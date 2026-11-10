@@ -1,61 +1,146 @@
-from search.local_dictionary import LOCAL_COMPOUND_DICTIONARY, normalize_arabic_text
-
-
-def get_autocomplete_suggestions(prefix: str, limit: int = 8) -> list[dict]:
-    if not prefix or not isinstance(prefix, str) or not prefix.strip():
-        return [dict(item) for item in LOCAL_COMPOUND_DICTIONARY[:limit]]
-
-    raw_p = prefix.strip()
-    low_p = raw_p.lower()
-    norm_p = normalize_arabic_text(raw_p)
-
-    prefix_matches = []
-    substring_matches = []
-
-    for item in LOCAL_COMPOUND_DICTIONARY:
-        name_ar_norm = normalize_arabic_text(item["name_ar"])
-        name_en_low = item["name_en"].lower()
-        formula_low = item.get("molecular_formula", "").lower()
-        abbrs_low = [a.lower() for a in item.get("abbreviations", [])]
-        syns_ar_norm = [normalize_arabic_text(s) for s in item.get("synonyms_ar", [])]
-        syns_en_low = [s.lower() for s in item.get("synonyms_en", [])]
-        brands_low = [b.lower() for b in item.get("brand_names", [])]
-        brands_ar_norm = [normalize_arabic_text(b) for b in item.get("brand_names", [])]
-
-        is_prefix = (
-            (norm_p and name_ar_norm.startswith(norm_p))
-            or name_en_low.startswith(low_p)
-            or formula_low.startswith(low_p)
-            or any(a.startswith(low_p) for a in abbrs_low)
-            or any(norm_p and s.startswith(norm_p) for s in syns_ar_norm)
-            or any(s.startswith(low_p) for s in syns_en_low)
-            or any(b.startswith(low_p) for b in brands_low)
-            or any(norm_p and b.startswith(norm_p) for b in brands_ar_norm)
-        )
-
-        if is_prefix:
-            prefix_matches.append(dict(item))
-            continue
-
-        is_sub = (
-            (norm_p and norm_p in name_ar_norm)
-            or (low_p in name_en_low)
-            or (low_p in formula_low)
-            or (low_p in item.get("iupac_name", "").lower())
-            or any(low_p in a for a in abbrs_low)
-            or any(norm_p and norm_p in s for s in syns_ar_norm)
-            or any(low_p in s for s in syns_en_low)
-            or any(low_p in b for b in brands_low)
-        )
-        if is_sub:
-            substring_matches.append(dict(item))
-
-    combined = prefix_matches + substring_matches
-    return combined[:limit]
+from search.compound_search import (
+    _compute_fuzzy_name_score,
+    _decorate_entry,
+    _evaluate_local_entry_match,
+    normalize_text,
+)
+from search.local_dictionary import (
+    LOCAL_COMPOUND_DICTIONARY,
+    formulas_match,
+    is_chemical_formula_query,
+    replace_subscripts,
+)
 
 
 def format_suggestion_label(entry: dict) -> str:
-    cid_part = f"CID: {entry['pubchem_cid']}" if entry.get("pubchem_cid") else "بدون CID"
-    chembl_part = f" | ChEMBL: {entry['chembl_id']}" if entry.get("chembl_id") else ""
-    return f"{entry['name_ar']} | {entry['name_en']} ({entry['molecular_formula']}) [{cid_part}{chembl_part}]"
+    formula = entry.get("molecular_formula", "")
+    cid = entry.get("pubchem_cid") or "N/A"
+    chembl = entry.get("chembl_id") or "N/A"
+    reason = entry.get("match_reason_ar", "")
+    base = f"{entry['name_ar']} | {entry['name_en']} ({formula}) [CID: {cid} | {chembl}]"
+    if reason:
+        return f"{base} — {reason}"
+    return base
 
+
+def build_instant_search_catalog() -> list[dict]:
+    catalog = []
+    for entry in LOCAL_COMPOUND_DICTIONARY:
+        item = _decorate_entry(
+            entry,
+            matched_by="catalog_entry",
+            match_category="Exact Match",
+            match_reason_ar="اختيار مباشر من فهرس القاموس المحلي الموثق",
+            match_rank=100,
+        )
+        abbrevs = ", ".join(entry.get("abbreviations", []))
+        brands = ", ".join(entry.get("brand_names", []))
+        syns_ar = "، ".join(entry.get("synonyms_ar", [])[:3])
+        syns_en = ", ".join(entry.get("synonyms_en", [])[:3])
+        extra_tags = " | ".join(filter(None, [abbrevs, brands, syns_ar, syns_en]))
+        cid = entry.get("pubchem_cid") or "N/A"
+        chembl = entry.get("chembl_id") or "N/A"
+        item["instant_label"] = (
+            f"{entry['name_ar']} | {entry['name_en']} | الصيغة: {entry.get('molecular_formula', '')} "
+            f"| CID: {cid} | {chembl}" + (f" | ({extra_tags})" if extra_tags else "")
+        )
+        catalog.append(item)
+    return catalog
+
+
+def get_autocomplete_suggestions(query: str, limit: int = 6, search_type: str = "auto") -> list[dict]:
+    raw_q = query.strip() if query else ""
+    if not raw_q:
+        default_items = []
+        for entry in LOCAL_COMPOUND_DICTIONARY[:limit]:
+            item = _decorate_entry(
+                entry,
+                matched_by="default_suggestion",
+                match_category="Exact Match",
+                match_reason_ar="اقتراح افتراضي من القاموس المحلي الموثق",
+                match_rank=50,
+            )
+            item["display_label"] = format_suggestion_label(item)
+            default_items.append(item)
+        return default_items
+
+    cleaned_q = replace_subscripts(raw_q).strip()
+    norm_q = normalize_text(cleaned_q)
+    is_formula_mode = search_type == "formula" or (search_type == "auto" and is_chemical_formula_query(cleaned_q))
+
+    scored: list[tuple[float, dict]] = []
+    seen_keys: set[str] = set()
+
+    if is_formula_mode:
+        clean_formula_q = cleaned_q.replace(" ", "").lower()
+        for entry in LOCAL_COMPOUND_DICTIONARY:
+            entry_formula = entry.get("molecular_formula", "")
+            entry_formula_low = entry_formula.lower()
+            abbrevs_low = [ab.lower() for ab in entry.get("abbreviations", []) if is_chemical_formula_query(ab)]
+            if formulas_match(cleaned_q, entry_formula) or clean_formula_q in abbrevs_low:
+                item = _decorate_entry(
+                    entry,
+                    matched_by="exact_formula",
+                    match_category="Exact Match",
+                    match_reason_ar=f"تطابق تام مع الصيغة الكيميائية ({entry_formula})",
+                    match_rank=98.0,
+                )
+                item["display_label"] = format_suggestion_label(item)
+                scored.append((98.0, item))
+                seen_keys.add(entry["key"])
+            elif entry_formula_low.startswith(clean_formula_q) or any(ab.startswith(clean_formula_q) for ab in abbrevs_low):
+                item = _decorate_entry(
+                    entry,
+                    matched_by="prefix_formula",
+                    match_category="Partial Match",
+                    match_reason_ar=f"تطابق في بداية الصيغة الكيميائية ({entry_formula})",
+                    match_rank=84.0,
+                )
+                item["display_label"] = format_suggestion_label(item)
+                scored.append((84.0, item))
+                seen_keys.add(entry["key"])
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item for _, item in scored[:limit]]
+
+    for entry in LOCAL_COMPOUND_DICTIONARY:
+        matched_item = _evaluate_local_entry_match(cleaned_q, norm_q, entry, search_type=search_type)
+        if matched_item is not None:
+            matched_item["display_label"] = format_suggestion_label(matched_item)
+            scored.append((matched_item["match_score"], matched_item))
+            seen_keys.add(entry["key"])
+            continue
+
+        if search_type == "auto":
+            entry_formula = entry.get("molecular_formula", "")
+            if entry_formula.lower().startswith(cleaned_q.lower()):
+                item = _decorate_entry(
+                    entry,
+                    matched_by="prefix_formula",
+                    match_category="Partial Match",
+                    match_reason_ar=f"تطابق في بداية الصيغة الكيميائية ({entry_formula})",
+                    match_rank=82.0,
+                )
+                item["display_label"] = format_suggestion_label(item)
+                scored.append((82.0, item))
+                seen_keys.add(entry["key"])
+                continue
+
+        if len(norm_q) >= 3 and search_type not in {"formula", "smiles", "abbreviation"}:
+            f_score, f_field, f_term = _compute_fuzzy_name_score(norm_q, entry, search_type=search_type)
+            if f_score >= 0.65:
+                pct = int(round(f_score * 100))
+                rank_val = round(f_score * 65.0, 2)
+                item = _decorate_entry(
+                    entry,
+                    matched_by="approximate_name",
+                    match_category="Did You Mean",
+                    match_reason_ar=f"تصحيح إملائي مقترح لـ {f_field} ({f_term} - تشابه {pct}%)",
+                    match_rank=rank_val,
+                )
+                item["display_label"] = format_suggestion_label(item)
+                scored.append((rank_val, item))
+                seen_keys.add(entry["key"])
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:limit]]

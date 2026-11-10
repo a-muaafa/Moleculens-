@@ -21,8 +21,19 @@ from config.settings import (
 )
 from model.predict import predict_dpp4_activity
 from reports.generate_report import generate_educational_report
-from search.autocomplete import format_suggestion_label, get_autocomplete_suggestions
-from search.compound_search import search_compound, verify_compound_identity
+from search.autocomplete import (
+    build_instant_search_catalog,
+    format_suggestion_label,
+    get_autocomplete_suggestions,
+)
+from search.compound_search import (
+    SEARCH_ONLINE_STATE_KEY,
+    SEARCH_QUERY_STATE_KEY,
+    SEARCH_TYPE_STATE_KEY,
+    search_compound,
+    update_search_session_state,
+    verify_compound_identity,
+)
 from search.local_dictionary import get_all_local_compounds
 from visualization.charts import (
     build_nearest_compounds_chart,
@@ -250,6 +261,28 @@ html, body, [class*="css"], .stApp {
     color: #ffffff;
     border-color: #0d5c63;
 }
+
+.suggestion-card {
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(15, 52, 96, 0.25);
+    border-right: 4px solid #0d5c63;
+    border-radius: 10px;
+    padding: 0.75rem 0.95rem;
+    margin-bottom: 0.65rem;
+    direction: rtl;
+    text-align: right;
+}
+
+.match-badge {
+    display: inline-block;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: #0f3460;
+    color: #ffffff;
+    margin-left: 0.4rem;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -279,13 +312,39 @@ def load_all_resources():
 
 model, ref_bundle, metrics, clean_report, clean_df, test_df, demo_compounds = load_all_resources()
 
-if "search_query_input" not in st.session_state:
-    st.session_state["search_query_input"] = "سيتاجليبتين"
+update_search_session_state(st.session_state, default_query="سيتاجليبتين")
 if "confirmed_compound" not in st.session_state:
     initial_res = search_compound("سيتاجليبتين", allow_network=False)
     st.session_state["confirmed_compound"] = initial_res.get("selected")
+if "confirmed_compound_key" not in st.session_state:
+    comp0 = st.session_state.get("confirmed_compound")
+    st.session_state["confirmed_compound_key"] = comp0.get("key") if isinstance(comp0, dict) else None
+if "search_verification_ok" not in st.session_state:
+    st.session_state["search_verification_ok"] = True
+if "selected_override_compound" not in st.session_state:
+    st.session_state["selected_override_compound"] = None
 if "student_guesses_by_smiles" not in st.session_state:
     st.session_state["student_guesses_by_smiles"] = {}
+
+
+def _set_query_callback(new_query: str, override_comp: dict | None = None) -> None:
+    st.session_state[SEARCH_QUERY_STATE_KEY] = new_query
+    st.session_state["selected_override_compound"] = override_comp
+
+
+def _on_text_query_change() -> None:
+    st.session_state["selected_override_compound"] = None
+
+
+def _on_instant_catalog_change() -> None:
+    chosen_lbl = st.session_state.get("instant_catalog_selector", "")
+    if not chosen_lbl or chosen_lbl.startswith("--"):
+        return
+    for item in build_instant_search_catalog():
+        if item["instant_label"] == chosen_lbl:
+            st.session_state[SEARCH_QUERY_STATE_KEY] = item["name_ar"]
+            st.session_state["selected_override_compound"] = item
+            break
 
 st.markdown(
     f"""
@@ -363,144 +422,251 @@ if main_section == "1. البحث الذكي والمختبر الافتراضي
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="panel-card"><h3>مربع البحث الذكي عن المركبات (Smart Compound Search &amp; Autocomplete)</h3>', unsafe_allow_html=True)
-    st.markdown(
-        "<p>ابحث تلقائيا باستخدام الاسم العربي الشائع، الاسم الإنجليزي، الاسم العلمي (IUPAC)، الصيغة الكيميائية (مثل H2O أو O2 أو H2O2)، الاختصار العلمي (مثل ATP أو NADH)، الاسم التجاري (مثل Januvia أو Galvus)، أو صيغة SMILES.</p>",
-        unsafe_allow_html=True,
-    )
-
-    ex_cols = st.columns(9)
-    quick_examples = [
-        ("سيتاجليبتين", "سيتاجليبتين"),
-        ("Vildagliptin", "Vildagliptin"),
-        ("الماء", "الماء"),
-        ("H2O", "H2O"),
-        ("O2", "O2"),
-        ("H2O2", "H2O2"),
-        ("ATP", "ATP"),
-        ("NADH", "NADH"),
-        ("C6H12O6 (غموض)", "C6H12O6"),
-    ]
-    for idx_ex, (btn_lbl, q_val) in enumerate(quick_examples):
-        with ex_cols[idx_ex]:
-            if st.button(btn_lbl, key=f"q_ex_{idx_ex}"):
-                st.session_state["search_query_input"] = q_val
-
-    c_search1, c_search2, c_search3 = st.columns([1.8, 1.0, 0.9])
-    with c_search1:
-        query_text = st.text_input(
-            "أدخل اسم المركب أو صيغته الكيميائية أو اختصاره:",
-            value=st.session_state["search_query_input"],
-            key="search_input_box",
-        )
-        st.session_state["search_query_input"] = query_text
-    with c_search2:
-        search_type_label = st.selectbox(
-            "تصفية نوع المدخل (اختياري - الافتراضي تلقائي):",
-            [
-                "تلقائي شامل (Auto)",
-                "الاسم العربي (Arabic Name)",
-                "الاسم الإنجليزي (English Name)",
-                "الاسم العلمي (IUPAC Name)",
-                "الصيغة الكيميائية (Chemical Formula)",
-                "الاختصار العلمي (Abbreviation)",
-                "المرادفات (Synonyms)",
-                "الاسم التجاري (Brand Name)",
-                "صيغة SMILES",
-            ],
-        )
-        type_map = {
-            "تلقائي شامل (Auto)": "auto",
-            "الاسم العربي (Arabic Name)": "name_ar",
-            "الاسم الإنجليزي (English Name)": "name_en",
-            "الاسم العلمي (IUPAC Name)": "iupac",
-            "الصيغة الكيميائية (Chemical Formula)": "formula",
-            "الاختصار العلمي (Abbreviation)": "abbreviation",
-            "المرادفات (Synonyms)": "synonym",
-            "الاسم التجاري (Brand Name)": "brand",
-            "صيغة SMILES": "smiles",
-        }
-        selected_search_type = type_map[search_type_label]
-    with c_search3:
-        allow_online = st.checkbox("تفعيل الاتصال بـ PubChem عند عدم توفر المركب محليا", value=True)
-
-    suggestions = get_autocomplete_suggestions(query_text, limit=6)
-    if suggestions:
-        sugg_labels = [format_suggestion_label(s) for s in suggestions]
-        st.caption("الاقتراحات التلقائية المطابقة أثناء الكتابة: " + "  ||  ".join(sugg_labels[:4]))
-
-    search_res = search_compound(query_text, search_type=selected_search_type, allow_network=allow_online)
-
-    st.markdown(
-        f"<p><strong>مصدر البحث وحالة الاتصال:</strong> <span class='status-pill pill-info'>{search_res['connection_status']}</span> — {search_res['message']}</p>",
-        unsafe_allow_html=True,
-    )
-
-    if not search_res["found"]:
-        st.warning(search_res["message"])
-        if search_res["did_you_mean"]:
-            st.info("مركبات مقترحة يمكنك تجربتها: " + " ، ".join(search_res["did_you_mean"]))
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()
-
-    if search_res["is_ambiguous"]:
-        st.warning(search_res["ambiguity_message"])
-        cand_list = search_res["candidates"]
-        cand_options = [
-            f"{idx_c + 1}. {c['name_ar']} | {c['name_en']} | الصيغة: {c.get('molecular_formula', '')} | CID: {c.get('pubchem_cid') or 'غير متوفر'} | ChEMBL: {c.get('chembl_id') or 'غير متوفر'}"
-            for idx_c, c in enumerate(cand_list)
-        ]
-        chosen_cand_label = st.radio(
-            "نظرا لوجود أكثر من احتمال علمي، يرجى اختيار المركب المقصود لتأكيد هويته قبل بدء التحليل:",
-            cand_options,
-            key=f"ambig_choice_{query_text}",
-        )
-        chosen_idx = cand_options.index(chosen_cand_label)
-        active_compound = cand_list[chosen_idx]
-    else:
-        active_compound = search_res["selected"]
-        if len(search_res["candidates"]) > 1:
-            st.info("ملاحظة علمية: الرمز O يعني ذرة أكسجين منفردة، بينما O2 هو جزيء الأكسجين الثنائي.")
-
-    verification = verify_compound_identity(active_compound)
-    if not verification["is_verified"]:
-        st.error(verification["error"])
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.stop()
-
-    verified_comp = verification["compound"]
-    st.session_state["confirmed_compound"] = verified_comp
-    mol_obj, canonical_smi, _ = validate_smiles(verified_comp["canonical_smiles"])
-    scaf_mol, scaf_smi = get_murcko_scaffold(mol_obj)
-    desc_data = calculate_descriptors(mol_obj)
-
-    col_id1, col_id2, col_id3 = st.columns([1.0, 1.0, 1.5])
-    with col_id1:
-        st.image(render_mol_png(mol_obj, size=(340, 230)), caption=f"البنية ثنائية الأبعاد: {verified_comp['name_ar']} ({verified_comp['name_en']})")
-    with col_id2:
-        st.image(render_mol_png(scaf_mol, size=(340, 230)), caption="الهيكل الأساسي (Bemis-Murcko Scaffold)")
-    with col_id3:
-        syns_ar_str = "، ".join(verified_comp.get("synonyms_ar", [])[:4]) or "غير محدد"
-        syns_en_str = ", ".join(verified_comp.get("synonyms_en", [])[:4]) or "N/A"
-        brands_str = "، ".join(verified_comp.get("brand_names", [])) or "غير متوفر"
+    @st.fragment
+    def render_smart_search_fragment():
+        st.markdown('<div class="panel-card"><h3>مربع البحث الذكي عن المركبات (Smart Compound Search &amp; Autocomplete)</h3>', unsafe_allow_html=True)
         st.markdown(
-            f"""
+            "<p>ابحث تلقائيا باستخدام الاسم العربي الشائع، الاسم الإنجليزي، الاسم العلمي (IUPAC)، الصيغة الكيميائية (مثل CO2 أو H2O أو O2 أو H2O2 أو C6H12O6)، الاختصار العلمي (مثل ATP أو NADH)، الاسم التجاري (مثل Januvia أو Galvus)، أو صيغة SMILES.</p>",
+            unsafe_allow_html=True,
+        )
+
+        quick_examples = [
+            ("سيتاجليبتين", "سيتاجليبتين"),
+            ("Vildagliptin", "Vildagliptin"),
+            ("CO2", "CO2"),
+            ("الماء", "الماء"),
+            ("H2O", "H2O"),
+            ("O2", "O2"),
+            ("H2O2", "H2O2"),
+            ("ATP", "ATP"),
+            ("NADH", "NADH"),
+            ("C6H12O6 (تعدد مصاوغات)", "C6H12O6"),
+        ]
+        ex_cols = st.columns(len(quick_examples))
+        for idx_ex, (btn_lbl, q_val) in enumerate(quick_examples):
+            with ex_cols[idx_ex]:
+                st.button(
+                    btn_lbl,
+                    key=f"q_ex_{idx_ex}",
+                    on_click=_set_query_callback,
+                    args=(q_val, None),
+                )
+
+        c_search1, c_search2, c_search3 = st.columns([1.8, 1.0, 0.9])
+        with c_search1:
+            query_text = st.text_input(
+                "أدخل اسم المركب أو صيغته الكيميائية أو اختصاره:",
+                key=SEARCH_QUERY_STATE_KEY,
+                on_change=_on_text_query_change,
+            )
+        with c_search2:
+            type_options = [
+                ("auto", "تلقائي شامل (Auto)"),
+                ("name_ar", "الاسم العربي (Arabic Name)"),
+                ("name_en", "الاسم الإنجليزي (English Name)"),
+                ("iupac", "الاسم العلمي (IUPAC Name)"),
+                ("formula", "الصيغة الكيميائية (Chemical Formula)"),
+                ("abbreviation", "الاختصار العلمي (Abbreviation)"),
+                ("synonym", "المرادفات (Synonyms)"),
+                ("brand", "الاسم التجاري (Brand Name)"),
+                ("smiles", "صيغة SMILES"),
+            ]
+            type_codes = [code for code, _ in type_options]
+            type_labels_map = dict(type_options)
+            selected_search_type = st.selectbox(
+                "تصفية نوع المدخل (دون مسح النص المكتوب):",
+                options=type_codes,
+                format_func=lambda code: type_labels_map.get(code, code),
+                key=SEARCH_TYPE_STATE_KEY,
+            )
+        with c_search3:
+            allow_online = st.checkbox(
+                "تفعيل الاتصال بـ PubChem عند عدم توفر المركب محليا",
+                key=SEARCH_ONLINE_STATE_KEY,
+            )
+
+        catalog_items = build_instant_search_catalog()
+        catalog_labels = ["-- اكتب هنا للفلترة الحية الفورية أثناء الكتابة (عربي / إنجليزي / صيغة / اختصار / اسم تجاري) --"] + [
+            item["instant_label"] for item in catalog_items
+        ]
+        st.selectbox(
+            "البحث التفاعلي الفوري أثناء الكتابة (Live Autocomplete Palette - لا يتطلب الضغط على Enter):",
+            options=catalog_labels,
+            index=0,
+            key="instant_catalog_selector",
+            on_change=_on_instant_catalog_change,
+        )
+
+        suggestions = get_autocomplete_suggestions(query_text, limit=6, search_type=selected_search_type)
+        if suggestions:
+            st.markdown("<strong>قائمة الاقتراحات التفاعلية المطابقة للمدخل الحالي (اضغط على أي مركب لاختياره فورا):</strong>", unsafe_allow_html=True)
+            sugg_cols = st.columns(min(len(suggestions), 3))
+            for idx_s, sugg in enumerate(suggestions[:6]):
+                with sugg_cols[idx_s % min(len(suggestions), 3)]:
+                    s_mol, _, _ = validate_smiles(sugg.get("canonical_smiles", ""))
+                    s_cid = sugg.get("pubchem_cid") or "N/A"
+                    s_chembl = sugg.get("chembl_id") or "N/A"
+                    st.markdown(
+                        f"""
+<div class="suggestion-card">
+  <div><span class="match-badge">{sugg.get('match_category', 'Match')}</span> <strong>{sugg['name_ar']}</strong> | <span class="ltr-inline">{sugg['name_en']}</span></div>
+  <div style="font-size:0.86rem;margin-top:0.25rem;">
+    <strong>الصيغة:</strong> <code class="ltr-inline">{sugg.get('molecular_formula', '')}</code> |
+    <strong>CID:</strong> <code class="ltr-inline">{s_cid}</code> |
+    <strong>ChEMBL:</strong> <code class="ltr-inline">{s_chembl}</code>
+  </div>
+  <div style="font-size:0.82rem;color:#475569;margin-top:0.2rem;"><strong>سبب الظهور:</strong> {sugg.get('match_reason_ar', '')}</div>
+</div>
+""",
+                        unsafe_allow_html=True,
+                    )
+                    if s_mol is not None and idx_s < 3:
+                        with st.expander(f"معاينة البنية: {sugg['name_ar']} ({sugg.get('molecular_formula', '')})", expanded=False):
+                            st.image(render_mol_png(s_mol, size=(220, 150)), caption=f"{sugg['name_ar']} | {sugg['name_en']}")
+                    st.button(
+                        f"اختيار: {sugg['name_ar']} ({sugg.get('molecular_formula', '')})",
+                        key=f"pick_sugg_{idx_s}_{sugg.get('key', idx_s)}",
+                        on_click=_set_query_callback,
+                        args=(sugg["name_ar"], sugg),
+                    )
+
+        override_comp = st.session_state.get("selected_override_compound")
+        if override_comp is not None and query_text.strip() in {override_comp.get("name_ar"), override_comp.get("name_en"), override_comp.get("molecular_formula")}:
+            search_res = {
+                "found": True,
+                "match_type": "exact",
+                "is_ambiguous": False,
+                "ambiguity_message": None,
+                "candidates": [override_comp],
+                "selected": override_comp,
+                "did_you_mean": [],
+                "data_source": "local_dictionary",
+                "connection_status": override_comp.get("source", "القاموس المحلي الموثق"),
+                "message": f"تم اختيار المركب تفاعليا ({override_comp.get('match_reason_ar', 'مطابقة مباشرة')}).",
+            }
+        else:
+            search_res = search_compound(query_text, search_type=selected_search_type, allow_network=allow_online)
+
+        st.markdown(
+            f"<p><strong>مصدر البحث وحالة الاتصال:</strong> <span class='status-pill pill-info'>{search_res['connection_status']}</span> — {search_res['message']}</p>",
+            unsafe_allow_html=True,
+        )
+
+        if not search_res["found"]:
+            st.warning(search_res["message"])
+            if search_res["did_you_mean"]:
+                st.markdown("<strong>مركبات مقترحة يمكنك اختيارها مباشرة (Did You Mean):</strong>", unsafe_allow_html=True)
+                dym_cols = st.columns(min(len(search_res["did_you_mean"]), 5))
+                for idx_d, dym_item in enumerate(search_res["did_you_mean"][:5]):
+                    clean_dym = dym_item.split("(")[0].strip()
+                    with dym_cols[idx_d]:
+                        st.button(
+                            dym_item,
+                            key=f"dym_btn_{idx_d}",
+                            on_click=_set_query_callback,
+                            args=(clean_dym, None),
+                        )
+            st.markdown("</div>", unsafe_allow_html=True)
+            prev_ok = st.session_state.get("search_verification_ok", True)
+            st.session_state["search_verification_ok"] = False
+            st.session_state["confirmed_compound"] = None
+            st.session_state["confirmed_compound_key"] = None
+            if prev_ok:
+                st.rerun()
+            return
+
+        if search_res["is_ambiguous"]:
+            st.warning(search_res["ambiguity_message"])
+            cand_list = search_res["candidates"]
+            cand_options = [
+                (
+                    f"{idx_c + 1}. {c['name_ar']} | {c['name_en']} | الصيغة: {c.get('molecular_formula', '')} "
+                    f"| CID: {c.get('pubchem_cid') or 'غير متوفر'} | ChEMBL: {c.get('chembl_id') or 'غير متوفر'} "
+                    f"— [{c.get('match_reason_ar', 'تطابق الصيغة')}]"
+                )
+                for idx_c, c in enumerate(cand_list)
+            ]
+            chosen_cand_label = st.radio(
+                "نظرا لتعدد المركبات أو المصاوغات المشتركة، يرجى اختيار المركب المقصود لتأكيد هويته (لا يتم اختيار مركب عشوائي):",
+                cand_options,
+                key=f"ambig_choice_{query_text}_{selected_search_type}",
+            )
+            chosen_idx = cand_options.index(chosen_cand_label)
+            active_compound = cand_list[chosen_idx]
+        else:
+            active_compound = search_res["selected"]
+
+        verification = verify_compound_identity(active_compound)
+        if not verification["is_verified"]:
+            st.error(verification["error"])
+            st.markdown("</div>", unsafe_allow_html=True)
+            prev_ok = st.session_state.get("search_verification_ok", True)
+            st.session_state["search_verification_ok"] = False
+            st.session_state["confirmed_compound"] = None
+            st.session_state["confirmed_compound_key"] = None
+            if prev_ok:
+                st.rerun()
+            return
+
+        verified_comp = verification["compound"]
+        v_steps = verification["verification_steps"]
+        mol_obj_frag, canonical_smi_frag, _ = validate_smiles(verified_comp["canonical_smiles"])
+        scaf_mol_frag, _ = get_murcko_scaffold(mol_obj_frag)
+        desc_data_frag = calculate_descriptors(mol_obj_frag)
+
+        col_id1, col_id2, col_id3 = st.columns([1.0, 1.0, 1.5])
+        with col_id1:
+            st.image(render_mol_png(mol_obj_frag, size=(340, 230)), caption=f"البنية ثنائية الأبعاد: {verified_comp['name_ar']} ({verified_comp['name_en']})")
+        with col_id2:
+            st.image(render_mol_png(scaf_mol_frag, size=(340, 230)), caption="الهيكل الأساسي (Bemis-Murcko Scaffold)")
+        with col_id3:
+            syns_ar_str = "، ".join(verified_comp.get("synonyms_ar", [])[:4]) or "غير محدد"
+            syns_en_str = ", ".join(verified_comp.get("synonyms_en", [])[:4]) or "N/A"
+            brands_str = "، ".join(verified_comp.get("brand_names", [])) or "غير متوفر"
+            match_reason_str = verified_comp.get("match_reason_ar", "تطابق مباشر")
+            match_cat_str = verified_comp.get("match_category", "Exact Match")
+            st.markdown(
+                f"""
 <div class="panel-card" style="margin-bottom:0;">
   <h4>بطاقة التحقق من هوية المركب (Compound Identity Verification)</h4>
-  <p><span class="status-pill pill-high">تم التحقق من الهوية والبنية الجزيئية بنجاح</span></p>
+  <p>
+    <span class="status-pill pill-high">تم التحقق من الهوية والبنية الجزيئية بنجاح</span>
+    <span class="match-badge">{match_cat_str}</span>
+  </p>
+  <p><strong>سبب ظهور النتيجة:</strong> {match_reason_str}</p>
   <p><strong>الاسم العربي:</strong> {verified_comp['name_ar']} | <strong>الاسم الإنجليزي:</strong> <span class="ltr-inline">{verified_comp['name_en']}</span></p>
-  <p><strong>الصيغة الجزيئية (Molecular Formula):</strong> <code class="ltr-inline">{desc_data['molecular_formula']}</code></p>
+  <p><strong>الصيغة الجزيئية المستخرجة (RDKit):</strong> <code class="ltr-inline">{desc_data_frag['molecular_formula']}</code> (مطابقة للصيغة المسجلة: <code class="ltr-inline">{verified_comp.get('molecular_formula', '')}</code>)</p>
   <p><strong>الاسم العلمي (IUPAC Name):</strong> <code class="ltr-inline">{verified_comp.get('iupac_name', 'N/A')}</code></p>
   <p><strong>المرادفات (Synonyms):</strong> {syns_ar_str} | <span class="ltr-inline">{syns_en_str}</span></p>
   <p><strong>الاسم التجاري الموثق:</strong> {brands_str}</p>
   <p><strong>المعرفات المرجعية:</strong> PubChem CID: <code class="ltr-inline">{verified_comp.get('pubchem_cid') or 'غير متوفر'}</code> | ChEMBL ID: <code class="ltr-inline">{verified_comp.get('chembl_id') or 'غير متوفر'}</code></p>
-  <p><strong>صيغة SMILES الموحدة:</strong> <code class="ltr-inline">{canonical_smi}</code></p>
+  <p><strong>صيغة SMILES الموحدة:</strong> <code class="ltr-inline">{canonical_smi_frag}</code></p>
+  <p><strong>فحوصات التحقق الأربع:</strong> صلاحية SMILES: <code class="ltr-inline">{v_steps['smiles_valid']}</code> | استخراج الصيغة: <code class="ltr-inline">{v_steps['formula_extracted']}</code> | تطابق الصيغة: <code class="ltr-inline">{v_steps['formula_verified']}</code> | المعرف المرجعي: <code class="ltr-inline">{v_steps['has_reference_id']}</code></p>
   <p><strong>نبذة تعريفية:</strong> {verified_comp.get('info_ar', '')}</p>
 </div>
 """,
-            unsafe_allow_html=True,
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
+                unsafe_allow_html=True,
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        new_comp_key = f"{verified_comp.get('key', '')}_{canonical_smi_frag}"
+        prev_comp_key = st.session_state.get("confirmed_compound_key")
+        prev_ok = st.session_state.get("search_verification_ok", False)
+        st.session_state["confirmed_compound"] = verified_comp
+        st.session_state["confirmed_compound_key"] = new_comp_key
+        st.session_state["search_verification_ok"] = True
+        if prev_comp_key != new_comp_key or not prev_ok:
+            st.rerun()
+
+    render_smart_search_fragment()
+
+    if not st.session_state.get("search_verification_ok") or not st.session_state.get("confirmed_compound"):
+        st.stop()
+
+    verified_comp = st.session_state["confirmed_compound"]
+    mol_obj, canonical_smi, _ = validate_smiles(verified_comp["canonical_smiles"])
+    scaf_mol, scaf_smi = get_murcko_scaffold(mol_obj)
+    desc_data = calculate_descriptors(mol_obj)
 
     pred_data = predict_dpp4_activity(mol_obj, model, ref_bundle)
 
@@ -1082,7 +1248,8 @@ elif main_section == "2. مكتبة المركبات التجريبية لـ DPP
                     unsafe_allow_html=True,
                 )
                 if st.button(f"نسخ اسم {demo['name_ar']} إلى مربع البحث لتحليله في المختبر", key=f"load_demo_{idx_d}"):
-                    st.session_state["search_query_input"] = demo["name_en"]
+                    st.session_state[SEARCH_QUERY_STATE_KEY] = demo["name_en"]
+                    st.session_state["selected_override_compound"] = None
                     st.success(f"تم تحديد {demo['name_ar']} ({demo['name_en']}). انتقل إلى تبويب «1. البحث الذكي والمختبر الافتراضي» لاستعراض المراحل الخمس.")
             st.markdown("</div>", unsafe_allow_html=True)
 

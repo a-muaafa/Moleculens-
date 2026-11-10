@@ -50,3 +50,7 @@ AD_BORDERLINE_TANIMOTO = 0.30
 AD_MIN_HEAVY_ATOMS = 6
 AD_MAX_MW = 900.0
 
+PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+PUBCHEM_TIMEOUT_SECONDS = 5
+
+
