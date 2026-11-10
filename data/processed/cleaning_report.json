@@ -1,0 +1,13 @@
+{
+  "initial_records": 1000,
+  "after_valid_numeric": 995,
+  "after_measurement_type_ic50": 995,
+  "after_exact_relation": 854,
+  "after_data_validity": 776,
+  "after_binding_assay_filter": 740,
+  "after_unit_and_structure_standardization": 740,
+  "converted_non_nm_units": 17,
+  "discordant_replicates_removed": 35,
+  "final_unique_compounds": 641,
+  "unique_murcko_scaffolds": 231
+}

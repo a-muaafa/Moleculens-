@@ -1,0 +1,23 @@
+{
+  "split_method": "Bemis-Murcko Scaffold Split",
+  "target_variable": "pIC50 (9 - log10(IC50_nM))",
+  "activity_threshold_pic50": 6.0,
+  "activity_threshold_nm": 1000.0,
+  "train_count": 499,
+  "test_count": 142,
+  "train_scaffolds": 185,
+  "test_scaffolds": 46,
+  "smiles_leakage_count": 0,
+  "scaffold_leakage_count": 0,
+  "mae_pic50": 0.7713,
+  "rmse_pic50": 1.121,
+  "r2_pic50": 0.3565,
+  "roc_auc": 0.8829,
+  "random_split_comparison": {
+    "mae_pic50": 0.511,
+    "rmse_pic50": 0.733,
+    "r2_pic50": 0.5311,
+    "roc_auc": 0.9128,
+    "shared_scaffolds_leaked": 41
+  }
+}
