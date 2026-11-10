@@ -1,5 +1,10 @@
 {
   "split_method": "Bemis-Murcko Scaffold Split",
+  "random_seed": 42,
+  "target_id": "CHEMBL284",
+  "target_organism": "Homo sapiens",
+  "predicted_measurement_type": "IC50 (via logarithmic pIC50)",
+  "predicted_units": "nM (and pIC50)",
   "target_variable": "pIC50 (9 - log10(IC50_nM))",
   "activity_threshold_pic50": 6.0,
   "activity_threshold_nm": 1000.0,
@@ -13,7 +18,18 @@
   "rmse_pic50": 1.121,
   "r2_pic50": 0.3565,
   "roc_auc": 0.8829,
+  "roc_auc_note_ar": "مقياس ROC-AUC يقيس قدرة النموذج الترتيبية على التمييز التصنيفي بين المركبات النشطة وغير النشطة (عند عتبة pIC50 >= 6.0 أي IC50 <= 1000 nM)، وليس مقياسا لدقة التنبؤ العددي بقيمة IC50.",
+  "train_property_bounds": {
+    "mw_min": 196.23,
+    "mw_max": 681.68,
+    "logp_min": -1.26,
+    "logp_max": 5.01,
+    "tpsa_min": 32.21,
+    "tpsa_max": 178.11
+  },
   "random_split_comparison": {
+    "train_count": 512,
+    "test_count": 129,
     "mae_pic50": 0.511,
     "rmse_pic50": 0.733,
     "r2_pic50": 0.5311,

@@ -1,33 +1,40 @@
-import io
 import json
 import os
 import joblib
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-from rdkit import Chem, DataStructs
-from rdkit.Chem import Descriptors, Draw, Lipinski, QED, rdFingerprintGenerator, rdMolDescriptors
-from rdkit.Chem.FilterCatalog import FilterCatalog, FilterCatalogParams
-from rdkit.Chem.Scaffolds import MurckoScaffold
+from chemistry.descriptors import PROPERTY_EDUCATIONAL_GUIDE, calculate_descriptors
+from chemistry.molecular_structure import get_murcko_scaffold, render_mol_png, validate_smiles
+from config.settings import (
+    APP_NAME,
+    APP_SLOGAN,
+    CLEAN_DATA_PATH,
+    CLEAN_REPORT_PATH,
+    DEMO_COMPOUNDS_PATH,
+    METRICS_PATH,
+    MODEL_PATH,
+    TARGET_INFO,
+    TEAM_NAME,
+    TEST_PRED_PATH,
+    TRAINING_REF_PATH,
+)
+from model.predict import predict_dpp4_activity
+from reports.generate_report import generate_educational_report
+from search.autocomplete import format_suggestion_label, get_autocomplete_suggestions
+from search.compound_search import search_compound, verify_compound_identity
+from search.local_dictionary import get_all_local_compounds
+from visualization.charts import (
+    build_nearest_compounds_chart,
+    build_pic50_gauge,
+    build_properties_chart,
+    build_published_activity_distribution_chart,
+    build_similarity_chart,
+    build_split_comparison_chart,
+    build_test_scatter_chart,
+)
 
-st.set_page_config(page_title="MolecuLens | المختبر الافتراضي للفرز الحاسوبي", layout="wide")
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models", "dpp4_rf_model.pkl")
-REF_PATH = os.path.join(BASE_DIR, "models", "training_reference.pkl")
-METRICS_PATH = os.path.join(BASE_DIR, "models", "model_metrics.json")
-CLEAN_REPORT_PATH = os.path.join(BASE_DIR, "data", "processed", "cleaning_report.json")
-CLEAN_DATA_PATH = os.path.join(BASE_DIR, "data", "processed", "dpp4_cleaned.csv")
-TEST_PRED_PATH = os.path.join(BASE_DIR, "data", "processed", "test_predictions.csv")
-
-BENCHMARK_COMPOUNDS = {
-    "سيتاجليبتين (Sitagliptin - مثبط مرجعي معتمد لإنزيم DPP4)": "N[C@@H](CC(=O)N1CCn2c(nnc2C(F)(F)F)C1)Cc1cc(F)c(F)cc1F",
-    "فيلداجليبتين (Vildagliptin - مثبط مرجعي لإنزيم DPP4)": "N#C[C@@H]1CCCN1C(=O)CNC12CC3CC(CC(O)(C3)C1)C2",
-    "مركب نشط من بيانات التدريب (ChEMBL Active Lead)": "N[C@@H](CC1CCCCC1)C(=O)N1CCCCC1",
-    "مركب يحتوي على بنية متداخلة مخبريا (Rhodanine PAINS Example)": "O=C1CSC(=S)N1Cc1ccc(O)c(O)c1",
-    "الأسبرين (Aspirin - مركب خارج نطاق التدريب لمثبطات DPP4)": "CC(=O)Oc1ccccc1C(=O)O",
-}
+st.set_page_config(page_title=f"{APP_NAME} | {APP_SLOGAN}", layout="wide")
 
 st.markdown(
     """
@@ -41,60 +48,62 @@ html, body, [class*="css"], .stApp {
 }
 
 .block-container {
-    padding-top: 1.4rem;
+    padding-top: 1.2rem;
     padding-bottom: 3rem;
-    max-width: 1380px;
+    max-width: 1400px;
 }
 
 #MainMenu, footer {
     visibility: hidden;
 }
 
-.lims-header {
+.hero-banner {
     background: linear-gradient(135deg, #0b192c 0%, #0f3460 55%, #0d5c63 100%);
     color: #f8fafc;
     padding: 1.7rem 2.2rem;
     border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     margin-bottom: 1rem;
-    box-shadow: 0 10px 28px rgba(11, 25, 44, 0.18);
+    box-shadow: 0 10px 28px rgba(11, 25, 44, 0.16);
 }
 
-.lims-header-top {
+.hero-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.8rem;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.55rem;
 }
 
-.lims-title {
-    font-size: 1.9rem;
+.hero-brand {
+    font-size: 2rem;
     font-weight: 800;
     margin: 0;
     color: #ffffff;
-    letter-spacing: 0.3px;
 }
 
-.lims-tag {
+.hero-slogan {
+    direction: ltr;
+    unicode-bidi: embed;
+    font-family: 'JetBrains Mono', monospace;
     background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.25);
     color: #e2e8f0;
-    padding: 0.25rem 0.85rem;
+    padding: 0.28rem 0.9rem;
     border-radius: 6px;
-    font-size: 0.85rem;
+    font-size: 0.86rem;
     font-weight: 600;
 }
 
-.lims-sub {
+.hero-desc {
     margin: 0;
     font-size: 0.98rem;
     color: #cbd5e1;
-    line-height: 1.65;
+    line-height: 1.7;
 }
 
-.gov-banner {
+.gov-notice {
     background: #fffbeb;
     border-right: 5px solid #b45309;
     border-top: 1px solid #fde68a;
@@ -103,42 +112,41 @@ html, body, [class*="css"], .stApp {
     color: #78350f;
     padding: 0.75rem 1.15rem;
     border-radius: 8px;
-    margin-bottom: 1.2rem;
-    font-size: 0.92rem;
+    margin-bottom: 1.15rem;
+    font-size: 0.91rem;
     font-weight: 600;
 }
 
-.station-bar {
+.stage-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.6rem;
-    margin-bottom: 1.3rem;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 1.2rem;
 }
 
-.station-step {
+.stage-box {
     background: var(--secondary-background-color);
     border: 1px solid rgba(128, 128, 128, 0.25);
     border-top: 4px solid #0d5c63;
     border-radius: 8px;
-    padding: 0.65rem 0.85rem;
+    padding: 0.7rem 0.9rem;
 }
 
-.station-step .num {
+.stage-box .st-num {
     font-size: 0.78rem;
     font-weight: 700;
     color: #0d5c63;
-    text-transform: uppercase;
 }
 
-.station-step .lbl {
-    font-size: 0.92rem;
+.stage-box .st-title {
+    font-size: 0.94rem;
     font-weight: 700;
     margin-top: 0.15rem;
 }
 
-.station-step .desc {
+.stage-box .st-sub {
     font-size: 0.78rem;
-    opacity: 0.8;
+    opacity: 0.82;
     margin-top: 0.1rem;
 }
 
@@ -146,7 +154,7 @@ html, body, [class*="css"], .stApp {
     background: var(--secondary-background-color);
     border: 1px solid rgba(128, 128, 128, 0.22);
     border-radius: 10px;
-    padding: 1.15rem 1.3rem;
+    padding: 1.15rem 1.35rem;
     margin-bottom: 1rem;
 }
 
@@ -161,36 +169,23 @@ html, body, [class*="css"], .stApp {
     border: 1px solid rgba(128, 128, 128, 0.24);
     border-right: 4px solid #0f3460;
     border-radius: 8px;
-    padding: 0.9rem 1rem;
-    margin-bottom: 0.8rem;
-    min-height: 138px;
-}
-
-.prop-title {
-    font-size: 0.86rem;
-    font-weight: 700;
-    opacity: 0.85;
+    padding: 0.95rem 1.05rem;
+    margin-bottom: 0.85rem;
 }
 
 .prop-val {
-    font-size: 1.35rem;
+    font-size: 1.3rem;
     font-weight: 800;
-    margin: 0.25rem 0;
+    margin: 0.25rem 0 0.45rem 0;
     direction: ltr;
     unicode-bidi: embed;
     text-align: right;
     font-family: 'JetBrains Mono', monospace;
 }
 
-.prop-explain {
-    font-size: 0.82rem;
-    line-height: 1.5;
-    opacity: 0.9;
-}
-
 .status-pill {
     display: inline-block;
-    padding: 0.22rem 0.75rem;
+    padding: 0.22rem 0.78rem;
     border-radius: 6px;
     font-weight: 700;
     font-size: 0.86rem;
@@ -202,7 +197,7 @@ html, body, [class*="css"], .stApp {
 .pill-low  { background: #b91c1c; }
 .pill-info { background: #0f3460; }
 
-.ltr-box, code {
+.ltr-inline, code {
     direction: ltr;
     unicode-bidi: embed;
     font-family: 'JetBrains Mono', monospace;
@@ -210,17 +205,41 @@ html, body, [class*="css"], .stApp {
     display: inline-block;
 }
 
-.stTextInput input {
-    direction: ltr;
-    text-align: left;
-    font-family: 'JetBrains Mono', monospace;
+.sep-col-chem {
+    border-top: 4px solid #0f3460;
+    background: var(--secondary-background-color);
+    padding: 1rem;
+    border-radius: 8px;
+    border-right: 1px solid rgba(128,128,128,0.2);
+    border-left: 1px solid rgba(128,128,128,0.2);
+    border-bottom: 1px solid rgba(128,128,128,0.2);
+}
+
+.sep-col-exp {
+    border-top: 4px solid #15803d;
+    background: var(--secondary-background-color);
+    padding: 1rem;
+    border-radius: 8px;
+    border-right: 1px solid rgba(128,128,128,0.2);
+    border-left: 1px solid rgba(128,128,128,0.2);
+    border-bottom: 1px solid rgba(128,128,128,0.2);
+}
+
+.sep-col-ai {
+    border-top: 4px solid #b45309;
+    background: var(--secondary-background-color);
+    padding: 1rem;
+    border-radius: 8px;
+    border-right: 1px solid rgba(128,128,128,0.2);
+    border-left: 1px solid rgba(128,128,128,0.2);
+    border-bottom: 1px solid rgba(128,128,128,0.2);
 }
 
 .stButton > button {
     width: 100%;
     border-radius: 8px;
     font-weight: 700;
-    padding: 0.55rem 0.9rem;
+    padding: 0.5rem 0.85rem;
     background: #0f3460;
     color: #ffffff;
     border: 1px solid #1e40af;
@@ -231,24 +250,6 @@ html, body, [class*="css"], .stApp {
     color: #ffffff;
     border-color: #0d5c63;
 }
-
-.conf-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0.6rem;
-    font-size: 0.9rem;
-}
-
-.conf-table th, .conf-table td {
-    border: 1px solid rgba(128, 128, 128, 0.3);
-    padding: 0.6rem 0.8rem;
-    text-align: right;
-}
-
-.conf-table th {
-    background: rgba(15, 52, 96, 0.12);
-    font-weight: 700;
-}
 </style>
 """,
     unsafe_allow_html=True,
@@ -256,9 +257,9 @@ html, body, [class*="css"], .stApp {
 
 
 @st.cache_resource
-def load_artifacts():
+def load_all_resources():
     model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
-    ref = joblib.load(REF_PATH) if os.path.exists(REF_PATH) else None
+    ref_bundle = joblib.load(TRAINING_REF_PATH) if os.path.exists(TRAINING_REF_PATH) else None
     metrics = None
     if os.path.exists(METRICS_PATH):
         with open(METRICS_PATH, "r", encoding="utf-8") as f:
@@ -269,1087 +270,917 @@ def load_artifacts():
             clean_rep = json.load(f)
     clean_df = pd.read_csv(CLEAN_DATA_PATH) if os.path.exists(CLEAN_DATA_PATH) else None
     test_df = pd.read_csv(TEST_PRED_PATH) if os.path.exists(TEST_PRED_PATH) else None
-    return model, ref, metrics, clean_rep, clean_df, test_df
+    demo_compounds = []
+    if os.path.exists(DEMO_COMPOUNDS_PATH):
+        with open(DEMO_COMPOUNDS_PATH, "r", encoding="utf-8") as f:
+            demo_compounds = json.load(f)
+    return model, ref_bundle, metrics, clean_rep, clean_df, test_df, demo_compounds
 
 
-@st.cache_resource
-def load_pains_catalog():
-    params = FilterCatalogParams()
-    params.AddCatalog(FilterCatalogParams.FilterCatalogs.PAINS)
-    return FilterCatalog(params)
+model, ref_bundle, metrics, clean_report, clean_df, test_df, demo_compounds = load_all_resources()
 
-
-@st.cache_resource
-def get_morgan_generator():
-    return rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
-
-
-def mol_to_png_bytes(mol, size=(360, 260)):
-    img = Draw.MolToImage(mol, size=size)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
-
-
-def compute_query_similarity(mol, ref_bundle):
-    gen = get_morgan_generator()
-    q_bv = gen.GetFingerprint(mol)
-    q_arr = gen.GetFingerprintAsNumPy(mol).astype(np.float32)
-
-    train_df = ref_bundle["train_df"]
-    train_X = ref_bundle["train_fps_numpy"]
-
-    dot_prod = np.dot(train_X, q_arr)
-    q_bits = float(np.sum(q_arr))
-    t_bits = np.sum(train_X, axis=1)
-    denom = q_bits + t_bits - dot_prod
-    sims = np.where(denom > 0, dot_prod / denom, 0.0)
-
-    order = np.argsort(sims)[::-1]
-    top_idx = order[:5]
-    max_sim = float(sims[order[0]])
-    mean_top5_sim = float(np.mean(sims[top_idx]))
-
-    nearest_df = train_df.iloc[top_idx].copy()
-    nearest_df["tanimoto"] = np.round(sims[top_idx], 3)
-    return q_arr, sims, max_sim, mean_top5_sim, nearest_df
-
-
-def evaluate_confidence(sim_value, roc_auc_value):
-    if sim_value >= 0.60:
-        sim_tier = 2
-        sim_label = "مرتفع (>= 0.60)"
-        sim_pill = "pill-high"
-    elif sim_value >= 0.30:
-        sim_tier = 1
-        sim_label = "متوسط (0.30 - 0.59)"
-        sim_pill = "pill-mid"
-    else:
-        sim_tier = 0
-        sim_label = "منخفض (< 0.30) - خارج نطاق التدريب"
-        sim_pill = "pill-low"
-
-    if roc_auc_value >= 0.85:
-        auc_tier = 2
-        auc_label = "مرتفع (>= 0.85)"
-        auc_pill = "pill-high"
-    elif roc_auc_value >= 0.70:
-        auc_tier = 1
-        auc_label = "متوسط (0.70 - 0.84)"
-        auc_pill = "pill-mid"
-    else:
-        auc_tier = 0
-        auc_label = "منخفض (< 0.70)"
-        auc_pill = "pill-low"
-
-    final_tier = min(sim_tier, auc_tier)
-    out_of_domain = sim_value < 0.30
-
-    if final_tier == 2:
-        final_label = "عالية (موثوق ضمن نطاق التدريب)"
-        final_pill = "pill-high"
-    elif final_tier == 1:
-        final_label = "متوسطة (يتطلب تحققا إضافيا)"
-        final_pill = "pill-mid"
-    else:
-        final_label = "منخفضة (خارج نطاق التدريب)" if out_of_domain else "منخفضة"
-        final_pill = "pill-low"
-
-    return {
-        "sim_tier": sim_tier,
-        "sim_label": sim_label,
-        "sim_pill": sim_pill,
-        "auc_tier": auc_tier,
-        "auc_label": auc_label,
-        "auc_pill": auc_pill,
-        "final_tier": final_tier,
-        "final_label": final_label,
-        "final_pill": final_pill,
-        "out_of_domain": out_of_domain,
-    }
-
-
-def classify_potency_educational(pic50_val):
-    ic50_nm = 10.0 ** (9.0 - pic50_val)
-    if pic50_val >= 7.0:
-        return (
-            "نشاط تثبيطي مرتفع (ضمن العتبات التعليمية)",
-            "pill-high",
-            "القيمة المتوقعة تقع تحت 100 nM (pIC50 >= 7.0). يمثل هذا التقدير مؤشرا حاسوبيا أوليا لارتباط قوي محتمل ولا يعد إثباتا مخبريا أو علاجيا.",
-            ic50_nm,
-        )
-    if pic50_val >= 6.0:
-        return (
-            "نشاط تثبيطي متوسط (ضمن العتبات التعليمية)",
-            "pill-mid",
-            "القيمة المتوقعة تقع بين 100 و 1000 nM (pIC50 بين 6.0 و 7.0). يشير التقدير الأولي إلى نشاط معتدل قد يتطلب تحسينات بنائية.",
-            ic50_nm,
-        )
-    return (
-        "نشاط تثبيطي ضعيف أو غير نشط (ضمن العتبات التعليمية)",
-        "pill-low",
-        "القيمة المتوقعة أعلى من 1000 nM (pIC50 < 6.0). يشير التقدير الحاسوبي الأولي إلى ضعف الارتباط بالهدف البيولوجي.",
-        ic50_nm,
-    )
-
-
-def build_pic50_gauge(pic50_val):
-    clamped_val = float(np.clip(pic50_val, 3.0, 10.0))
-    fig = go.Figure(
-        go.Indicator(
-            mode="gauge+number",
-            value=clamped_val,
-            number={"suffix": " pIC50", "valueformat": ".2f"},
-            title={"text": "مقياس التقدير اللوغاريتمي للنشاط (pIC50 من 3.0 إلى 10.0)"},
-            gauge={
-                "axis": {"range": [3.0, 10.0], "tickvals": [3, 4, 5, 6, 7, 8, 9, 10]},
-                "bar": {"color": "#0f3460"},
-                "steps": [
-                    {"range": [3.0, 6.0], "color": "#fecaca"},
-                    {"range": [6.0, 7.0], "color": "#fde68a"},
-                    {"range": [7.0, 10.0], "color": "#bbf7d0"},
-                ],
-                "threshold": {
-                    "line": {"color": "#0b192c", "width": 4},
-                    "thickness": 0.8,
-                    "value": clamped_val,
-                },
-            },
-        )
-    )
-    fig.update_layout(height=275, margin=dict(l=25, r=25, t=55, b=15))
-    return fig
-
-
-def build_similarity_histogram(all_sims, query_max_sim):
-    fig = go.Figure()
-    fig.add_trace(
-        go.Histogram(
-            x=all_sims,
-            nbinsx=30,
-            marker_color="#0d5c63",
-            opacity=0.82,
-            name="مركبات التدريب",
-        )
-    )
-    fig.add_vline(
-        x=0.30,
-        line_dash="dash",
-        line_color="#b91c1c",
-        annotation_text="حد النطاق الأدنى (0.30)",
-        annotation_position="top left",
-    )
-    fig.add_vline(
-        x=0.60,
-        line_dash="dash",
-        line_color="#15803d",
-        annotation_text="عتبة التشابه المرتفع (0.60)",
-        annotation_position="top left",
-    )
-    fig.add_vline(
-        x=query_max_sim,
-        line_width=3,
-        line_color="#0f3460",
-        annotation_text=f"أعلى تشابه للمركب ({query_max_sim:.2f})",
-        annotation_position="top right",
-    )
-    fig.update_layout(
-        title="توزيع تشابه المركب المدخل (Tanimoto) مقارنة بمركبات التدريب فقط",
-        xaxis_title="معامل تشابه Tanimoto مع مجموعة التدريب",
-        yaxis_title="عدد مركبات التدريب",
-        height=310,
-        margin=dict(l=20, r=20, t=45, b=20),
-    )
-    return fig
-
-
-if "experiment_history" not in st.session_state:
-    st.session_state["experiment_history"] = []
-if "student_guess_submitted" not in st.session_state:
-    st.session_state["student_guess_submitted"] = False
-if "student_potency_guess" not in st.session_state:
-    st.session_state["student_potency_guess"] = "نشاط تثبيطي مرتفع (ضمن العتبات التعليمية)"
-if "student_conf_guess" not in st.session_state:
-    st.session_state["student_conf_guess"] = "عالية (موثوق ضمن نطاق التدريب)"
-
-model, ref_bundle, metrics, clean_report, clean_df, test_df = load_artifacts()
-pains_catalog = load_pains_catalog()
+if "search_query_input" not in st.session_state:
+    st.session_state["search_query_input"] = "سيتاجليبتين"
+if "confirmed_compound" not in st.session_state:
+    initial_res = search_compound("سيتاجليبتين", allow_network=False)
+    st.session_state["confirmed_compound"] = initial_res.get("selected")
+if "student_guesses_by_smiles" not in st.session_state:
+    st.session_state["student_guesses_by_smiles"] = {}
 
 st.markdown(
-    """
-<div class="lims-header">
-  <div class="lims-header-top">
-    <h1 class="lims-title">MolecuLens | المختبر الافتراضي للفرز الحاسوبي</h1>
-    <span class="lims-tag">هاكاثون شراع 2026 - مسار الصحة وجودة الحياة</span>
+    f"""
+<div class="hero-banner">
+  <div class="hero-top">
+    <div>
+      <h1 class="hero-brand">{APP_NAME} | المختبر الافتراضي لاستكشاف المركبات الدوائية</h1>
+      <div style="font-size:0.88rem;color:#94a3b8;font-weight:600;">الفريق التطويري: {TEAM_NAME}</div>
+    </div>
+    <span class="hero-slogan">{APP_SLOGAN}</span>
   </div>
-  <p class="lims-sub">
-    منصة تعليمية عربية تعمل كمحاكي مهام للفرز الحاسوبي الأولي للمركبات الدوائية المستهدفة لإنزيم DPP-4،
-    تدمج الرحلة العلمية الموجهة، التفسير الصيدلاني العربي، وشفافية تقييم الثقة ونطاق التدريب في شاشة موحدة.
+  <p class="hero-desc">
+    مختبر افتراضي تعليمي باللغة العربية يساعد طلاب الصيدلة والعلوم الصحية والكيمياء على البحث الذكي عن المركبات،
+    وفهم خصائصها الفيزيائية الكيميائية، والاطلاع على الأدلة العلمية المنشورة عنها في ChEMBL، والتعرف على كيفية استخدام
+    الذكاء الاصطناعي في التنبؤ بالنشاط الحيوي تجاه الهدف البروتيني البشري DPP4 مع تقييم نطاق تطبيق النموذج.
   </p>
 </div>
-<div class="gov-banner">
-  حوكمة صارمة: مشروع تعليمي تدريبي بحثي بحت؛ لا يكتشف أدوية جديدة، ولا يصدر أحكاما نهائية على الفعالية أو الأمان، ولا يقدم استشارات علاجية أو سريرية.
+<div class="gov-notice">
+  حدود المشروع وحوكمته العلمية: MolecuLens مختبر تعليمي للفرز الحاسوبي الأولي، وليس أداة لاكتشاف أدوية جديدة أو إثبات فعاليتها العلاجية أو تقديم نصائح طبية.
 </div>
 """,
     unsafe_allow_html=True,
 )
 
 if model is None or ref_bundle is None or metrics is None:
-    st.error("ملفات النموذج أو بصمات التدريب غير موجودة. يرجى تشغيل clean_data.py ثم train_model.py أولا.")
+    st.error("ملفات النموذج أو المرجع غير موجودة. يرجى تشغيل clean_data.py ثم train_model.py أولا.")
     st.stop()
 
-nav_mode = st.radio(
-    "وضع العمل في المختبر الافتراضي:",
+main_section = st.radio(
+    "أقسام منصة MolecuLens:",
     [
-        "الرحلة التعليمية الموجهة (المحطات الخمس والتقرير التعليمي)",
-        "صفحة التحقق ومختبر الأخطاء والاختبار النقدي",
+        "1. البحث الذكي والمختبر الافتراضي (المراحل الخمس)",
+        "2. مكتبة المركبات التجريبية لـ DPP4 (Demo Library)",
+        "3. التحقق من النموذج ومقارنة Random Split و Scaffold Split وتنظيف البيانات",
     ],
     horizontal=True,
 )
 
-if nav_mode == "الرحلة التعليمية الموجهة (المحطات الخمس والتقرير التعليمي)":
+if main_section == "1. البحث الذكي والمختبر الافتراضي (المراحل الخمس)":
     st.markdown(
         """
-<div class="station-bar">
-  <div class="station-step">
-    <div class="num">المحطة 1</div>
-    <div class="lbl">الهدف البيولوجي</div>
-    <div class="desc">UniProt P27487 | DPP-4</div>
+<div class="stage-grid">
+  <div class="stage-box">
+    <div class="st-num">نقطة الدخول</div>
+    <div class="st-title">البحث الذكي والتحقق</div>
+    <div class="st-sub">عربي / إنجليزي / صيغة / اختصار / PubChem</div>
   </div>
-  <div class="station-step">
-    <div class="num">المحطة 2</div>
-    <div class="lbl">الخصائص والتنبيهات</div>
-    <div class="desc">RDKit &amp; PAINS Filter</div>
+  <div class="stage-box">
+    <div class="st-num">المرحلة الأولى</div>
+    <div class="st-title">الهدف البروتيني</div>
+    <div class="st-sub">Human DPP4 (UniProt P27487)</div>
   </div>
-  <div class="station-step">
-    <div class="num">المحطة 3</div>
-    <div class="lbl">الأدلة والتشابه</div>
-    <div class="desc">ChEMBL &amp; Tanimoto</div>
+  <div class="stage-box">
+    <div class="st-num">المرحلة الثانية</div>
+    <div class="st-title">الخصائص الكيميائية</div>
+    <div class="st-sub">RDKit, Lipinski &amp; PAINS</div>
   </div>
-  <div class="station-step">
-    <div class="num">المحطة 4</div>
-    <div class="lbl">التوقع والتنبؤ</div>
-    <div class="desc">تحدي الطالب ونموذج RF</div>
+  <div class="stage-box">
+    <div class="st-num">المرحلة الثالثة</div>
+    <div class="st-title">الأدلة المنشورة</div>
+    <div class="st-sub">ChEMBL Assays &amp; Documents</div>
   </div>
-  <div class="station-step">
-    <div class="num">المحطة 5</div>
-    <div class="lbl">الحكم والتقرير</div>
-    <div class="desc">معادلة الثقة وملخص التعلم</div>
+  <div class="stage-box">
+    <div class="st-num">المرحلة الرابعة</div>
+    <div class="st-title">تحدي التوقع وتنبؤ AI</div>
+    <div class="st-sub">Guess Before You See &amp; AD</div>
+  </div>
+  <div class="stage-box">
+    <div class="st-num">المرحلة الخامسة</div>
+    <div class="st-title">التقييم والتقرير التعليمي</div>
+    <div class="st-sub">فصل الخصائص والأدلة والتنبؤ</div>
   </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    with st.container():
-        st.markdown('<div class="panel-card"><h3>لوحة البداية وإدخال المركب الكيميائي</h3>', unsafe_allow_html=True)
-        col_preset, col_input = st.columns([1.1, 1.4])
-        with col_preset:
-            preset_choice = st.selectbox(
-                "اختر تجربة معيارية جاهزة أو أدخل صيغة مخصصة:",
-                ["إدخال مخصص"] + list(BENCHMARK_COMPOUNDS.keys()),
-                index=1,
-            )
-            default_smiles = (
-                BENCHMARK_COMPOUNDS[preset_choice]
-                if preset_choice != "إدخال مخصص"
-                else "N[C@@H](CC(=O)N1CCn2c(nnc2C(F)(F)F)C1)Cc1cc(F)c(F)cc1F"
-            )
-        with col_input:
-            smiles_input = st.text_input("الصيغة الخطية للمركب (SMILES):", value=default_smiles)
+    st.markdown('<div class="panel-card"><h3>مربع البحث الذكي عن المركبات (Smart Compound Search &amp; Autocomplete)</h3>', unsafe_allow_html=True)
+    st.markdown(
+        "<p>ابحث تلقائيا باستخدام الاسم العربي الشائع، الاسم الإنجليزي، الاسم العلمي (IUPAC)، الصيغة الكيميائية (مثل H2O أو O2 أو H2O2)، الاختصار العلمي (مثل ATP أو NADH)، الاسم التجاري (مثل Januvia أو Galvus)، أو صيغة SMILES.</p>",
+        unsafe_allow_html=True,
+    )
 
-        mol = Chem.MolFromSmiles(smiles_input.strip()) if smiles_input.strip() else None
-        if mol is None:
-            st.error("الصيغة الكيميائية المدخلة غير صحيحة بنائيا. يرجى التحقق من تنسيق SMILES قبل بدء التجربة.")
-            st.markdown("</div>", unsafe_allow_html=True)
-            st.stop()
+    ex_cols = st.columns(9)
+    quick_examples = [
+        ("سيتاجليبتين", "سيتاجليبتين"),
+        ("Vildagliptin", "Vildagliptin"),
+        ("الماء", "الماء"),
+        ("H2O", "H2O"),
+        ("O2", "O2"),
+        ("H2O2", "H2O2"),
+        ("ATP", "ATP"),
+        ("NADH", "NADH"),
+        ("C6H12O6 (غموض)", "C6H12O6"),
+    ]
+    for idx_ex, (btn_lbl, q_val) in enumerate(quick_examples):
+        with ex_cols[idx_ex]:
+            if st.button(btn_lbl, key=f"q_ex_{idx_ex}"):
+                st.session_state["search_query_input"] = q_val
 
-        canonical_smi = Chem.MolToSmiles(mol, canonical=True)
-        scaffold_smi = MurckoScaffold.MurckoScaffoldSmiles(mol=mol, includeChirality=False)
-        scaffold_mol = Chem.MolFromSmiles(scaffold_smi) if scaffold_smi else mol
-        formula_str = rdMolDescriptors.CalcMolFormula(mol)
+    c_search1, c_search2, c_search3 = st.columns([1.8, 1.0, 0.9])
+    with c_search1:
+        query_text = st.text_input(
+            "أدخل اسم المركب أو صيغته الكيميائية أو اختصاره:",
+            value=st.session_state["search_query_input"],
+            key="search_input_box",
+        )
+        st.session_state["search_query_input"] = query_text
+    with c_search2:
+        search_type_label = st.selectbox(
+            "تصفية نوع المدخل (اختياري - الافتراضي تلقائي):",
+            [
+                "تلقائي شامل (Auto)",
+                "الاسم العربي (Arabic Name)",
+                "الاسم الإنجليزي (English Name)",
+                "الاسم العلمي (IUPAC Name)",
+                "الصيغة الكيميائية (Chemical Formula)",
+                "الاختصار العلمي (Abbreviation)",
+                "المرادفات (Synonyms)",
+                "الاسم التجاري (Brand Name)",
+                "صيغة SMILES",
+            ],
+        )
+        type_map = {
+            "تلقائي شامل (Auto)": "auto",
+            "الاسم العربي (Arabic Name)": "name_ar",
+            "الاسم الإنجليزي (English Name)": "name_en",
+            "الاسم العلمي (IUPAC Name)": "iupac",
+            "الصيغة الكيميائية (Chemical Formula)": "formula",
+            "الاختصار العلمي (Abbreviation)": "abbreviation",
+            "المرادفات (Synonyms)": "synonym",
+            "الاسم التجاري (Brand Name)": "brand",
+            "صيغة SMILES": "smiles",
+        }
+        selected_search_type = type_map[search_type_label]
+    with c_search3:
+        allow_online = st.checkbox("تفعيل الاتصال بـ PubChem عند عدم توفر المركب محليا", value=True)
 
-        c_prev1, c_prev2, c_prev3 = st.columns([1, 1, 1.3])
-        with c_prev1:
-            st.image(mol_to_png_bytes(mol, size=(360, 230)), caption="التركيب ثنائي الأبعاد للمركب المدخل")
-        with c_prev2:
-            st.image(mol_to_png_bytes(scaffold_mol, size=(360, 230)), caption="الهيكل الأساسي (Bemis-Murcko Scaffold)")
-        with c_prev3:
-            st.markdown(
-                f"""
+    suggestions = get_autocomplete_suggestions(query_text, limit=6)
+    if suggestions:
+        sugg_labels = [format_suggestion_label(s) for s in suggestions]
+        st.caption("الاقتراحات التلقائية المطابقة أثناء الكتابة: " + "  ||  ".join(sugg_labels[:4]))
+
+    search_res = search_compound(query_text, search_type=selected_search_type, allow_network=allow_online)
+
+    st.markdown(
+        f"<p><strong>مصدر البحث وحالة الاتصال:</strong> <span class='status-pill pill-info'>{search_res['connection_status']}</span> — {search_res['message']}</p>",
+        unsafe_allow_html=True,
+    )
+
+    if not search_res["found"]:
+        st.warning(search_res["message"])
+        if search_res["did_you_mean"]:
+            st.info("مركبات مقترحة يمكنك تجربتها: " + " ، ".join(search_res["did_you_mean"]))
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    if search_res["is_ambiguous"]:
+        st.warning(search_res["ambiguity_message"])
+        cand_list = search_res["candidates"]
+        cand_options = [
+            f"{idx_c + 1}. {c['name_ar']} | {c['name_en']} | الصيغة: {c.get('molecular_formula', '')} | CID: {c.get('pubchem_cid') or 'غير متوفر'} | ChEMBL: {c.get('chembl_id') or 'غير متوفر'}"
+            for idx_c, c in enumerate(cand_list)
+        ]
+        chosen_cand_label = st.radio(
+            "نظرا لوجود أكثر من احتمال علمي، يرجى اختيار المركب المقصود لتأكيد هويته قبل بدء التحليل:",
+            cand_options,
+            key=f"ambig_choice_{query_text}",
+        )
+        chosen_idx = cand_options.index(chosen_cand_label)
+        active_compound = cand_list[chosen_idx]
+    else:
+        active_compound = search_res["selected"]
+        if len(search_res["candidates"]) > 1:
+            st.info("ملاحظة علمية: الرمز O يعني ذرة أكسجين منفردة، بينما O2 هو جزيء الأكسجين الثنائي.")
+
+    verification = verify_compound_identity(active_compound)
+    if not verification["is_verified"]:
+        st.error(verification["error"])
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    verified_comp = verification["compound"]
+    st.session_state["confirmed_compound"] = verified_comp
+    mol_obj, canonical_smi, _ = validate_smiles(verified_comp["canonical_smiles"])
+    scaf_mol, scaf_smi = get_murcko_scaffold(mol_obj)
+    desc_data = calculate_descriptors(mol_obj)
+
+    col_id1, col_id2, col_id3 = st.columns([1.0, 1.0, 1.5])
+    with col_id1:
+        st.image(render_mol_png(mol_obj, size=(340, 230)), caption=f"البنية ثنائية الأبعاد: {verified_comp['name_ar']} ({verified_comp['name_en']})")
+    with col_id2:
+        st.image(render_mol_png(scaf_mol, size=(340, 230)), caption="الهيكل الأساسي (Bemis-Murcko Scaffold)")
+    with col_id3:
+        syns_ar_str = "، ".join(verified_comp.get("synonyms_ar", [])[:4]) or "غير محدد"
+        syns_en_str = ", ".join(verified_comp.get("synonyms_en", [])[:4]) or "N/A"
+        brands_str = "، ".join(verified_comp.get("brand_names", [])) or "غير متوفر"
+        st.markdown(
+            f"""
 <div class="panel-card" style="margin-bottom:0;">
-  <h4>بطاقة التحقق البنائي الفوري</h4>
-  <p><strong>حالة التحقق:</strong> <span class="status-pill pill-high">صيغة SMILES صالحة كيميائيا</span></p>
-  <p><strong>الصيغة الجزيئية:</strong> <span class="ltr-box">{formula_str}</span></p>
-  <p><strong>SMILES القياسي (Canonical):</strong><br><code class="ltr-box">{canonical_smi}</code></p>
-  <p><strong>هيكل Murcko الأساسي:</strong><br><code class="ltr-box">{scaffold_smi if scaffold_smi else "لا يوجد نظام حلقي"}</code></p>
+  <h4>بطاقة التحقق من هوية المركب (Compound Identity Verification)</h4>
+  <p><span class="status-pill pill-high">تم التحقق من الهوية والبنية الجزيئية بنجاح</span></p>
+  <p><strong>الاسم العربي:</strong> {verified_comp['name_ar']} | <strong>الاسم الإنجليزي:</strong> <span class="ltr-inline">{verified_comp['name_en']}</span></p>
+  <p><strong>الصيغة الجزيئية (Molecular Formula):</strong> <code class="ltr-inline">{desc_data['molecular_formula']}</code></p>
+  <p><strong>الاسم العلمي (IUPAC Name):</strong> <code class="ltr-inline">{verified_comp.get('iupac_name', 'N/A')}</code></p>
+  <p><strong>المرادفات (Synonyms):</strong> {syns_ar_str} | <span class="ltr-inline">{syns_en_str}</span></p>
+  <p><strong>الاسم التجاري الموثق:</strong> {brands_str}</p>
+  <p><strong>المعرفات المرجعية:</strong> PubChem CID: <code class="ltr-inline">{verified_comp.get('pubchem_cid') or 'غير متوفر'}</code> | ChEMBL ID: <code class="ltr-inline">{verified_comp.get('chembl_id') or 'غير متوفر'}</code></p>
+  <p><strong>صيغة SMILES الموحدة:</strong> <code class="ltr-inline">{canonical_smi}</code></p>
+  <p><strong>نبذة تعريفية:</strong> {verified_comp.get('info_ar', '')}</p>
 </div>
 """,
-                unsafe_allow_html=True,
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    q_arr, all_train_sims, max_sim, mean_top5_sim, nearest_df = compute_query_similarity(mol, ref_bundle)
-    tree_preds = np.array([est.predict([q_arr])[0] for est in model.estimators_], dtype=np.float64)
-    pred_pic50 = float(np.mean(tree_preds))
-    pred_std_pic50 = float(np.std(tree_preds))
-    pot_label, pot_pill, pot_explain, pred_ic50_nm = classify_potency_educational(pred_pic50)
-    conf_res = evaluate_confidence(max_sim, float(metrics["roc_auc"]))
-    pains_match = pains_catalog.GetFirstMatch(mol)
-    pains_desc = pains_match.GetDescription() if pains_match else None
-
-    if not st.session_state["experiment_history"] or st.session_state["experiment_history"][-1]["smiles"] != canonical_smi:
-        st.session_state["experiment_history"].append(
-            {
-                "smiles": canonical_smi,
-                "formula": formula_str,
-                "pred_pic50": round(pred_pic50, 2),
-                "pred_ic50_nm": round(pred_ic50_nm, 2),
-                "max_tanimoto": round(max_sim, 3),
-                "confidence": conf_res["final_label"],
-            }
+            unsafe_allow_html=True,
         )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    view_style = st.radio(
-        "طريقة عرض المحطات الخمس:",
-        ["عرض الشاشة الموحدة (جميع المحطات متتابعة)", "التنقل بتبويبات المحطات الخمس"],
+    pred_data = predict_dpp4_activity(mol_obj, model, ref_bundle)
+
+    published_records = []
+    if clean_df is not None and "canonical_smiles" in clean_df.columns:
+        matched_rows = clean_df[clean_df["canonical_smiles"] == canonical_smi]
+        if not matched_rows.empty:
+            published_records.extend(matched_rows.to_dict(orient="records"))
+    if not published_records and demo_compounds:
+        for d_item in demo_compounds:
+            _, d_canon, _ = validate_smiles(d_item["canonical_smiles"])
+            if d_canon == canonical_smi or (verified_comp.get("chembl_id") and d_item.get("chembl_id") == verified_comp.get("chembl_id")):
+                published_records.append(d_item)
+
+    display_mode = st.radio(
+        "طريقة تصفح مراحل المختبر الخمس:",
+        ["عرض الرحلة الكاملة المتتابعة (المراحل الخمس في شاشة موحدة)", "التنقل عبر تبويبات المراحل الخمس"],
         horizontal=True,
     )
 
-    def render_station_1():
+    def render_stage_1():
         st.markdown(
-            """
+            f"""
 <div class="panel-card">
-  <h3>المحطة الأولى: تعريف الهدف البيولوجي (UniProt &amp; ChEMBL Target Profile)</h3>
-  <p>
-    قبل فحص أي جزيء حاسوبيا، يبدأ الباحث بفهم البروتين المستهدف ووظيفته الفسيولوجية وبنية موقع الارتباط النشط.
-  </p>
+  <h3>المرحلة الأولى: اختيار الهدف البروتيني (Target Protein Selection)</h3>
+  <p>يركز المختبر في إصداره الحالي على الهدف البروتيني البشري المعتمد <strong>{TARGET_INFO['name_en']}</strong>.</p>
 </div>
 """,
             unsafe_allow_html=True,
         )
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("الاسم العلمي للهدف", "Dipeptidyl peptidase 4")
-        c2.metric("معرف UniProt المرجعي", "P27487 (DPP4_HUMAN)")
-        c3.metric("معرف الهدف في ChEMBL", "CHEMBL284")
-        c4.metric("التصنيف الإنزيمي", "EC 3.4.14.5")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("اسم البروتين المستهدف", "DPP4 (Dipeptidyl Peptidase-4)")
+        m2.metric("المعرف المرجعي (UniProt)", TARGET_INFO["uniprot_id"])
+        m3.metric("معرف الهدف (ChEMBL)", TARGET_INFO["target_id"])
+        m4.metric("الكائن الحي (Organism)", TARGET_INFO["organism"])
 
-        col_bio1, col_bio2 = st.columns(2)
-        with col_bio1:
+        c_t1, c_t2 = st.columns(2)
+        with c_t1:
             st.markdown(
-                """
+                f"""
 <div class="panel-card">
-  <h4>الآلية الفسيولوجية وعلاقتها بالسكري من النوع الثاني</h4>
+  <h4>الوظيفة الحيوية والعلاقة بأبحاث السكري</h4>
+  <p><strong>وصف الوظيفة:</strong> {TARGET_INFO['function_ar']}</p>
+  <p><strong>علاقته بأبحاث السكري:</strong> {TARGET_INFO['diabetes_relation_ar']}</p>
   <p>
-    يعمل إنزيم <strong>DPP-4</strong> كببتيداز سيريني يقوم بشطر الببتيدات الثنائية من النهاية الأمينية (N-terminus)
-    للهرمونات المعوية المعروفة باسم الإنكريتينات، وعلى رأسها <code>GLP-1</code> و <code>GIP</code>.
-  </p>
-  <p>
-    يؤدي تثبيط إنزيم DPP-4 إلى حماية هرمون <code>GLP-1</code> الداخلي من التحلل السريع، مما يعزز إفراز الإنسولين
-    بطريقة معتمدة على تركيز الجلوكوز في الدم ويقلل إفراز الجلوكاجون دون التسبب بهبوط حاد في سكر الدم.
+    <strong>الروابط المرجعية المعتمدة:</strong>
+    <a href="{TARGET_INFO['uniprot_url']}" target="_blank">صفحة البروتين في UniProt (P27487)</a> |
+    <a href="{TARGET_INFO['chembl_url']}" target="_blank">صفحة الهدف في ChEMBL (CHEMBL284)</a>
   </p>
 </div>
 """,
                 unsafe_allow_html=True,
             )
-        with col_bio2:
+        with c_t2:
             st.markdown(
-                """
+                f"""
 <div class="panel-card">
-  <h4>البنية الفراغية لموقع الارتباط والتحديات الانتقائية</h4>
-  <p>
-    يتكون الموقع النشط للإنزيم من:
-  </p>
+  <h4>التحقق من هوية الهدف في بيانات التدريب وحدود التفسير</h4>
   <ul>
-    <li><strong>الثالوث التحفيزي (Catalytic Triad):</strong> الأحماض الأمينية <code>Ser630</code> و <code>Asp708</code> و <code>His740</code>.</li>
-    <li><strong>الجيب الكاره للماء (S1 Hydrophobic Pocket):</strong> يستوعب المجموعات الحلقية أو المفلورة في المثبطات الانتقائية.</li>
-    <li><strong>منطقة الإرساء الأيونية (S2 Subsite):</strong> تحتوي على <code>Glu205</code> و <code>Glu206</code> التي تشكل جسورا ملحية مع مجموعة الأمين في المثبط.</li>
+    <li><strong>تأكيد الكائن الحي والهدف:</strong> تم التحقق برمجيا في مرحلة تنظيف البيانات من أن جميع سجلات التدريب والاختبار البالغ عددها <code class="ltr-inline">{clean_report['final_unique_compounds']}</code> مركبا فريدا تتبع حصريا الهدف البشري <code class="ltr-inline">CHEMBL284</code> والكائن الحي <code class="ltr-inline">Homo sapiens</code>.</li>
+    <li><strong>بنية موقع الارتباط:</strong> يضم الموقع النشط الثالوث التحفيزي (<code class="ltr-inline">Ser630, Asp708, His740</code>) والجيب الكاره للماء <code class="ltr-inline">S1</code> ومنطقة الإرساء الأيونية <code class="ltr-inline">Glu205/Glu206</code>.</li>
+    <li><strong>تنبيه علمي:</strong> وجود نشاط تثبيطي تجاه DPP4 حاسوبيا أو مخبريا لا يعني إثبات فعالية علاجية لدى مرضى السكري؛ إذ يتطلب تطوير الدواء إثبات الانتقائية عدم تثبيط إنزيمي <code class="ltr-inline">DPP8</code> و <code class="ltr-inline">DPP9</code> ودراسات الحرائك والسمية السريرية.</li>
   </ul>
-  <p>
-    <strong>تنبيه تعليمي:</strong> الارتباط القوي بإنزيم DPP-4 وحده لا يكفي؛ إذ يجب أن يكون المركب انتقائيا ولا يثبط إنزيمي
-    <code>DPP-8</code> و <code>DPP-9</code> لتجنب السمية الخلوية والمناعية.
-  </p>
 </div>
 """,
                 unsafe_allow_html=True,
             )
 
-    def render_station_2():
+    def render_stage_2():
         st.markdown(
             """
 <div class="panel-card">
-  <h3>المحطة الثانية: الخصائص الفيزيائية الكيميائية وفحص التنبيهات الهيكلية (RDKit)</h3>
+  <h3>المرحلة الثانية: تحليل الخصائص الكيميائية (Chemical Properties Analysis - RDKit)</h3>
   <p>
-    تحسب هذه المحطة المؤشرات الجزيئية الحاسمة للامتصاص الفموي والنفاذية الخلوية، وتفحص وجود المجموعات المسببة للتداخلات المخبرية.
+    استخراج الخصائص الفيزيائية الكيميائية للمركب باستخدام مكتبة RDKit مع شرح تعليمي مفصل لكل خاصية (معناها، طريقة حسابها، أهميتها الدوائية، وحدود تفسيرها).
   </p>
 </div>
 """,
             unsafe_allow_html=True,
         )
-        mw = Descriptors.MolWt(mol)
-        logp = Descriptors.MolLogP(mol)
-        tpsa = Descriptors.TPSA(mol)
-        hbd = Lipinski.NumHDonors(mol)
-        hba = Lipinski.NumHAcceptors(mol)
-        rot = Lipinski.NumRotatableBonds(mol)
-        qed_val = QED.qed(mol)
-        fsp3 = rdMolDescriptors.CalcFractionCSP3(mol)
-        rings = rdMolDescriptors.CalcNumRings(mol)
 
-        viol = sum([mw > 500, logp > 5, hbd > 5, hba > 10])
-
-        props = [
-            (
-                "الوزن الجزيئي (Molecular Weight)",
-                f"{mw:.1f} Da",
-                "المدى المرجعي لقاعدة ليينسكي: <= 500 Da. المركبات الأصغر حجما تعبر الأغشية الحيوية بسهولة أكبر عند الإعطاء الفموي.",
-            ),
-            (
-                "معامل التوزع الدهني (LogP)",
-                f"{logp:.2f}",
-                "المدى المرجعي: <= 5.0. يقيس التوازن بين الذوبانية المائية والألفة الدهنية اللازمة لعبور جدار الأمعاء.",
-            ),
-            (
-                "المساحة السطحية القطبية (TPSA)",
-                f"{tpsa:.1f} Å²",
-                "المدى المرجعي للامتصاص الفموي الجيد: < 140 Å². القيم المرتفعة جدا قد تحد من النفاذية السلبية عبر الأغشية.",
-            ),
-            (
-                "مانحات روابط الهيدروجين (HBD)",
-                f"{hbd}",
-                "المدى المرجعي: <= 5. زيادة مجموعات OH و NH ترفع القطبية وتزيد طاقة نزع الماء أثناء عبور الغشاء الخلوي.",
-            ),
-            (
-                "مستقبلات روابط الهيدروجين (HBA)",
-                f"{hba}",
-                "المدى المرجعي: <= 10. تعكس ذرات النيتروجين والأكسجين القادرة على تكوين تفاعلات قطبية مع الهدف والماء.",
-            ),
-            (
-                "الروابط القابلة للدوران (Rotatable Bonds)",
-                f"{rot}",
-                "المدى المرجعي (Veber): <= 10. المرونة المفرطة للجزيء تزيد فقدان الإنتروبيا عند الارتباط بموقع الإنزيم.",
-            ),
-            (
-                "مؤشر التشابه الدوائي الكمي (QED)",
-                f"{qed_val:.2f}",
-                "يتراوح بين 0 و 1. يدمج ثماني خصائص فيزيائية كيميائية لقياس مدى قرب الجزيء من خصائص الأدوية الفموية المعروفة.",
-            ),
-            (
-                "نسبة ذرات الكربون المشبعة (Fraction Csp3)",
-                f"{fsp3:.2f}",
-                "المدى المفضل: >= 0.25. ارتفاع نسبة الكربون ثلاثي الأبعاد يحسن الذوبانية ويقلل التراكم البلوري المسطح.",
-            ),
-            (
-                "عدد الحلقات الكيميائية (Ring Count)",
-                f"{rings}",
-                "توفر الأنظمة الحلقية الصلابة البنائية اللازمة لتوجيه المجموعات الوظيفية داخل جيوب S1 و S2 في إنزيم DPP-4.",
-            ),
-        ]
-
-        for i in range(0, len(props), 3):
-            cols = st.columns(3)
-            for j in range(3):
-                title, val, expl = props[i + j]
+        prop_keys = ["molecular_weight", "logp", "hbd", "hba", "rotatable_bonds", "tpsa"]
+        for i in range(0, len(prop_keys), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                pk = prop_keys[i + j]
+                guide = PROPERTY_EDUCATIONAL_GUIDE[pk]
+                val = desc_data[pk]
                 with cols[j]:
                     st.markdown(
                         f"""
 <div class="prop-card">
-  <div class="prop-title">{title}</div>
-  <div class="prop-val">{val}</div>
-  <div class="prop-explain">{expl}</div>
+  <div style="font-weight:700;font-size:0.95rem;color:#0f3460;">{guide['title_ar']}</div>
+  <div class="prop-val">{val} {guide['unit']} <span style="font-size:0.8rem;font-weight:500;opacity:0.75;">(المدى الاسترشادي: {guide['reference_range']})</span></div>
+  <p style="margin:0.2rem 0;font-size:0.84rem;"><strong>ما معناها؟</strong> {guide['meaning']}</p>
+  <p style="margin:0.2rem 0;font-size:0.84rem;"><strong>كيف يتم حسابها؟</strong> {guide['calculation']}</p>
+  <p style="margin:0.2rem 0;font-size:0.84rem;"><strong>لماذا تهم في دراسة المركبات؟</strong> {guide['importance']}</p>
+  <p style="margin:0.2rem 0;font-size:0.84rem;color:#78350f;"><strong>ما حدود تفسيرها؟</strong> {guide['limitations']}</p>
 </div>
 """,
                         unsafe_allow_html=True,
                     )
 
-        col_lip, col_pains = st.columns(2)
-        with col_lip:
-            lip_pill = "pill-high" if viol <= 1 else "pill-mid"
-            lip_status = f"مخالفات قاعدة Lipinski: {viol} من 4"
+        fig_props, exp_props = build_properties_chart(desc_data)
+        st.plotly_chart(fig_props, use_container_width=True)
+        st.caption(exp_props)
+
+        c_lip, c_pains = st.columns(2)
+        with c_lip:
+            lip = desc_data["lipinski"]
+            lip_pill = "pill-high" if lip["passes_rule_of_five"] else "pill-mid"
             st.markdown(
                 f"""
 <div class="panel-card">
-  <h4>تقييم قابلية الامتصاص الفموي (Lipinski Rule of Five)</h4>
-  <p><span class="status-pill {lip_pill}">{lip_status}</span></p>
-  <p>
-    تقيم قاعدة Lipinski احتمالية الذوبان والامتصاص الفموي فقط، ولا تقيس قدرة المركب على تثبيط إنزيم DPP-4؛
-    فقد يحقق جزيء خامل كافة شروط Lipinski دون أي نشاط بيولوجي على الهدف.
-  </p>
+  <h4>قاعدة ليبينسكي الخماسية (Lipinski's Rule of Five)</h4>
+  <p><span class="status-pill {lip_pill}">{lip['summary_ar']}</span></p>
+  <ul>
+    <li>الوزن الجزيئي &lt;= 500 Da: <strong>{"مطابق" if lip['checks']['mw_ok'] else "غير مطابق"}</strong> (<code class="ltr-inline">{desc_data['molecular_weight']} Da</code>)</li>
+    <li>معامل التوزع LogP &lt;= 5.0: <strong>{"مطابق" if lip['checks']['logp_ok'] else "غير مطابق"}</strong> (<code class="ltr-inline">{desc_data['logp']}</code>)</li>
+    <li>مانحات الهيدروجين HBD &lt;= 5: <strong>{"مطابق" if lip['checks']['hbd_ok'] else "غير مطابق"}</strong> (<code class="ltr-inline">{desc_data['hbd']}</code>)</li>
+    <li>مستقبلات الهيدروجين HBA &lt;= 10: <strong>{"مطابق" if lip['checks']['hba_ok'] else "غير مطابق"}</strong> (<code class="ltr-inline">{desc_data['hba']}</code>)</li>
+  </ul>
+  <p style="font-size:0.84rem;color:#78350f;"><strong>حدود التفسير:</strong> {lip['disclaimer_ar']}</p>
 </div>
 """,
                 unsafe_allow_html=True,
             )
-        with col_pains:
-            if pains_desc:
-                st.markdown(
-                    f"""
+        with c_pains:
+            pains = desc_data["pains"]
+            pains_pill = "pill-low" if pains["has_pains_alert"] else "pill-info"
+            st.markdown(
+                f"""
 <div class="panel-card">
-  <h4>فحص التداخلات المخبرية الهيكلي (PAINS Filter)</h4>
-  <p><span class="status-pill pill-low">تم رصد تنبيه PAINS هيكلي: {pains_desc}</span></p>
-  <p>
-    يحتوي هذا المركب على بنية فرعية معروفة بالتفاعل غير النوعي في الفحوصات الحيوية (Pan-Assay Interference Compounds)،
-    مما قد يعطي نتائج إيجابية كاذبة مخبريا نتيجة التكتل أو التفاعل الكيميائي المباشر بدلا من التثبيط الانتقائي.
+  <h4>فحص الأنماط المتداخلة مخبريا (PAINS Filter)</h4>
+  <p><span class="status-pill {pains_pill}">{pains['status_ar']}</span></p>
+  <p style="font-size:0.86rem;">
+    يكشف فحص PAINS (Pan-Assay Interference Compounds) عن المجموعات الكيميائية التي تميل للتفاعل غير النوعي
+    أو التكتل أو التلوين الكاذب في الفحوصات الحيوية.
   </p>
+  <p style="font-size:0.84rem;color:#78350f;"><strong>حدود التفسير:</strong> {pains['disclaimer_ar']}</p>
 </div>
 """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    """
-<div class="panel-card">
-  <h4>فحص التداخلات المخبرية الهيكلي (PAINS Filter)</h4>
-  <p><span class="status-pill pill-info">لم ترصد تنبيهات PAINS المعروفة</span></p>
-  <p>
-    عدم رصد تنبيهات PAINS يعني خلو الجزيء من الأنماط الهيكلية المسجلة في الفهرس كمسببات شائعة للتداخل المخبري الكاذب،
-    ولا يعني بأي حال أن المركب آمن سميا أو صالح للاستخدام الدوائي.
-  </p>
-</div>
-""",
-                    unsafe_allow_html=True,
-                )
+                unsafe_allow_html=True,
+            )
 
-    def render_station_3():
+    def render_stage_3():
         st.markdown(
             """
 <div class="panel-card">
-  <h3>المحطة الثالثة: الأدلة المخبرية المنشورة (ChEMBL) والتشابه الهيكلي مع مجموعة التدريب (Tanimoto)</h3>
+  <h3>المرحلة الثالثة: استكشاف الأدلة العلمية المنشورة (Published Experimental Evidence - ChEMBL)</h3>
   <p>
-    تفصل هذه المحطة فصلا تاما بين القياسات المخبرية الحقيقية المنشورة في قاعدة بيانات ChEMBL وبين تنبؤات النموذج الحاسوبي،
-    وتحسب التشابه الهيكلي حصريا مقابل بصمات مركبات التدريب لمنع أي تسرب من مجموعة الاختبار.
+    تعرض هذه المرحلة النتائج التجريبية المنشورة في الأدبيات العلمية وقاعدة بيانات ChEMBL بمعزل تام عن تنبؤات الذكاء الاصطناعي،
+    مع توثيق معرف التجربة (Assay ID) ومعرف المرجع العلمي (Document ID) وعدد القياسات المتوافقة.
   </p>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
-        exact_matches = pd.DataFrame()
-        if clean_df is not None and "canonical_smiles" in clean_df.columns:
-            exact_matches = clean_df[clean_df["canonical_smiles"] == canonical_smi]
-
-        if not exact_matches.empty:
-            row_ex = exact_matches.iloc[0]
-            st.markdown(
-                f"""
-<div class="panel-card" style="border-right: 5px solid #15803d;">
-  <h4>سجل مخبري مطابق في قاعدة بيانات ChEMBL</h4>
-  <p>
-    المركب المدخل مسجل فعليا في البيانات المنظفة تحت المعرف
-    <code class="ltr-box">{row_ex['molecule_chembl_id']}</code>
-    في تجربة الربط المخبري <code class="ltr-box">{row_ex['assay_chembl_id']}</code> (النوع: <code class="ltr-box">{row_ex['assay_type']}</code>)
-    بعلاقة قياس <code class="ltr-box">{row_ex['standard_relation']}</code> وقيمة مخبرية
-    <code class="ltr-box">{row_ex['standard_value']:.2f} {row_ex['standard_units']}</code>
-    (<code class="ltr-box">pIC50 = {row_ex['pIC50']:.2f}</code>).
-  </p>
+        st.markdown(
+            """
+<div class="panel-card">
+  <h4>توضيح تعليمي: الفرق العلمي بين قياس IC50 وقياس Ki</h4>
+  <ul>
+    <li><strong>تركيز التثبيط النصفي (IC50):</strong> هو تركيز المثبط اللازم لخفض نشاط الإنزيم بنسبة 50% في ظروف تجربة محددة؛ وتعتمد قيمته على تركيز الإنزيم وتركيز الركيزة (Substrate) في التجربة.</li>
+    <li><strong>ثابت التثبيط (Ki):</strong> يعبر عن ألفة الارتباط الجوهرية (Intrinsic Binding Affinity) بين المثبط والإنزيم بمعزل عن تركيز الركيزة (يرتبط بـ IC50 عبر معادلة Cheng-Prusoff).</li>
+    <li><strong>القاعدة العلمية في MolecuLens:</strong> يتم التعامل مع كل نوع قياس بصورة منفصلة تماما ولا يتم دمج قيم IC50 مع Ki في تدريب النموذج أو حساب الوسيط.</li>
+  </ul>
 </div>
 """,
+            unsafe_allow_html=True,
+        )
+
+        highlight_val = None
+        highlight_lbl = verified_comp["name_ar"]
+        if published_records:
+            st.markdown(
+                f"<div class='panel-card' style='border-right:5px solid #15803d;'><h4>الأدلة التجريبية المنشورة للمركب المختار ({verified_comp['name_ar']} | {verified_comp['name_en']})</h4>",
                 unsafe_allow_html=True,
             )
+            ev_rows = []
+            for rec in published_records:
+                med_val = float(rec.get("median_activity", rec.get("standard_value", 0.0)))
+                pic50_v = float(rec.get("pIC50", 9.0 - np.log10(med_val) if med_val > 0 else 0.0))
+                highlight_val = pic50_v
+                ev_rows.append(
+                    {
+                        "اسم المركب": f"{verified_comp['name_ar']} ({verified_comp['name_en']})",
+                        "معرف المركب (ChEMBL ID)": str(rec.get("compound_id") or rec.get("molecule_chembl_id") or verified_comp.get("chembl_id") or "N/A"),
+                        "اسم الهدف البروتيني": f"{TARGET_INFO['name_en']} ({rec.get('target_id', 'CHEMBL284')})",
+                        "الكائن الحي": str(rec.get("target_organism", "Homo sapiens")),
+                        "نوع التجربة (Assay Type)": str(rec.get("assay_type", "B")),
+                        "نوع القياس (Standard Type)": str(rec.get("standard_type", "IC50")),
+                        "وسيط القيمة (Median Activity)": round(med_val, 2),
+                        "وحدة القياس": str(rec.get("standard_units", "nM")),
+                        "قيمة pIC50": round(pic50_v, 2),
+                        "عدد القياسات المجمعة (Measurement Count)": int(rec.get("measurement_count", 1)),
+                        "معرف التجربة (Assay ID)": str(rec.get("assay_id") or rec.get("assay_chembl_id") or "N/A"),
+                        "معرف المرجع (Document ID)": str(rec.get("document_id") or rec.get("document_chembl_id") or "N/A"),
+                        "جميع مراجع القياسات المجمعة (Source IDs)": str(rec.get("source_ids") or rec.get("reference_citation") or f"{rec.get('assay_id')} ({rec.get('document_id')})"),
+                    }
+                )
+            st.dataframe(pd.DataFrame(ev_rows), use_container_width=True, hide_index=True)
+            st.caption(
+                "ملاحظة منهجية: عند وجود أكثر من قياس متوافق للمركب نفسه، تعرض القيمة الوسيطة (Median Activity) مع ذكر عدد القياسات (Measurement Count) وكافة معرفات التجارب والمراجع الأصلية، ولا تعرض كأنها تجربة منفردة."
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.markdown(
                 """
 <div class="panel-card">
-  <h4>حالة المطابقة المباشرة في البيانات المحلية</h4>
+  <h4>حالة الأدلة التجريبية المباشرة للمركب المختار</h4>
   <p>
-    هذا المركب غير مطابق تطابقا تاما لأي سجل في مجموعة التدريب، ولذلك يعتمد تقييم النطاق التطبيقي على قياس تشابه
-    بصمات Morgan الجزيئية (Tanimoto Similarity) مع أقرب المركبات المقاسة مخبريا في مجموعة التدريب.
+    لا يوجد سجل تجريبي منشور مطابق تماما لهذا المركب في مجموعة بيانات ChEMBL المنظفة لهدف DPP4 البشري.
+    يمكنك الاطلاع أدناه على توزيع القياسات المنشورة في ChEMBL وأقرب المركبات المقاسة مخبريا في المرحلة الرابعة.
   </p>
 </div>
 """,
                 unsafe_allow_html=True,
             )
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("أعلى تشابه مع مركبات التدريب (Max Tanimoto)", f"{max_sim:.3f}")
-        m2.metric("متوسط تشابه أقرب 5 مركبات تدريب", f"{mean_top5_sim:.3f}")
-        m3.metric("عدد مركبات التدريب المرجعية", f"{len(ref_bundle['train_df'])}")
+        if clean_df is not None and not clean_df.empty:
+            fig_pub, exp_pub = build_published_activity_distribution_chart(clean_df, highlight_val, highlight_lbl)
+            st.plotly_chart(fig_pub, use_container_width=True)
+            st.caption(exp_pub)
 
-        st.plotly_chart(build_similarity_histogram(all_train_sims, max_sim), use_container_width=True)
+    def render_stage_4():
+        st.markdown(
+            """
+<div class="panel-card">
+  <h3>المرحلة الرابعة: تحدي «خمّن قبل أن ترى» والتنبؤ بالنشاط الحيوي باستخدام الذكاء الاصطناعي</h3>
+  <p>
+    تبدأ هذه المرحلة بتجربة تفاعلية تطلب منك صياغة توقعك العلمي بناء على خصائص المركب وأدلته المنشورة قبل مشاهدة نتائج نموذج Random Forest،
+    يليها عرض تصنيف نطاق تطبيق النموذج (Applicability Domain) وأقرب مركبات التدريب.
+  </p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
-        st.markdown("<h4>أقرب 5 مركبات مرجعية في مجموعة التدريب مع بيانات التجارب والمصادر</h4>", unsafe_allow_html=True)
-        display_df = pd.DataFrame(
+        current_guess = st.session_state["student_guesses_by_smiles"].get(canonical_smi, {"submitted": False})
+
+        st.markdown('<div class="panel-card"><h4>تحدي الطالب التفاعلي: خمّن قبل أن ترى (Guess Before You See)</h4>', unsafe_allow_html=True)
+        g_col1, g_col2, g_col3 = st.columns([1.2, 1.2, 0.8])
+        act_placeholder = "-- اختر تخمينك لمستوى النشاط الحيوي تجاه DPP4 --"
+        dom_placeholder = "-- اختر تخمينك لتصنيف نطاق تطبيق النموذج --"
+        act_options = [
+            act_placeholder,
+            "نشاط تثبيطي مرتفع (ضمن العتبات التعليمية)",
+            "نشاط تثبيطي متوسط (ضمن العتبات التعليمية)",
+            "نشاط تثبيطي ضعيف أو غير نشط (ضمن العتبات التعليمية)",
+        ]
+        dom_options = [
+            dom_placeholder,
+            "داخل النطاق – In-Domain",
+            "حدّي – Borderline",
+            "خارج النطاق – Out-of-Domain",
+        ]
+
+        with g_col1:
+            sel_act = st.selectbox(
+                "1. بناء على المراحل السابقة، ما تخمينك لمستوى نشاط المركب؟",
+                act_options,
+                index=0,
+                key=f"guess_act_{canonical_smi}",
+            )
+        with g_col2:
+            sel_dom = st.selectbox(
+                "2. ما تخمينك لمدى انتماء المركب إلى نطاق بيانات تدريب النموذج؟",
+                dom_options,
+                index=0,
+                key=f"guess_dom_{canonical_smi}",
+            )
+        with g_col3:
+            st.write("")
+            st.write("")
+            if st.button("إرسال التخمين وإظهار النتيجة", key=f"btn_guess_{canonical_smi}"):
+                if sel_act == act_placeholder or sel_dom == dom_placeholder:
+                    st.warning("يرجى اختيار تخمينك لكلا السؤالين أولا قبل الإرسال (لا توجد قيم افتراضية مسبقة).")
+                else:
+                    ad_actual = pred_data["applicability_domain"]["status_ar"]
+                    act_actual = pred_data["category_ar"]
+                    act_ok = sel_act == act_actual
+                    dom_ok = sel_dom == ad_actual
+                    comp_exp = (
+                        f"{'أصبت في تقدير فئة النشاط؛ ' if act_ok else 'اختلف تخمينك للنشاط عن تقدير النموذج؛ '}"
+                        f"{'وأصبت في تحديد نطاق التطبيق.' if dom_ok else 'واختلف تقديرك لنطاق التطبيق (حيث يعتمد النطاق على تشابه Tanimoto مع مركبات التدريب وفحص البنية الكيميائية).'}"
+                    )
+                    st.session_state["student_guesses_by_smiles"][canonical_smi] = {
+                        "submitted": True,
+                        "activity_guess": sel_act,
+                        "domain_guess": sel_dom,
+                        "activity_matched": act_ok,
+                        "domain_matched": dom_ok,
+                        "comparison_explanation": comp_exp,
+                    }
+                    current_guess = st.session_state["student_guesses_by_smiles"][canonical_smi]
+
+        if current_guess.get("submitted"):
+            st.success(
+                f"تم تسجيل تخمينك لهذا المركب ({verified_comp['name_ar']}): "
+                f"النشاط المختار: [{current_guess['activity_guess']}] | النطاق المختار: [{current_guess['domain_guess']}]. "
+                f"النتيجة التعليمية: {current_guess['comparison_explanation']}"
+            )
+        else:
+            st.info("أدخل تخمينك أعلاه واضغط «إرسال التخمين وإظهار النتيجة» لتفعيل مقارنة إجابتك بنتيجة النموذج.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        ad_info = pred_data["applicability_domain"]
+        st.markdown(
+            f"""
+<div class="panel-card">
+  <h4>تصنيف نطاق تطبيق النموذج (Prediction Applicability Domain)</h4>
+  <p>
+    <strong>حالة النطاق للمركب الحالي:</strong>
+    <span class="status-pill {ad_info['pill_class']}">{ad_info['status_ar']}</span>
+    &nbsp;|&nbsp;
+    <strong>أقصى تشابه Tanimoto مع مركبات التدريب:</strong> <code class="ltr-inline">{pred_data['max_tanimoto']:.3f}</code>
+    &nbsp;|&nbsp;
+    <strong>متوسط أقرب 5 مركبات تدريب:</strong> <code class="ltr-inline">{pred_data['mean_top5_tanimoto']:.3f}</code>
+  </p>
+  <p>{ad_info['summary_ar']}</p>
+  <ul>
+    {"".join(f"<li>{r}</li>" for r in ad_info['reasons_ar'])}
+  </ul>
+  <p style="font-size:0.84rem;opacity:0.9;"><strong>المبرر العلمي للحدود:</strong> {ad_info['thresholds_justification_ar']}</p>
+  <p style="font-size:0.84rem;color:#78350f;"><strong>إقرار منهجي:</strong> {ad_info['scientific_disclaimer_ar']}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+        show_ood_raw = False
+        if not ad_info["can_show_reliable_prediction"]:
+            st.error(
+                "تنبيه علمي: هذا المركب يقع خارج نطاق تطبيق النموذج (Out-of-Domain). "
+                "لذلك لا يقدم النظام تنبؤا عدديا معتمدا له، منعا للتضليل العلمي."
+            )
+            show_ood_raw = st.checkbox(
+                "إظهار القيمة الحاسوبية الخام لأغراض المقارنة والتعلم فقط (مع الإقرار بعدم موثوقيتها)",
+                value=False,
+                key=f"ood_toggle_{canonical_smi}",
+            )
+
+        if ad_info["can_show_reliable_prediction"] or show_ood_raw:
+            c_p1, c_p2 = st.columns([1.1, 1.3])
+            with c_p1:
+                fig_g, exp_g = build_pic50_gauge(pred_data["pred_pic50"])
+                st.plotly_chart(fig_g, use_container_width=True)
+                st.caption(exp_g)
+            with c_p2:
+                warn_banner = (
+                    "<p><span class='status-pill pill-low'>تحذير: قيمة خام خارج نطاق التدريب (للتوضيح التعليمي فقط)</span></p>"
+                    if not ad_info["can_show_reliable_prediction"]
+                    else (
+                        "<p><span class='status-pill pill-mid'>تنبيه: المركب في المنطقة الحدية (Borderline) - يفسر التنبؤ بحذر</span></p>"
+                        if ad_info["status_code"] == "Borderline"
+                        else ""
+                    )
+                )
+                st.markdown(
+                    f"""
+<div class="panel-card">
+  <h4>مخرجات نموذج الذكاء الاصطناعي (Random Forest Regressor)</h4>
+  {warn_banner}
+  <p><strong>نوع القياس المتنبأ به:</strong> {pred_data['measurement_type']} (خاص بـ IC50 فقط ولا يخلط مع Ki)</p>
+  <p><strong>وحدة القياس:</strong> {pred_data['units']}</p>
+  <p><strong>قيمة التنبؤ اللوغاريتمي (Predicted pIC50):</strong> <code class="ltr-inline" style="font-size:1.2rem;font-weight:800;">{pred_data['pred_pic50']:.2f}</code></p>
+  <p><strong>القيمة المكافئة لتركيز التثبيط النصفي (Predicted IC50):</strong> <code class="ltr-inline" style="font-size:1.15rem;font-weight:700;">{pred_data['pred_ic50_nm']:,.2f} nM</code></p>
+  <p><strong>تفسير النتيجة:</strong> <span class="status-pill {pred_data['pill_class']}">{pred_data['category_ar']}</span></p>
+  <p>{pred_data['explanation_ar']}</p>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown('<div class="panel-card"><h4>مقاييس التحقق العالمية للنموذج على مجموعة الاختبار (Bemis-Murcko Scaffold Split)</h4>', unsafe_allow_html=True)
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        mc1.metric("متوسط الخطأ المطلق (MAE)", f"{metrics['mae_pic50']:.3f} pIC50")
+        mc2.metric("جذر متوسط مربع الخطأ (RMSE)", f"{metrics['rmse_pic50']:.3f} pIC50")
+        mc3.metric("معامل التحديد العددي (R²)", f"{metrics['r2_pic50']:.3f}")
+        mc4.metric("أداء التمييز التصنيفي (ROC-AUC)", f"{metrics['roc_auc']:.3f}")
+        st.caption(metrics.get("roc_auc_note_ar", ""))
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        fig_sim, exp_sim = build_similarity_chart(pred_data["all_train_similarities"], pred_data["max_tanimoto"])
+        st.plotly_chart(fig_sim, use_container_width=True)
+        st.caption(exp_sim)
+
+        nearest_df = pred_data["nearest_train_compounds"]
+        fig_near, exp_near = build_nearest_compounds_chart(nearest_df)
+        st.plotly_chart(fig_near, use_container_width=True)
+        st.caption(exp_near)
+
+        st.markdown("<h4>جدول أقرب 5 مركبات في بيانات التدريب فقط (مع المعرفات والمصادر)</h4>", unsafe_allow_html=True)
+        near_table = pd.DataFrame(
             {
                 "معرف المركب (ChEMBL ID)": nearest_df["molecule_chembl_id"].astype(str),
                 "معامل التشابه (Tanimoto)": nearest_df["tanimoto"].round(3),
+                "نوع القياس": nearest_df["standard_type"].astype(str),
+                "وسيط النشاط (IC50 nM)": nearest_df["standard_value"].round(2),
+                "قيمة pIC50": nearest_df["pIC50"].round(2),
+                "عدد القياسات": nearest_df.get("measurement_count", pd.Series(1, index=nearest_df.index)).astype(int),
                 "معرف التجربة (Assay ID)": nearest_df["assay_chembl_id"].astype(str),
-                "نوع التجربة": nearest_df["assay_type"].astype(str),
-                "نوع القياس والعلاقة": nearest_df["standard_type"].astype(str) + " (" + nearest_df["standard_relation"].astype(str) + ")",
-                "القيمة المخبرية (IC50 nM)": nearest_df["standard_value"].round(2),
-                "قيمة pIC50 المخبرية": nearest_df["pIC50"].round(2),
-                "المصدر المرجعي (Document ID)": nearest_df["document_chembl_id"].fillna("غير محدد").astype(str),
-                "المجلة العلمية": nearest_df["document_journal"].fillna("غير محدد").astype(str),
-                "سنة النشر": nearest_df["document_year"].fillna(0).astype(int).astype(str).replace("0", "غير محدد"),
-                "الصيغة القياسية (SMILES)": nearest_df["canonical_smiles"].astype(str),
+                "معرف المرجع (Document ID)": nearest_df["document_chembl_id"].astype(str),
+                "مراجع القياسات (Source IDs)": nearest_df.get("source_ids", nearest_df["assay_chembl_id"]).astype(str),
             }
         )
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(near_table, use_container_width=True, hide_index=True)
 
-        st.markdown("<h4>مقارنة بصرية مع أقرب 3 هياكل كيميائية في مجموعة التدريب</h4>", unsafe_allow_html=True)
-        g_cols = st.columns(3)
-        for idx_col in range(min(3, len(nearest_df))):
-            r_near = nearest_df.iloc[idx_col]
-            m_near = Chem.MolFromSmiles(str(r_near["canonical_smiles"]))
-            with g_cols[idx_col]:
-                if m_near is not None:
-                    st.image(
-                        mol_to_png_bytes(m_near, size=(320, 210)),
-                        caption=(
-                            f"{r_near['molecule_chembl_id']} | Tanimoto: {r_near['tanimoto']:.2f} | "
-                            f"IC50: {r_near['standard_value']:.1f} nM (pIC50: {r_near['pIC50']:.2f})"
-                        ),
-                    )
-
-    def render_station_4():
+    def render_stage_5():
         st.markdown(
             """
 <div class="panel-card">
-  <h3>المحطة الرابعة: تحدي «خمّن قبل أن ترى» والتنبؤ الحاسوبي (Random Forest Regressor)</h3>
+  <h3>المرحلة الخامسة: التقييم النهائي والتقرير التعليمي (Final Evaluation &amp; Educational Report)</h3>
   <p>
-    لتعزيز التفكير النقدي وتجنب الثقة العمياء بالذكاء الاصطناعي، سجل توقعك العلمي أولا بناء على خصائص المركب في المحطة الثانية
-    ودرجة تشابهه مع الأدلة المخبرية في المحطة الثالثة، ثم قارن حكمك بتقدير النموذج الحاسوبي.
+    يفصل هذا الملخص النهائي بصريا وعلميا بين ثلاث ركائز مستقلة: الخصائص الكيميائية المحسوبة، الأدلة التجريبية المنشورة، وتوقعات نموذج الذكاء الاصطناعي.
   </p>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
-        with st.container():
-            st.markdown('<div class="panel-card"><h4>تحدي الطالب: خمّن قبل أن ترى النتيجة الحاسوبية</h4>', unsafe_allow_html=True)
-            cg1, cg2, cg3 = st.columns([1.2, 1.2, 0.8])
-            with cg1:
-                pot_guess = st.selectbox(
-                    "1. ما توقعك لمستوى النشاط التثبيطي لهذا المركب؟",
-                    [
-                        "نشاط تثبيطي مرتفع (ضمن العتبات التعليمية)",
-                        "نشاط تثبيطي متوسط (ضمن العتبات التعليمية)",
-                        "نشاط تثبيطي ضعيف أو غير نشط (ضمن العتبات التعليمية)",
-                    ],
-                    key="pot_guess_select",
-                )
-            with cg2:
-                conf_guess = st.selectbox(
-                    "2. ما توقعك لمستوى الثقة في تنبؤ النموذج لهذا المركب؟",
-                    [
-                        "عالية (موثوق ضمن نطاق التدريب)",
-                        "متوسطة (يتطلب تحققا إضافيا)",
-                        "منخفضة (خارج نطاق التدريب)",
-                    ],
-                    key="conf_guess_select",
-                )
-            with cg3:
-                st.write("")
-                st.write("")
-                if st.button("تسجيل التوقع ومقارنته"):
-                    st.session_state["student_guess_submitted"] = True
-                    st.session_state["student_potency_guess"] = pot_guess
-                    st.session_state["student_conf_guess"] = conf_guess
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        col_pred1, col_pred2 = st.columns([1.15, 1.25])
-        with col_pred1:
-            st.plotly_chart(build_pic50_gauge(pred_pic50), use_container_width=True)
-        with col_pred2:
+        ad_info = pred_data["applicability_domain"]
+        c_sep1, c_sep2, c_sep3 = st.columns(3)
+        with c_sep1:
             st.markdown(
                 f"""
-<div class="panel-card">
-  <h4>التقدير الحاسوبي الأولي للنموذج (Random Forest على مقياس pIC50)</h4>
-  <p>
-    <strong>قيمة pIC50 المتوقعة:</strong>
-    <span class="ltr-box" style="font-size:1.25rem;font-weight:800;">{pred_pic50:.2f} ± {pred_std_pic50:.2f}</span>
-  </p>
-  <p>
-    <strong>القيمة المكافئة لتركيز التثبيط النصفي (IC50):</strong>
-    <span class="ltr-box" style="font-size:1.2rem;font-weight:700;">{pred_ic50_nm:,.2f} nM</span>
-  </p>
-  <p>
-    <strong>التصنيف الاسترشادي:</strong>
-    <span class="status-pill {pot_pill}">{pot_label}</span>
-  </p>
-  <p style="margin-top:0.6rem;">{pot_explain}</p>
-  <p style="font-size:0.84rem;opacity:0.85;margin-top:0.5rem;">
-    <strong>ملاحظة منهجية:</strong> يعتمد المقياس على التحويل اللوغاريتمي <code class="ltr-box">pIC50 = 9 - log10(IC50_nM)</code>
-    بحيث يغطي القيم الممتدة من <code class="ltr-box">0.1 nM</code> حتى <code class="ltr-box">1,000,000 nM</code> دون إخفاء القيم المرتفعة،
-    مع التأكيد على أن هذه العتبات تعليمية استرشادية وليست حكما نهائيا على فعالية المركب.
-  </p>
+<div class="sep-col-chem">
+  <h4>1. الخصائص الكيميائية المحسوبة (RDKit)</h4>
+  <p><em>حسابات بنيوية حتمية مشتقة من الصيغة الجزيئية:</em></p>
+  <ul>
+    <li><strong>الصيغة الجزيئية:</strong> <code class="ltr-inline">{desc_data['molecular_formula']}</code></li>
+    <li><strong>الوزن الجزيئي:</strong> <code class="ltr-inline">{desc_data['molecular_weight']} Da</code></li>
+    <li><strong>معامل LogP:</strong> <code class="ltr-inline">{desc_data['logp']}</code></li>
+    <li><strong>مانحات / مستقبلات H:</strong> <code class="ltr-inline">HBD={desc_data['hbd']} | HBA={desc_data['hba']}</code></li>
+    <li><strong>الروابط الدوارة و TPSA:</strong> <code class="ltr-inline">Rot={desc_data['rotatable_bonds']} | TPSA={desc_data['tpsa']} Å²</code></li>
+    <li><strong>قاعدة Lipinski:</strong> {desc_data['lipinski']['summary_ar']}</li>
+    <li><strong>فحص PAINS:</strong> {desc_data['pains']['status_ar']}</li>
+  </ul>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+        with c_sep2:
+            if published_records:
+                rec0 = published_records[0]
+                med_v = float(rec0.get("median_activity", rec0.get("standard_value", 0.0)))
+                pic_v = float(rec0.get("pIC50", 9.0 - np.log10(med_v) if med_v > 0 else 0.0))
+                exp_html = f"""
+  <p><em>قياسات مخبرية حقيقية موثقة في قاعدة بيانات ChEMBL:</em></p>
+  <ul>
+    <li><strong>معرف المركب:</strong> <code class="ltr-inline">{rec0.get('compound_id') or rec0.get('molecule_chembl_id')}</code></li>
+    <li><strong>الهدف البشري:</strong> <code class="ltr-inline">{rec0.get('target_id', 'CHEMBL284')} ({rec0.get('target_organism', 'Homo sapiens')})</code></li>
+    <li><strong>نوع القياس:</strong> <code class="ltr-inline">{rec0.get('standard_type', 'IC50')}</code></li>
+    <li><strong>الوسيط المخبري:</strong> <code class="ltr-inline">{med_v:.2f} nM (pIC50 = {pic_v:.2f})</code></li>
+    <li><strong>عدد القياسات:</strong> <code class="ltr-inline">{rec0.get('measurement_count', 1)}</code></li>
+    <li><strong>المراجع (Assay / Doc):</strong> <code class="ltr-inline">{rec0.get('source_ids') or (str(rec0.get('assay_id')) + ' / ' + str(rec0.get('document_id')))}</code></li>
+  </ul>
+"""
+            else:
+                exp_html = """
+  <p><em>قياسات مخبرية حقيقية موثقة في قاعدة بيانات ChEMBL:</em></p>
+  <p>لا تتوفر تجربة مخبرية منشورة مطابقة تماما لهذا المركب في مجموعة بيانات DPP4 المحلية المنظفة.</p>
+"""
+            st.markdown(
+                f"""
+<div class="sep-col-exp">
+  <h4>2. الأدلة المنشورة من التجارب (ChEMBL)</h4>
+  {exp_html}
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+        with c_sep3:
+            pred_val_html = (
+                f"<li><strong>التنبؤ اللوغاريتمي (pIC50):</strong> <code class='ltr-inline'>{pred_data['pred_pic50']:.2f}</code></li>"
+                f"<li><strong>التركيز المكافئ (IC50):</strong> <code class='ltr-inline'>{pred_data['pred_ic50_nm']:,.2f} nM</code></li>"
+                f"<li><strong>تفسير النشاط:</strong> {pred_data['category_ar']}</li>"
+                if ad_info["can_show_reliable_prediction"]
+                else "<li><strong>التنبؤ العددي:</strong> محجوب كقيمة معتمدة لوقوع المركب خارج نطاق تطبيق النموذج (Out-of-Domain).</li>"
+            )
+            st.markdown(
+                f"""
+<div class="sep-col-ai">
+  <h4>3. توقعات الذكاء الاصطناعي ونطاق التطبيق</h4>
+  <p><em>تقديرات حاسوبية لنموذج Random Forest (ليست قياسا مخبريا):</em></p>
+  <ul>
+    <li><strong>نطاق التطبيق (AD):</strong> <span class="status-pill {ad_info['pill_class']}">{ad_info['status_ar']}</span></li>
+    <li><strong>أقصى تشابه Tanimoto:</strong> <code class="ltr-inline">{pred_data['max_tanimoto']:.3f}</code></li>
+    {pred_val_html}
+    <li><strong>أداء النموذج (Scaffold Split):</strong> <code class="ltr-inline">MAE={metrics['mae_pic50']:.2f}, RMSE={metrics['rmse_pic50']:.2f}, R²={metrics['r2_pic50']:.2f}</code></li>
+  </ul>
 </div>
 """,
                 unsafe_allow_html=True,
             )
 
-    def render_station_5():
-        st.markdown(
-            """
-<div class="panel-card">
-  <h3>المحطة الخامسة: الحكم النهائي، تطبيق معادلة الثقة المعتمدة، والتقرير التعليمي</h3>
-  <p>
-    تطبيقا للوثيقة المعتمدة للمشروع، لا يحدد مستوى الثقة بناء على التشابه وحده ولا بناء على أداء النموذج وحده،
-    بل يحسب كحد أدنى صريح بين المعيارين مع عرض كل مؤشر بشكل منفصل.
-  </p>
-</div>
-""",
-            unsafe_allow_html=True,
+        student_guess_state = st.session_state["student_guesses_by_smiles"].get(canonical_smi)
+        report_markdown = generate_educational_report(
+            compound_info=verified_comp,
+            descriptors=desc_data,
+            published_records=published_records,
+            prediction=pred_data,
+            metrics=metrics,
+            student_guess=student_guess_state,
         )
 
-        roc_auc_val = float(metrics["roc_auc"])
-        mae_val = float(metrics["mae_pic50"])
-        rmse_val = float(metrics["rmse_pic50"])
-        r2_val = float(metrics["r2_pic50"])
+        with st.expander("معاينة النص الكامل للتقرير التعليمي الموثق", expanded=False):
+            st.markdown(report_markdown)
 
-        st.markdown(
-            f"""
-<div class="panel-card">
-  <h4>تفصيل حساب مستوى الثقة التشغيلي (القاعدة الحسابية الصريحة)</h4>
-  <p>
-    <strong>المعادلة المعتمدة:</strong>
-    <code>مستوى الثقة النهائي = الحد الأدنى (معيار التشابه الهيكلي للمركب , معيار الأداء العام للنموذج بتقسيم Scaffold Split)</code>
-  </p>
-  <table class="conf-table">
-    <thead>
-      <tr>
-        <th>المؤشر</th>
-        <th>القيمة المحسوبة</th>
-        <th>المستوى المعياري</th>
-        <th>التفسير المنهجي</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><strong>1. معيار التشابه الهيكلي للمركب (Tanimoto)</strong></td>
-        <td><span class="ltr-box">Max = {max_sim:.3f} | Top-5 Mean = {mean_top5_sim:.3f}</span></td>
-        <td><span class="status-pill {conf_res['sim_pill']}">{conf_res['sim_label']}</span></td>
-        <td>يقيس مدى قرب المركب المدخل من الفضاء الكيميائي لمركبات التدريب فقط.</td>
-      </tr>
-      <tr>
-        <td><strong>2. معيار الأداء العام للنموذج (Scaffold Split ROC-AUC)</strong></td>
-        <td><span class="ltr-box">ROC-AUC = {roc_auc_val:.3f} | MAE = {mae_val:.3f} | RMSE = {rmse_val:.3f} | R² = {r2_val:.3f}</span></td>
-        <td><span class="status-pill {conf_res['auc_pill']}">{conf_res['auc_label']}</span></td>
-        <td>قيمة عالمية ثابتة للنموذج محسوبة على هياكل Murcko غير مرئية لمنع تسرب البيانات.</td>
-      </tr>
-      <tr>
-        <td><strong>3. مستوى الثقة النهائي (حسب القيمة الأدنى)</strong></td>
-        <td><span class="ltr-box">min(Tier {conf_res['sim_tier']}, Tier {conf_res['auc_tier']}) = Tier {conf_res['final_tier']}</span></td>
-        <td><span class="status-pill {conf_res['final_pill']}">{conf_res['final_label']}</span></td>
-        <td>{"تنبيه حرج: المركب خارج نطاق التدريب (Tanimoto < 0.30)، التنبؤ غير موثوق." if conf_res["out_of_domain"] else "محكوم بالحد الأدنى بين المؤشرين لضمان الصدق العلمي."}</td>
-      </tr>
-    </tbody>
-  </table>
-  <p style="margin-top:0.8rem;font-size:0.86rem;opacity:0.9;">
-    <strong>إقرار منهجي صريح:</strong> هذه العتبات ومستوى الثقة الناتج عنها هي معايير تشغيلية تعليمية مقترحة لتدريب الطالب على الفحص النقدي
-    ونطاق التطبيق (Applicability Domain)، وليست احتمالا إحصائيا مطلقا لصحة التنبؤ.
-  </p>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-
-        st.markdown('<div class="panel-card"><h4>التقرير التعليمي الشامل للتجربة</h4>', unsafe_allow_html=True)
-        student_pot = st.session_state["student_potency_guess"]
-        student_conf = st.session_state["student_conf_guess"]
-        pot_match = student_pot == pot_label
-        conf_match = student_conf == conf_res["final_label"]
-
-        st.markdown(
-            f"""
-<p><strong>1. مقارنة توقع الطالب («خمّن قبل أن ترى») بالنتيجة الحاسوبية:</strong></p>
-<ul>
-  <li>
-    <strong>توقع النشاط:</strong> اختار الطالب (<em>{student_pot}</em>) بينما أظهر التقدير الحاسوبي (<em>{pot_label}</em>)
-    بقيمة <code class="ltr-box">pIC50 = {pred_pic50:.2f}</code> (<code class="ltr-box">{pred_ic50_nm:,.2f} nM</code>) —
-    <strong>{"تطابق في تقدير فئة النشاط" if pot_match else "اختلاف يوضح أهمية مراجعة الأدلة التجريبية"}</strong>.
-  </li>
-  <li>
-    <strong>توقع مستوى الثقة:</strong> اختار الطالب (<em>{student_conf}</em>) بينما أظهرت قاعدة الحد الأدنى (<em>{conf_res['final_label']}</em>)
-    بناء على <code class="ltr-box">Tanimoto = {max_sim:.3f}</code> و <code class="ltr-box">ROC-AUC = {roc_auc_val:.3f}</code> —
-    <strong>{"تطابق في تقييم الموثوقية" if conf_match else "اختلاف يبرز دور قاعدة الحد الأدنى ونطاق التدريب"}</strong>.
-  </li>
-</ul>
-<p><strong>2. الخلاصة التعليمية المستفادة من هذه التجربة:</strong></p>
-<ul>
-  <li>
-    {"المركب يقع خارج نطاق التدريب (Tanimoto < 0.30)، ما يعني أن النموذج يستقرئ في منطقة كيميائية لم يتدرب عليها، وبالتالي لا يعتمد على الرقم المتوقع مهما بدا دقيقا." if conf_res["out_of_domain"] else "المركب يقع ضمن نطاق تشابه مقبول مع مركبات التدريب، ما يمنح التقدير الحاسوبي سياقا مرجعيا قابلا للمقارنة المخبرية."}
-  </li>
-  <li>
-    {f"رصد تنبيه هيكلي ({pains_desc}) يستوجب الحذر من التداخلات المخبرية الكاذبة قبل إجراء أي فحص حيوي." if pains_desc else "لم ترصد تنبيهات PAINS المعروفة، مع بقاء الحاجة لاختبارات الانتقائية والسمية المخبرية."}
-  </li>
-</ul>
-""",
-            unsafe_allow_html=True,
-        )
-
-        report_md = f"""# تقرير تجربة MolecuLens التعليمية
-- الصيغة القياسية (Canonical SMILES): `{canonical_smi}`
-- الصيغة الجزيئية: `{formula_str}`
-- هيكل Murcko الأساسي: `{scaffold_smi}`
-- التقدير الحاسوبي (pIC50): `{pred_pic50:.2f} +/- {pred_std_pic50:.2f}`
-- التقدير المكافئ (IC50): `{pred_ic50_nm:.2f} nM`
-- فئة النشاط الاسترشادية: {pot_label}
-- فحص تنبيهات PAINS: {"تم رصد تنبيه: " + pains_desc if pains_desc else "لم ترصد تنبيهات PAINS المعروفة"}
-- أعلى تشابه Tanimoto مع التدريب: `{max_sim:.3f}`
-- متوسط تشابه أقرب 5 مركبات تدريب: `{mean_top5_sim:.3f}`
-- أداء النموذج العالمي (Scaffold Split): `ROC-AUC = {roc_auc_val:.3f}, MAE = {mae_val:.3f}, RMSE = {rmse_val:.3f}, R2 = {r2_val:.3f}`
-- مستوى الثقة التشغيلي النهائي: {conf_res['final_label']}
-- توقع الطالب للنشاط: {student_pot}
-- توقع الطالب للثقة: {student_conf}
-"""
         st.download_button(
-            label="تحميل التقرير التعليمي للتجربة (ملف نصي موثق)",
-            data=report_md.encode("utf-8"),
-            file_name="MolecuLens_Experiment_Report.md",
+            label="تحميل التقرير التعليمي الكامل للمركب (Markdown Report)",
+            data=report_markdown.encode("utf-8"),
+            file_name=f"MolecuLens_Report_{verified_comp.get('id', 'compound')}.md",
             mime="text/markdown",
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
-        if st.session_state["experiment_history"]:
-            st.markdown("<h4>سجل التجارب المنفذة خلال الجلسة الحالية</h4>", unsafe_allow_html=True)
-            hist_df = pd.DataFrame(st.session_state["experiment_history"]).rename(
-                columns={
-                    "smiles": "SMILES القياسي",
-                    "formula": "الصيغة الجزيئية",
-                    "pred_pic50": "pIC50 المتوقع",
-                    "pred_ic50_nm": "IC50 المتوقع (nM)",
-                    "max_tanimoto": "أعلى تشابه (Tanimoto)",
-                    "confidence": "مستوى الثقة النهائي",
-                }
-            )
-            st.dataframe(hist_df, use_container_width=True, hide_index=True)
-
-    if view_style == "عرض الشاشة الموحدة (جميع المحطات متتابعة)":
-        render_station_1()
-        render_station_2()
-        render_station_3()
-        render_station_4()
-        render_station_5()
+    if display_mode == "عرض الرحلة الكاملة المتتابعة (المراحل الخمس في شاشة موحدة)":
+        render_stage_1()
+        render_stage_2()
+        render_stage_3()
+        render_stage_4()
+        render_stage_5()
     else:
-        t1, t2, t3, t4, t5 = st.tabs(
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
             [
-                "المحطة 1: الهدف (UniProt)",
-                "المحطة 2: الخصائص و PAINS",
-                "المحطة 3: الأدلة و Tanimoto",
-                "المحطة 4: التوقع والتنبؤ",
-                "المحطة 5: الحكم والتقرير",
+                "المرحلة 1: الهدف البروتيني",
+                "المرحلة 2: الخصائص الكيميائية",
+                "المرحلة 3: الأدلة المنشورة",
+                "المرحلة 4: التوقع وتنبؤ AI",
+                "المرحلة 5: التقييم والتقرير",
             ]
         )
-        with t1:
-            render_station_1()
-        with t2:
-            render_station_2()
-        with t3:
-            render_station_3()
-        with t4:
-            render_station_4()
-        with t5:
-            render_station_5()
+        with tab1:
+            render_stage_1()
+        with tab2:
+            render_stage_2()
+        with tab3:
+            render_stage_3()
+        with tab4:
+            render_stage_4()
+        with tab5:
+            render_stage_5()
+
+elif main_section == "2. مكتبة المركبات التجريبية لـ DPP4 (Demo Library)":
+    st.markdown(
+        """
+<div class="panel-card">
+  <h3>مكتبة المركبات التجريبية المرجعية المثبطة لإنزيم DPP4 البشري (DPP4 Demo Compounds)</h3>
+  <p>
+    تضم هذه المكتبة خمسة مثبطات قياسية معروفة لإنزيم DPP4 البشري، تم التحقق من سجلاتها المرجعية في ChEMBL و PubChem
+    وارتباط قياساتها بالهدف البشري <code class="ltr-inline">CHEMBL284</code> ونوع التجربة والوحدة والمرجع العلمي.
+  </p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    for idx_d, demo in enumerate(demo_compounds):
+        d_mol, d_canon, _ = validate_smiles(demo["canonical_smiles"])
+        with st.container():
+            st.markdown('<div class="panel-card">', unsafe_allow_html=True)
+            cd1, cd2 = st.columns([1.0, 2.2])
+            with cd1:
+                if d_mol is not None:
+                    st.image(render_mol_png(d_mol, size=(340, 220)), caption=f"{demo['name_ar']} ({demo['name_en']})")
+            with cd2:
+                st.markdown(
+                    f"""
+<h4>{demo['name_ar']} | <span class="ltr-inline">{demo['name_en']}</span></h4>
+<p><strong>الأسماء التجارية والرموز:</strong> {", ".join(demo.get("brand_names", []))}</p>
+<p><strong>الصيغة الكيميائية:</strong> <code class="ltr-inline">{demo['molecular_formula']}</code> | <strong>PubChem CID:</strong> <code class="ltr-inline">{demo['pubchem_cid']}</code> | <strong>ChEMBL ID:</strong> <code class="ltr-inline">{demo['chembl_id']}</code></p>
+<p><strong>الهدف البروتيني:</strong> <code class="ltr-inline">{demo['target_id']}</code> ({demo['target_name']} - <code class="ltr-inline">{demo['target_organism']}</code>)</p>
+<p><strong>بيانات النشاط الحيوي الموثقة:</strong> نوع التجربة: <code class="ltr-inline">{demo['assay_type']}</code> | نوع القياس: <code class="ltr-inline">{demo['standard_type']}</code> | الوسيط: <code class="ltr-inline">{demo['median_activity']} {demo['standard_units']}</code> (<code class="ltr-inline">pIC50 = {demo['pIC50']}</code>) | عدد القياسات: <code class="ltr-inline">{demo['measurement_count']}</code></p>
+<p><strong>مصدر القياس المرجعي:</strong> Assay ID: <code class="ltr-inline">{demo['assay_id']}</code> | Document ID: <code class="ltr-inline">{demo['document_id']}</code> (<span class="ltr-inline">{demo['reference_citation']}</span>)</p>
+<p><strong>ملاحظة علمية:</strong> {demo['notes_ar']}</p>
+""",
+                    unsafe_allow_html=True,
+                )
+                if st.button(f"نسخ اسم {demo['name_ar']} إلى مربع البحث لتحليله في المختبر", key=f"load_demo_{idx_d}"):
+                    st.session_state["search_query_input"] = demo["name_en"]
+                    st.success(f"تم تحديد {demo['name_ar']} ({demo['name_en']}). انتقل إلى تبويب «1. البحث الذكي والمختبر الافتراضي» لاستعراض المراحل الخمس.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 else:
     st.markdown(
         """
 <div class="panel-card">
-  <h3>صفحة التحقق المنهجي، مختبر الأخطاء، والاختبار النقدي</h3>
+  <h3>الدرس التعليمي: مقارنة Random Split و Scaffold Split وتوثيق تنظيف بيانات ChEMBL</h3>
   <p>
-    تكشف هذه الصفحة بشفافية كاملة كيف تم تنظيف بيانات ChEMBL، ولماذا استخدم تقسيم الهياكل (Bemis-Murcko Scaffold Split)
-    بدلا من التقسيم العشوائي، وأين يخطئ نموذج الذكاء الاصطناعي عند مواجهة المركبات البعيدة أو قفزات النشاط (Activity Cliffs).
+    يوضح هذا القسم كيف تم تنظيف بيانات ChEMBL بصرامة علمية، ولماذا نعتمد تقسيم الهياكل الأساسية (Bemis-Murcko Scaffold Split)
+    بدلا من التقسيم العشوائي عند اختبار قدرة نموذج الذكاء الاصطناعي على التعميم على مركبات جديدة.
   </p>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    if clean_report is not None:
-        st.markdown('<div class="panel-card"><h4>1. سياسة التنظيف العلمي للبيانات (Data Curation Funnel)</h4>', unsafe_allow_html=True)
-        c_s1, c_s2, c_s3, c_s4, c_s5 = st.columns(5)
-        c_s1.metric("السجلات الخام من ChEMBL", clean_report["initial_records"])
-        c_s2.metric("بعد تصفية العلاقة (= فقط)", clean_report["after_exact_relation"])
-        c_s3.metric("بعد استبعاد تحذيرات الصلاحية", clean_report["after_data_validity"])
-        c_s4.metric("بعد توحيد التجارب والوحدات (nM)", clean_report["after_unit_and_structure_standardization"])
-        c_s5.metric("المركبات الفريدة النهائية", clean_report["final_unique_compounds"])
-
-        st.markdown(
-            f"""
-<ul>
-  <li><strong>معالجة العلاقات غير المحددة:</strong> تم الإبقاء حصرا على القياسات الكمية الدقيقة ذات العلاقة <code class="ltr-box">=</code> واستبعاد القياسات الحدية (<code class="ltr-box">&gt;</code> و <code class="ltr-box">&gt;&gt;</code>).</li>
-  <li><strong>معالجة صلاحية البيانات (Data Validity):</strong> تم استبعاد كافة السجلات الحاملة لتحذير <code>Outside typical range</code>.</li>
-  <li><strong>توحيد الوحدات وتجانس التجارب:</strong> تم الاقتصار على تجارب الربط المخبري المباشر (<code class="ltr-box">Assay Type = B</code>) وتوحيد <code class="ltr-box">{clean_report['converted_non_nm_units']}</code> سجلا من وحدة <code class="ltr-box">ug.mL-1</code> إلى <code class="ltr-box">nM</code> بالاعتماد على الوزن الجزيئي الدقيق.</li>
-  <li><strong>معالجة التكرار وتضارب القياسات:</strong> تم استبعاد <code class="ltr-box">{clean_report['discordant_replicates_removed']}</code> سجلا متكررا يتجاوز فرق القياس فيها وحدة لوغاريتمية كاملة (<code class="ltr-box">&gt; 1.0 pIC50</code>)، ودمج القياسات المتوافقة بأخذ الوسيط الحسابي عبر <code class="ltr-box">{clean_report['unique_murcko_scaffolds']}</code> هيكلا أساسيا فريدا.</li>
-</ul>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-
-    st.markdown(
-        '<div class="panel-card"><h4>2. تقييم النموذج: مقارنة التقسيم الهيكلي (Scaffold Split) بالتقسيم العشوائي (Random Split)</h4>',
-        unsafe_allow_html=True,
-    )
-    rand_comp = metrics["random_split_comparison"]
-    comp_df = pd.DataFrame(
+    st.markdown('<div class="panel-card"><h4>أولا: مقارنة منهجية التقسيم العشوائي (Random Split) والتقسيم الهيكلي (Scaffold Split)</h4>', unsafe_allow_html=True)
+    rand_m = metrics["random_split_comparison"]
+    comp_table = pd.DataFrame(
         [
             {
-                "منهجية التقسيم": "تقسيم الهياكل المعتمد (Bemis-Murcko Scaffold Split)",
-                "عدد مركبات التدريب": metrics["train_count"],
-                "عدد مركبات الاختبار": metrics["test_count"],
-                "الهياكل المشتركة المتسربة": metrics["scaffold_leakage_count"],
-                "خطأ MAE (pIC50)": metrics["mae_pic50"],
-                "خطأ RMSE (pIC50)": metrics["rmse_pic50"],
-                "معامل التحديد (R²)": metrics["r2_pic50"],
-                "مساحة المنحنى (ROC-AUC)": metrics["roc_auc"],
+                "المقياس": "MAE (متوسط الخطأ المطلق في pIC50 - الأقل أفضل)",
+                "Random Split (تقسيم عشوائي 80/20)": rand_m["mae_pic50"],
+                "Scaffold Split (تقسيم الهياكل المعتمد)": metrics["mae_pic50"],
             },
             {
-                "منهجية التقسيم": "التقسيم العشوائي التقليدي (Random Split 80/20 - للمقارنة فقط)",
-                "عدد مركبات التدريب": metrics["train_count"],
-                "عدد مركبات الاختبار": metrics["test_count"],
-                "الهياكل المشتركة المتسربة": rand_comp["shared_scaffolds_leaked"],
-                "خطأ MAE (pIC50)": rand_comp["mae_pic50"],
-                "خطأ RMSE (pIC50)": rand_comp["rmse_pic50"],
-                "معامل التحديد (R²)": rand_comp["r2_pic50"],
-                "مساحة المنحنى (ROC-AUC)": rand_comp["roc_auc"],
+                "المقياس": "RMSE (جذر متوسط مربع الخطأ في pIC50 - الأقل أفضل)",
+                "Random Split (تقسيم عشوائي 80/20)": rand_m["rmse_pic50"],
+                "Scaffold Split (تقسيم الهياكل المعتمد)": metrics["rmse_pic50"],
+            },
+            {
+                "المقياس": "R² (معامل التحديد للتنبؤ العددي - الأعلى أفضل)",
+                "Random Split (تقسيم عشوائي 80/20)": rand_m["r2_pic50"],
+                "Scaffold Split (تقسيم الهياكل المعتمد)": metrics["r2_pic50"],
+            },
+            {
+                "المقياس": "ROC-AUC (للتمييز التصنيفي عند عتبة pIC50 >= 6.0)",
+                "Random Split (تقسيم عشوائي 80/20)": rand_m["roc_auc"],
+                "Scaffold Split (تقسيم الهياكل المعتمد)": metrics["roc_auc"],
+            },
+            {
+                "المقياس": "عدد الهياكل الأساسية المشتركة المتسربة بين التدريب والاختبار",
+                "Random Split (تقسيم عشوائي 80/20)": rand_m["shared_scaffolds_leaked"],
+                "Scaffold Split (تقسيم الهياكل المعتمد)": metrics["scaffold_leakage_count"],
             },
         ]
     )
-    st.dataframe(comp_df, use_container_width=True, hide_index=True)
+    st.dataframe(comp_table, use_container_width=True, hide_index=True)
+
+    fig_split, exp_split = build_split_comparison_chart(metrics)
+    st.plotly_chart(fig_split, use_container_width=True)
+    st.caption(exp_split)
+
     st.markdown(
         f"""
-<p>
-  <strong>لماذا لا نعرض عبارة «دقة النموذج» اعتمادا على R² وحده؟</strong>
-  لأن التقسيم العشوائي يسرب <code class="ltr-box">{rand_comp['shared_scaffolds_leaked']}</code> هيكلا كيميائيا مشتركا بين التدريب والاختبار،
-  مما يضخم قيمة <code class="ltr-box">R²</code> ظاهريا إلى <code class="ltr-box">{rand_comp['r2_pic50']:.3f}</code>.
-  أما عند اختبار النموذج بصرامة علمية على هياكل جديدة تماما عبر <strong>Scaffold Split</strong>
-  (تسرب الهياكل = <code class="ltr-box">0</code>)، نحصل على تقييم واقعي يتضمن أخطاء التنبؤ المطلقة
-  (<code class="ltr-box">MAE = {metrics['mae_pic50']:.3f}</code> و <code class="ltr-box">RMSE = {metrics['rmse_pic50']:.3f}</code>)
-  إلى جانب قدرة التمييز الترتيبية (<code class="ltr-box">ROC-AUC = {metrics['roc_auc']:.3f}</code>).
-</p>
+<h5>الشرح التعليمي للمقارنة (بذرة عشوائية ثابتة Seed = {metrics['random_seed']} ونفس إعدادات النموذج):</h5>
+<ul>
+  <li><strong>لماذا يبدو Random Split أسهل؟</strong> لأن التقسيم العشوائي يوزع المركبات المتشابهة التي تشترك في نفس النواة الكيميائية (حيث تسرب <code class="ltr-inline">{rand_m['shared_scaffolds_leaked']}</code> هيكلا أساسيا مشتركا) بين التدريب والاختبار، مما يجعل الاختبار أقرب إلى استيفاء داخلي ويعطي تقديرا متفائلا (<code class="ltr-inline">R² = {rand_m['r2_pic50']:.3f}, MAE = {rand_m['mae_pic50']:.3f}</code>).</li>
+  <li><strong>لماذا يعتبر Scaffold Split اختبارا أصعب وأكثر صدقا علميا؟</strong> لأنه يعزل كل هيكل Bemis-Murcko بالكامل بحيث لا يظهر أي هيكل أساسي مشترك بين التدريب والاختبار (<code class="ltr-inline">تسرب الهياكل = {metrics['scaffold_leakage_count']}</code>)، مما يحاكي الواقع الفعلي عندما يختبر الباحث عائلة كيميائية جديدة تماما.</li>
+  <li><strong>ماذا تعني هذه النتائج للطالب؟</strong> تعلمنا ألا ننخدع بارتفاع <code class="ltr-inline">R²</code> في التقسيم العشوائي، وأن نعتمد مقاييس الخطأ الواقعية على الهياكل الجديدة مع فحص نطاق التطبيق (Applicability Domain) لكل مركب.</li>
+</ul>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
     if test_df is not None and not test_df.empty:
-        st.markdown('<div class="panel-card"><h4>3. مختبر الأخطاء (Error Lab): تحليل أخطاء مجموعة الاختبار</h4>', unsafe_allow_html=True)
-        fig_err = go.Figure()
-        fig_err.add_trace(
-            go.Scatter(
-                x=test_df["true_pIC50"],
-                y=test_df["pred_pIC50"],
-                mode="markers",
-                marker=dict(
-                    size=9,
-                    color=test_df["max_train_tanimoto"],
-                    colorscale="Viridis",
-                    showscale=True,
-                    colorbar=dict(title="Tanimoto"),
-                ),
-                text=test_df["molecule_chembl_id"]
-                + " | خطأ مطلق: "
-                + test_df["abs_error_pIC50"].round(2).astype(str)
-                + " | Tanimoto: "
-                + test_df["max_train_tanimoto"].round(2).astype(str),
-                hoverinfo="text",
-                name="مركبات الاختبار",
-            )
-        )
-        min_v = float(min(test_df["true_pIC50"].min(), test_df["pred_pIC50"].min()) - 0.3)
-        max_v = float(max(test_df["true_pIC50"].max(), test_df["pred_pIC50"].max()) + 0.3)
-        fig_err.add_trace(
-            go.Scatter(
-                x=[min_v, max_v],
-                y=[min_v, max_v],
-                mode="lines",
-                line=dict(color="#b91c1c", dash="dash"),
-                name="خط التطابق المثالي",
-            )
-        )
-        fig_err.update_layout(
-            title="القيم المخبرية الحقيقية مقابل المتوقعة (pIC50) لمركبات الاختبار (Scaffold Split)",
-            xaxis_title="قيمة pIC50 المخبرية الحقيقية",
-            yaxis_title="قيمة pIC50 المتوقعة حاسوبيا",
-            height=380,
-            margin=dict(l=20, r=20, t=45, b=20),
-        )
-        st.plotly_chart(fig_err, use_container_width=True)
-
-        st.markdown("<h5>أبرز حالات الخطأ الحقيقي في مجموعة الاختبار (لدراسة حدود الذكاء الاصطناعي)</h5>", unsafe_allow_html=True)
-        worst_df = test_df.sort_values("abs_error_pIC50", ascending=False).head(8)
-        err_table = pd.DataFrame(
-            {
-                "معرف المركب (ChEMBL ID)": worst_df["molecule_chembl_id"].astype(str),
-                "أعلى تشابه مع التدريب (Tanimoto)": worst_df["max_train_tanimoto"].round(3),
-                "أقرب مركب في التدريب": worst_df["nearest_train_chembl_id"].astype(str),
-                "pIC50 الحقيقي": worst_df["true_pIC50"].round(2),
-                "pIC50 المتوقع": worst_df["pred_pIC50"].round(2),
-                "الخطأ المطلق |ΔpIC50|": worst_df["abs_error_pIC50"].round(2),
-                "IC50 الحقيقي (nM)": worst_df["true_ic50_nm"].round(1),
-                "IC50 المتوقع (nM)": worst_df["pred_ic50_nm"].round(1),
-                "تفسير سبب الخطأ": np.where(
-                    worst_df["max_train_tanimoto"] < 0.35,
-                    "ضعف التشابه مع مركبات التدريب (هيكل جديد)",
-                    "قفزة نشاط هيكلية (Activity Cliff) رغم تقارب البصمة",
-                ),
-            }
-        )
-        st.dataframe(err_table, use_container_width=True, hide_index=True)
+        st.markdown('<div class="panel-card"><h4>ثانيا: تحليل تنبؤات مجموعة الاختبار (Scaffold Split Test Set)</h4>', unsafe_allow_html=True)
+        fig_sc, exp_sc = build_test_scatter_chart(test_df)
+        st.plotly_chart(fig_sc, use_container_width=True)
+        st.caption(exp_sc)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown(
-        '<div class="panel-card"><h4>4. الاختبار القياسي للفهم النقدي للثقة والتشابه (5 أسئلة تقييمية)</h4>',
-        unsafe_allow_html=True,
-    )
-    q1 = st.radio(
-        "السؤال 1: إذا حصل مركب على تشابه Tanimoto مرتفع (0.72) مع مركبات التدريب، لكن أداء النموذج العام (ROC-AUC) كان متوسطا (0.78)، فما مستوى الثقة النهائي وفق وثيقة MolecuLens؟",
-        [
-            "ثقة عالية لأن التشابه الهيكلي أعلى من 0.60",
-            "ثقة متوسطة تطبيقا لقاعدة الحد الأدنى بين معيار التشابه ومعيار أداء النموذج",
-            "ثقة مطلقة بنسبة 100%",
-        ],
-        key="quiz_q1",
-    )
-    q2 = st.radio(
-        "السؤال 2: لماذا نستخدم تقسيم الهياكل (Scaffold Split) بدلا من التقسيم العشوائي عند تقييم النموذج؟",
-        [
-            "لتسريع وقت تدريب النموذج في بايثون",
-            "لمنع تسرب المركبات المتشابهة في هيكلها الأساسي بين التدريب والاختبار وقياس قدرة النموذج على التعميم",
-            "لزيادة قيمة R² وجعل دقة النموذج تبدو أعلى",
-        ],
-        key="quiz_q2",
-    )
-    q3 = st.radio(
-        "السؤال 3: ماذا يعني عدم ظهور أي تنبيه في فحص PAINS للمركب المدخل؟",
-        [
-            "أن المركب دواء آمن تماما وخال من السمية السريرية",
-            "أنه لم ترصد أنماط هيكلية معروفة بالتسبب في تداخلات مخبرية كاذبة، ولا يعني إثبات الأمان الدوائي",
-            "أن المركب يثبط إنزيم DPP-4 بفعالية مؤكدة",
-        ],
-        key="quiz_q3",
-    )
-    q4 = st.radio(
-        "السؤال 4: لماذا نقارن المركب المدخل ببصمات مركبات التدريب فقط عند حساب Tanimoto وليس بكامل ملف البيانات المنظفة؟",
-        [
-            "لتجنب المقارنة بمركبات مجموعة الاختبار وضمان قياس نطاق التطبيق الحقيقي لما تعلمه النموذج",
-            "لأن مركبات الاختبار لا تحتوي على صيغ SMILES",
-            "لأن حساب Tanimoto لا يعمل إلا على أقل من 500 مركب",
-        ],
-        key="quiz_q4",
-    )
-    q5 = st.radio(
-        "السؤال 5: إذا كان تشابه Tanimoto للمركب المدخل يساوي 0.18 وتنبأ النموذج بنشاط 45 nM، فما الحكم العلمي الصحيح؟",
-        [
-            "اعتماد المركب كمثبط قوي لأن القيمة أقل من 100 nM",
-            "تصنيف التنبؤ كمنخفض الثقة مع تنبيه «خارج نطاق التدريب» لعدم وجود تغطية كيميائية مشابهة في التدريب",
-            "الاكتفاء بقاعدة Lipinski للحكم على فعالية المركب",
-        ],
-        key="quiz_q5",
-    )
+    if clean_report is not None:
+        st.markdown('<div class="panel-card"><h4>ثالثا: تقرير تنظيف بيانات ChEMBL المفصل (Advanced ChEMBL Data Cleaning Report)</h4>', unsafe_allow_html=True)
+        cr1, cr2, cr3, cr4, cr5 = st.columns(5)
+        cr1.metric("السجلات قبل التنظيف", clean_report["initial_records"])
+        cr2.metric("السجلات الصالحة بعد التنظيف", clean_report["records_after_cleaning"])
+        cr3.metric("المركبات الفريدة النهائية", clean_report["unique_compounds_count"])
+        cr4.metric("عدد التجارب الفريدة (Assays)", clean_report["unique_assays_count"])
+        cr5.metric("عدد المراجع العلمية (Documents)", clean_report["unique_documents_count"])
 
-    if st.button("تصحيح الاختبار النقدي وعرض النتيجة"):
-        correct_answers = [
-            q1 == "ثقة متوسطة تطبيقا لقاعدة الحد الأدنى بين معيار التشابه ومعيار أداء النموذج",
-            q2 == "لمنع تسرب المركبات المتشابهة في هيكلها الأساسي بين التدريب والاختبار وقياس قدرة النموذج على التعميم",
-            q3 == "أنه لم ترصد أنماط هيكلية معروفة بالتسبب في تداخلات مخبرية كاذبة، ولا يعني إثبات الأمان الدوائي",
-            q4 == "لتجنب المقارنة بمركبات مجموعة الاختبار وضمان قياس نطاق التطبيق الحقيقي لما تعلمه النموذج",
-            q5 == "تصنيف التنبؤ كمنخفض الثقة مع تنبيه «خارج نطاق التدريب» لعدم وجود تغطية كيميائية مشابهة في التدريب",
-        ]
-        score = sum(correct_answers)
-        st.markdown(
-            f'<p><span class="status-pill {"pill-high" if score >= 4 else "pill-mid"}">النتيجة: {score} من 5 إجابات صحيحة</span></p>',
-            unsafe_allow_html=True,
+        excl = clean_report.get("exclusion_reasons", {})
+        excl_df = pd.DataFrame(
+            [
+                {"سبب الاستبعاد العلمي": "قيم مفقودة أو غير موجبة", "عدد السجلات المستبعدة": excl.get("missing_or_nonpositive_value", 0)},
+                {"سبب الاستبعاد العلمي": "هدف بروتيني مختلف أو كائن حي غير بشري", "عدد السجلات المستبعدة": excl.get("wrong_target_or_non_human_organism", 0)},
+                {"سبب الاستبعاد العلمي": "نوع قياس غير مطابق لـ IC50", "عدد السجلات المستبعدة": excl.get("non_ic50_measurement_type", 0)},
+                {"سبب الاستبعاد العلمي": "علاقات قياس مقيدة أو حدية (> أو < أو >>)", "عدد السجلات المستبعدة": excl.get("censored_or_inequality_relation", 0)},
+                {"سبب الاستبعاد العلمي": "ملاحظات عدم صلاحية البيانات (Outside typical range)", "عدد السجلات المستبعدة": excl.get("data_validity_warning_flagged", 0)},
+                {"سبب الاستبعاد العلمي": "اختلاف نوع التجربة (غير تجارب الربط المباشر B)", "عدد السجلات المستبعدة": excl.get("non_binding_assay_type", 0)},
+                {"سبب الاستبعاد العلمي": "تكرارات متضاربة للمركب نفسه (فرق يتجاوز 1.0 pIC50)", "عدد السجلات المستبعدة": excl.get("discordant_replicate_measurements", 0)},
+            ]
         )
-    st.markdown("</div>", unsafe_allow_html=True)
-
+        st.dataframe(excl_df, use_container_width=True, hide_index=True)
+        st.caption(
+            f"تم توحيد {clean_report['converted_non_nm_units']} سجلا من وحدة ug.mL-1 إلى nM باستخدام الوزن الجزيئي، "
+            f"وتجميع القياسات المتوافقة بحساب الوسيط (Median Activity) مع حفظ عدد القياسات وجميع معرفات التجارب والمراجع في حقل source_ids."
+        )
+        st.markdown("</div>", unsafe_allow_html=True)

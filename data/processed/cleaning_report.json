@@ -1,4 +1,7 @@
 {
+  "target_id": "CHEMBL284",
+  "target_organism": "Homo sapiens",
+  "aggregation_method": "Median of compatible measurements (after excluding discordant replicates with >1.0 pIC50 span)",
   "initial_records": 1000,
   "after_valid_numeric": 995,
   "after_measurement_type_ic50": 995,
@@ -6,8 +9,33 @@
   "after_data_validity": 776,
   "after_binding_assay_filter": 740,
   "after_unit_and_structure_standardization": 740,
+  "records_after_cleaning": 705,
   "converted_non_nm_units": 17,
   "discordant_replicates_removed": 35,
   "final_unique_compounds": 641,
-  "unique_murcko_scaffolds": 231
+  "unique_compounds_count": 641,
+  "unique_murcko_scaffolds": 231,
+  "unique_assays_count": 38,
+  "unique_documents_count": 34,
+  "measurement_type_distribution": {
+    "IC50": 1000
+  },
+  "measurements_per_compound_distribution": {
+    "1_measurements": 593,
+    "2_measurements": 39,
+    "3_measurements": 6,
+    "4_measurements": 1,
+    "5_measurements": 1,
+    "7_measurements": 1
+  },
+  "exclusion_reasons": {
+    "missing_or_nonpositive_value": 5,
+    "wrong_target_or_non_human_organism": 0,
+    "non_ic50_measurement_type": 0,
+    "censored_or_inequality_relation": 141,
+    "data_validity_warning_flagged": 78,
+    "non_binding_assay_type": 36,
+    "invalid_structure_or_out_of_range": 0,
+    "discordant_replicate_measurements": 35
+  }
 }
