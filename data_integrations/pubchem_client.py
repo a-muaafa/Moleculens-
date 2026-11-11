@@ -1,9 +1,36 @@
 import urllib.parse
 import requests
 from chemistry_engine.formula_analyzer import formulas_are_equivalent, normalize_chemical_formula
-from chemistry_engine.structure_analyzer import extract_rdkit_formula, validate_and_parse_smiles
+from chemistry_engine.structure_analyzer import compute_inchikey, extract_rdkit_formula, validate_and_parse_smiles
 from config.settings import EXTERNAL_API_TIMEOUT_SECONDS, PUBCHEM_BASE_URL
 from data_integrations.cache_store import get_cached_item, set_cached_item
+
+
+def _verify_pubchem_record_identity(
+    prop: dict,
+    query: str,
+    is_formula: bool = False,
+) -> tuple[bool, str, str]:
+    """
+    Verifies that a parsed SMILES from PubChem genuinely corresponds to the requested substance:
+    1) Checks that SMILES is syntactically valid and its molecular formula matches PubChem's MolecularFormula.
+    2) If queried by formula, ensures the resolved formula matches the user query formula.
+    """
+    smi = prop.get("IsomericSMILES") or prop.get("CanonicalSMILES") or ""
+    mol, canon_smi, _ = validate_and_parse_smiles(smi)
+    pub_formula = prop.get("MolecularFormula", "")
+    if mol is None and not pub_formula:
+        return False, "", "بنية غير صالحة"
+
+    rd_formula = extract_rdkit_formula(canon_smi) if canon_smi else ""
+    final_formula = pub_formula or rd_formula or ""
+    if pub_formula and rd_formula and not formulas_are_equivalent(pub_formula, rd_formula):
+        return False, "", "عدم تطابق صيغة SMILES مع الصيغة الجزيئية المسجلة"
+
+    if is_formula and not formulas_are_equivalent(query, final_formula):
+        return False, "", "عدم تطابق الصيغة الجزيئية مع المدخل"
+
+    return True, canon_smi or smi, final_formula
 
 
 def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECONDS) -> dict:
@@ -16,7 +43,10 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
         return res
 
     encoded = urllib.parse.quote(clean_q)
-    url = f"{PUBCHEM_BASE_URL}/compound/name/{encoded}/property/Title,MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES,IsomericSMILES/JSON"
+    url = (
+        f"{PUBCHEM_BASE_URL}/compound/name/{encoded}/property/"
+        "Title,MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES,IsomericSMILES,InChIKey/JSON"
+    )
     try:
         resp = requests.get(url, timeout=timeout)
         if resp.status_code != 200:
@@ -28,23 +58,29 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
         props = resp.json().get("PropertyTable", {}).get("Properties", [])
         records = []
         for p in props[:6]:
-            smi = p.get("IsomericSMILES") or p.get("CanonicalSMILES") or ""
-            mol, canon_smi, _ = validate_and_parse_smiles(smi)
-            if mol is None and not p.get("MolecularFormula"):
+            ok_id, canon_smi, formula = _verify_pubchem_record_identity(p, clean_q, is_formula=False)
+            if not ok_id:
                 continue
-            formula = p.get("MolecularFormula") or (extract_rdkit_formula(canon_smi) if canon_smi else "")
+            inchikey = p.get("InChIKey") or compute_inchikey(canon_smi) or ""
             records.append(
                 {
                     "pubchem_cid": p.get("CID"),
                     "name_en": p.get("Title") or clean_q,
                     "iupac_name": p.get("IUPACName", ""),
                     "symbol_or_formula": formula,
-                    "canonical_smiles": canon_smi or smi,
+                    "canonical_smiles": canon_smi,
+                    "inchikey": inchikey,
+                    "identity_verified": True,
                     "molar_mass": float(p["MolecularWeight"]) if p.get("MolecularWeight") else None,
                     "source": "PubChem PUG REST",
                 }
             )
-        result = {"ok": len(records) > 0, "records": records, "error": None if records else "No valid PubChem records", "cache_hit": False}
+        result = {
+            "ok": len(records) > 0,
+            "records": records,
+            "error": None if records else "No valid PubChem records",
+            "cache_hit": False,
+        }
         set_cached_item(cache_key, result)
         return result
     except Exception as exc:
@@ -83,7 +119,10 @@ def fetch_pubchem_by_formula(formula: str, timeout: int = EXTERNAL_API_TIMEOUT_S
                 set_cached_item(cache_key, result)
                 return result
             cid_csv = ",".join(str(c) for c in cids)
-            prop_url = f"{PUBCHEM_BASE_URL}/compound/cid/{cid_csv}/property/Title,MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES,IsomericSMILES/JSON"
+            prop_url = (
+                f"{PUBCHEM_BASE_URL}/compound/cid/{cid_csv}/property/"
+                "Title,MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES,IsomericSMILES,InChIKey/JSON"
+            )
             prop_resp = requests.get(prop_url, timeout=timeout)
             if prop_resp.status_code != 200:
                 return {"ok": False, "records": [], "error": f"PubChem CID Property HTTP {prop_resp.status_code}", "cache_hit": False}
@@ -92,23 +131,22 @@ def fetch_pubchem_by_formula(formula: str, timeout: int = EXTERNAL_API_TIMEOUT_S
         records = []
         seen_smi = set()
         for p in props:
-            smi = p.get("IsomericSMILES") or p.get("CanonicalSMILES") or ""
-            mol, canon_smi, _ = validate_and_parse_smiles(smi)
-            if mol is None:
-                continue
-            rdkit_f = extract_rdkit_formula(canon_smi)
-            if not formulas_are_equivalent(norm_formula, rdkit_f or ""):
+            ok_id, canon_smi, verified_formula = _verify_pubchem_record_identity(p, norm_formula, is_formula=True)
+            if not ok_id or not canon_smi:
                 continue
             if canon_smi in seen_smi:
                 continue
             seen_smi.add(canon_smi)
+            inchikey = p.get("InChIKey") or compute_inchikey(canon_smi) or ""
             records.append(
                 {
                     "pubchem_cid": p.get("CID"),
                     "name_en": p.get("Title") or norm_formula,
                     "iupac_name": p.get("IUPACName", ""),
-                    "symbol_or_formula": p.get("MolecularFormula") or rdkit_f,
+                    "symbol_or_formula": verified_formula,
                     "canonical_smiles": canon_smi,
+                    "inchikey": inchikey,
+                    "identity_verified": True,
                     "molar_mass": float(p["MolecularWeight"]) if p.get("MolecularWeight") else None,
                     "source": "PubChem PUG REST (Formula Pathway)",
                 }
@@ -118,4 +156,3 @@ def fetch_pubchem_by_formula(formula: str, timeout: int = EXTERNAL_API_TIMEOUT_S
         return result
     except Exception as exc:
         return {"ok": False, "records": [], "error": str(exc), "cache_hit": False}
-

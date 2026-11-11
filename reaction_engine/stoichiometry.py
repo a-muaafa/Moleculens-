@@ -1,9 +1,16 @@
 from typing import Any
-from chemistry_engine.formula_analyzer import calculate_molar_mass, formulas_are_equivalent
+from chemistry_engine.formula_analyzer import calculate_molar_mass, formulas_are_equivalent, is_gaseous_at_stp
 from config.settings import MOLAR_VOLUME_STP_LITERS
 
 
-def convert_amount_to_moles(amount: float, unit: str, molar_mass: float) -> float:
+def convert_amount_to_moles(
+    amount: float,
+    unit: str,
+    molar_mass: float,
+    formula: str = "",
+    substance: dict[str, Any] | None = None,
+    rxn_state: str = "",
+) -> float:
     val = float(amount)
     if unit == "mol":
         return val
@@ -14,6 +21,10 @@ def convert_amount_to_moles(amount: float, unit: str, molar_mass: float) -> floa
     if unit == "mg":
         return (val / 1000.0) / molar_mass if molar_mass > 0 else 0.0
     if unit == "L_STP":
+        if (formula or substance or rxn_state) and not is_gaseous_at_stp(formula, substance=substance, rxn_state=rxn_state):
+            raise ValueError(
+                f"Scientific Error: STP gas volume conversion (L_STP) cannot be applied to non-gaseous substance '{formula}'."
+            )
         return val / MOLAR_VOLUME_STP_LITERS
     raise ValueError(f"Unsupported unit: {unit}")
 
@@ -29,6 +40,7 @@ def compute_reaction_stoichiometry(
         formula = r_spec["formula"]
         coeff = int(r_spec["coefficient"])
         mm = calculate_molar_mass(formula) or 1.0
+        r_state = r_spec.get("state", "")
 
         matched_user = None
         for u_item in user_inputs:
@@ -40,7 +52,15 @@ def compute_reaction_stoichiometry(
 
         input_amount = float(matched_user["amount"]) if matched_user else float(coeff)
         input_unit = matched_user.get("unit", "mol") if matched_user else "mol"
-        initial_moles = convert_amount_to_moles(input_amount, input_unit, mm)
+        u_sub_dict = matched_user.get("substance") if matched_user else None
+        initial_moles = convert_amount_to_moles(
+            input_amount,
+            input_unit,
+            mm,
+            formula=formula,
+            substance=u_sub_dict,
+            rxn_state=r_state,
+        )
         extent_i = initial_moles / coeff
 
         item_record = {
@@ -77,7 +97,7 @@ def compute_reaction_stoichiometry(
 
         is_limiting = abs(item["extent_ratio"] - min_extent) <= 1e-6
         if is_stoichiometric:
-            role_ar = "متفاعل بنسبة متكافئة تماما"
+            role_ar = "متفاعل بنسبة متكافئة تماماً (Stoichiometric Ratio)"
         elif is_limiting:
             role_ar = "المتفاعل المحدد (Limiting Reagent)"
             limiting_reagents.append(item)
@@ -102,4 +122,3 @@ def compute_reaction_stoichiometry(
         "excess_reagents": excess_reagents if not is_stoichiometric else [],
         "reactants_breakdown": reactant_table,
     }
-

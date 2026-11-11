@@ -5,11 +5,13 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
+from chemistry_engine.formula_analyzer import format_chemical_formula_display
 from chemistry_engine.structure_analyzer import (
     analyze_molecular_structure,
     generate_3d_conformer_data,
     render_molecule_2d_svg,
     structure_matches_formula,
+    verify_substance_structure_identity,
 )
 
 ZOOM_LEVELS = [0.6, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5]
@@ -27,7 +29,7 @@ def _cached_analysis(smiles: str) -> dict[str, Any] | None:
     return analyze_molecular_structure(smiles)
 
 
-@st.cache_data(show_spinner="جار توليد البنية ثلاثية الأبعاد عبر RDKit...")
+@st.cache_data(show_spinner="جارٍ توليد البنية ثلاثية الأبعاد عبر RDKit...")
 def _cached_conformer(smiles: str) -> dict[str, Any] | None:
     return generate_3d_conformer_data(smiles)
 
@@ -79,11 +81,12 @@ def _3dmol_html(mol_block: str | None, pdb_id: str | None) -> str:
 def render_structure_viewer(entity: dict[str, Any], key_prefix: str = "sv") -> None:
     smiles = (entity.get("canonical_smiles") or "").strip()
     formula = entity.get("symbol_or_formula", "")
+    disp_formula = format_chemical_formula_display(formula)
     pdb_ids = entity.get("identifiers", {}).get("pdb_ids") or entity.get("pdb_ids") or []
     ekey = entity.get("key", "x")
     zoom_key = f"{key_prefix}_zoom_{ekey}"
 
-    st.markdown('<div class="ml-card"><h4>عارض التراكيب الكيميائية (Structure Viewer)</h4>', unsafe_allow_html=True)
+    st.markdown('<div class="ml-card"><h4>عارض التراكيب الكيميائية ثنائي وثلاثي الأبعاد (2D &amp; 3D Molecular Structure Viewer)</h4>', unsafe_allow_html=True)
 
     if not smiles and not pdb_ids:
         st.info("لا تتوفر بنية جزيئية مرجعية لهذه المادة في البيانات الحالية، لذلك لا يعرض النظام أي تركيب بديل أو عشوائي.")
@@ -91,9 +94,14 @@ def render_structure_viewer(entity: dict[str, Any], key_prefix: str = "sv") -> N
         return
 
     if smiles:
+        id_check = entity.get("identity_verification") or verify_substance_structure_identity(entity)
         verified = structure_matches_formula(smiles, formula) or entity.get("entity_type") == "chemical_element"
-        badge = "تحقق RDKit: البنية تطابق الصيغة المسجلة" if verified else "تنبيه: الصيغة المحسوبة من البنية تختلف عن الصيغة المسجلة"
-        st.caption(f"{badge} | المادة المرتبطة: {entity.get('name_ar')} ({formula}) | SMILES: {smiles}")
+        badge = (
+            id_check.get("status_ar")
+            if id_check.get("status_ar")
+            else ("تحقق RDKit: البنية تطابق الصيغة المسجلة" if verified else "تنبيه: الصيغة المحسوبة من البنية تختلف عن الصيغة المسجلة")
+        )
+        st.caption(f"{badge} | المادة المرتبطة: {entity.get('name_ar')} ({disp_formula}) | Canonical SMILES: {smiles}")
 
     tab_labels = []
     if smiles:
@@ -112,34 +120,37 @@ def render_structure_viewer(entity: dict[str, Any], key_prefix: str = "sv") -> N
                 st.session_state[zoom_key] = max(0, min(len(ZOOM_LEVELS) - 1, st.session_state[zoom_key] + delta))
 
             c1, c2, c3, c4 = st.columns([1, 1, 1.4, 2])
-            c1.button("تكبير (+)", key=f"{zoom_key}_in", on_click=_zoom, args=(1,))
-            c2.button("تصغير (-)", key=f"{zoom_key}_out", on_click=_zoom, args=(-1,))
-            c3.markdown(f"مستوى التكبير: **{int(ZOOM_LEVELS[st.session_state[zoom_key]] * 100)}%**")
-            show_idx = c4.checkbox("إظهار أرقام الذرات", key=f"{key_prefix}_idx_{ekey}")
+            c1.button("تكبير (Zoom In +)", key=f"{zoom_key}_in", on_click=_zoom, args=(1,))
+            c2.button("تصغير (Zoom Out -)", key=f"{zoom_key}_out", on_click=_zoom, args=(-1,))
+            c3.markdown(f"مستوى التكبير (Zoom): **{int(ZOOM_LEVELS[st.session_state[zoom_key]] * 100)}%**")
+            show_idx = c4.checkbox("إظهار أرقام الذرات (Show Atom Indices)", key=f"{key_prefix}_idx_{ekey}")
             svg = _cached_svg(smiles, ZOOM_LEVELS[st.session_state[zoom_key]], show_idx)
             if svg:
-                st.markdown(f'<div style="overflow:auto;direction:ltr;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:6px;">{svg}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="overflow:auto;direction:ltr;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:6px;text-align:center;">{svg}</div>',
+                    unsafe_allow_html=True,
+                )
             analysis = _cached_analysis(smiles)
             if analysis:
                 b = analysis["bonds"]
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("روابط أحادية", b["single"])
-                m2.metric("روابط ثنائية", b["double"])
-                m3.metric("روابط ثلاثية", b["triple"])
-                m4.metric("روابط عطرية", b["aromatic"])
+                m1.metric("روابط أحادية (Single)", b["single"])
+                m2.metric("روابط ثنائية (Double)", b["double"])
+                m3.metric("روابط ثلاثية (Triple)", b["triple"])
+                m4.metric("روابط عطرية (Aromatic)", b["aromatic"])
                 st.markdown(
-                    f"**الحلقات:** {analysis['rings']['summary_ar']}  \n"
-                    f"**المجموعات الوظيفية:** {analysis['functional_groups_summary_ar']}  \n"
-                    f"**الكيمياء الفراغية:** {analysis['stereochemistry']['summary_ar']}"
+                    f"**الحلقات (Rings):** {analysis['rings']['summary_ar']}  \n"
+                    f"**المجموعات الوظيفية (Functional Groups):** {analysis['functional_groups_summary_ar']}  \n"
+                    f"**الكيمياء الفراغية (Stereochemistry):** {analysis['stereochemistry']['summary_ar']}"
                 )
 
     if "3D" in tab_map:
         with tab_map["3D"]:
             conf = _cached_conformer(smiles) if smiles else None
             if conf:
-                st.caption("نموذج كرات وعصي قابل للتدوير بالسحب والتكبير بالعجلة (مولد من توافق ETKDGv3 ثم تحسين MMFF/UFF عبر RDKit).")
+                st.caption("نموذج كرات وعصي ثلاثي الأبعاد (3D Ball-and-Stick) قابل للتدوير والتكبير، مولد عبر خوارزمية ETKDGv3 وتحسين الطاقة MMFF94/UFF.")
                 st.plotly_chart(build_plotly_3d_figure(conf), use_container_width=True, key=f"{key_prefix}_plotly_{ekey}")
-                with st.expander("عارض 3Dmol.js التفاعلي (يتطلب اتصالا بالإنترنت)"):
+                with st.expander("عارض 3Dmol.js التفاعلي (Interactive WebGL 3D Viewer)"):
                     components.html(_3dmol_html(conf["mol_block"], None), height=470)
             elif pdb_ids:
                 st.caption(f"عرض البنية البلورية المسجلة في RCSB PDB ({pdb_ids[0]}).")

@@ -1,6 +1,7 @@
 from typing import Any
 import pandas as pd
 import streamlit as st
+from chemistry_engine.formula_analyzer import format_chemical_formula_display
 from config.settings import (
     ENTITY_BIOMOLECULE_PROTEIN,
     ENTITY_CHEMICAL_COMPOUND,
@@ -32,7 +33,7 @@ def _render_suggestions(query_text: str) -> None:
     suggestions = MolecuLensCore.fetch_suggestions(query_text, limit=6)
     if not suggestions:
         return
-    st.markdown("<strong>اقتراحات فورية (اختر لتعبئة خانة البحث):</strong>", unsafe_allow_html=True)
+    st.markdown("<strong>اقتراحات فورية (Live Suggestions — اختر لتعبئة خانة البحث):</strong>", unsafe_allow_html=True)
     for idx, s in enumerate(suggestions):
         c_text, c_btn = st.columns([5, 1])
         with c_text:
@@ -49,7 +50,12 @@ def _render_suggestions(query_text: str) -> None:
                 unsafe_allow_html=True,
             )
         with c_btn:
-            st.button("اختيار", key=f"exp_sug_{idx}_{s['key']}", on_click=_set_explore_query, args=(s["symbol_or_formula"] if s["entity_type"] != ENTITY_BIOMOLECULE_PROTEIN else s["name_en"],))
+            st.button(
+                "اختيار",
+                key=f"exp_sug_{idx}_{s['key']}",
+                on_click=_set_explore_query,
+                args=(s["symbol_or_formula"] if s["entity_type"] != ENTITY_BIOMOLECULE_PROTEIN else s["name_en"],),
+            )
 
 
 def render_explore_section(on_open_reaction_lab) -> None:
@@ -61,8 +67,8 @@ def render_explore_section(on_open_reaction_lab) -> None:
 <div class="ml-card">
   <h3>Explore &amp; Understand — استكشاف المادة وفهم تركيبها وخصائصها</h3>
   <p>
-    اكتب في خانة البحث الواحدة أي مدخل: الاسم العربي، الاسم الإنجليزي، الاسم العلمي (IUPAC)، الصيغة الكيميائية (H2O أو H₂O أو CH3COOH)،
-    الاختصار، الاسم التجاري، أو المرادفات. يتعرف النظام على نوع المدخل تلقائيا.
+    اكتب في خانة البحث الموحدة أي مدخل: الاسم العربي، الاسم الإنجليزي، الاسم النظامي (IUPAC Name)، الصيغة الكيميائية (H₂O أو CH₃COOH)،
+    الرمز الكيميائي، التمثيل البنيوي (SMILES)، أو الاسم التجاري؛ وسيتعرف المحرك العلمي على نوع المدخل تلقائياً.
   </p>
 </div>
 """,
@@ -70,13 +76,13 @@ def render_explore_section(on_open_reaction_lab) -> None:
     )
 
     query_text = st.text_input(
-        "خانة البحث العلمي الموحدة:",
+        "خانة البحث العلمي الموحدة (Unified Scientific Search):",
         key=EXPLORE_QUERY_KEY,
-        placeholder="مثال: حمض الخليك، Acetic acid، CH3COOH، Aspirin، Fe",
+        placeholder="مثال: حمض الخليك، Acetic Acid، CH3COOH، Aspirin، Fe",
     )
     detected = detect_query_input_type(query_text)
     if detected["type"] != "empty":
-        st.caption(f"نوع المدخل المكتشف تلقائيا: {detected['label_ar']}")
+        st.caption(f"نوع المدخل المكتشف تلقائياً (Detected Input Type): {detected['label_ar']}")
 
     _render_suggestions(query_text)
 
@@ -85,7 +91,7 @@ def render_explore_section(on_open_reaction_lab) -> None:
     if not res["found"]:
         st.warning(res["message"])
         if res["did_you_mean"]:
-            st.markdown("<strong>مقترحات يمكنك اختيارها مباشرة:</strong>", unsafe_allow_html=True)
+            st.markdown("<strong>مقترحات بديلة يمكنك اختيارها مباشرة (Suggested Alternatives):</strong>", unsafe_allow_html=True)
             d_cols = st.columns(min(len(res["did_you_mean"]), 5))
             for idx_d, d_txt in enumerate(res["did_you_mean"][:5]):
                 clean_q = d_txt.split("(")[-1].replace(")", "").strip() if "(" in d_txt else d_txt
@@ -97,11 +103,11 @@ def render_explore_section(on_open_reaction_lab) -> None:
         st.warning(res["ambiguity_message"])
         cand_list = res["candidates"]
         cand_labels = [
-            f"{idx_c + 1}. {c['name_ar']} | {c['name_en']} ({c['symbol_or_formula']}) — [{c['entity_type_label_ar']}]"
+            f"{idx_c + 1}. {c['name_ar']} | {c['name_en']} ({format_chemical_formula_display(c['symbol_or_formula'])}) — [{c['entity_type_label_ar']}]"
             for idx_c, c in enumerate(cand_list)
         ]
         chosen_lbl = st.radio(
-            "توجد أكثر من مادة تشترك في هذا المدخل؛ اختر المادة المقصودة لعرض ملفها العلمي:",
+            "توجد أكثر من مادة تشترك في هذا المدخل؛ اختر المادة المقصودة لعرض ملفها العلمي الكامل:",
             options=cand_labels,
             key=f"exp_ambig_{query_text}",
         )
@@ -112,6 +118,8 @@ def render_explore_section(on_open_reaction_lab) -> None:
     profile: dict[str, Any] = res["profile"]
     entity_type = entity["entity_type"]
     badge_cls = _badge_class_for_type(entity_type)
+    disp_formula = format_chemical_formula_display(entity["symbol_or_formula"])
+    id_ver = profile.get("identity_verification") or entity.get("identity_verification") or {}
 
     st.markdown(
         f"""
@@ -122,11 +130,14 @@ def render_explore_section(on_open_reaction_lab) -> None:
     <span class="ml-badge" style="background:#334155;">{entity.get('match_category', 'Exact Match')}</span>
   </div>
   <h3 style="margin-top:0.65rem;margin-bottom:0.25rem;">
-    {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']} ({entity['symbol_or_formula']})</span>
+    {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']} ({disp_formula})</span>
   </h3>
-  <p style="margin-bottom:0;color:#64748b;font-size:0.92rem;">
-    <strong>سبب المطابقة:</strong> {entity.get('match_reason_ar', '')} |
-    <strong>المصادر العلمية الموحدة:</strong> <span class="ltr-inline">{", ".join(profile.get('sources', []))}</span>
+  <p style="margin-bottom:0.2rem;color:#64748b;font-size:0.92rem;">
+    <strong>سبب المطابقة (Match Reason):</strong> {entity.get('match_reason_ar', '')} |
+    <strong>المصادر العلمية الموحدة (Verified Sources):</strong> <span class="ltr-inline">{", ".join(profile.get('sources', []))}</span>
+  </p>
+  <p style="margin-bottom:0;color:#0f766e;font-size:0.88rem;font-weight:600;">
+    {id_ver.get('status_ar', '')}
   </p>
 </div>
 """,
@@ -150,11 +161,11 @@ def render_explore_section(on_open_reaction_lab) -> None:
     st.markdown('<div class="ml-card">', unsafe_allow_html=True)
     st.markdown(
         f"<h4>الانتقال إلى مختبر التفاعلات (Explore Reactions / Open Reaction Lab)</h4>"
-        f"<p>هل ترغب في اختبار تفاعلات <strong>{entity['name_ar']} ({entity['symbol_or_formula']})</strong> وحساب النواتج والكميات المولية؟</p>",
+        f"<p>هل ترغب في اختبار تفاعلات <strong>{entity['name_ar']} ({disp_formula})</strong> وحساب المتفاعل المحدد (Limiting Reagent) والناتج النظري (Theoretical Yield)؟</p>",
         unsafe_allow_html=True,
     )
     if st.button(
-        f"Explore Reactions / Open Reaction Lab — نقل ({entity['symbol_or_formula']}) إلى مختبر التفاعلات",
+        f"Explore Reactions / Open Reaction Lab — نقل ({disp_formula}) إلى مختبر التفاعلات",
         key="btn_pass_to_reaction_lab",
     ):
         on_open_reaction_lab(profile["reaction_lab_entity"])
@@ -167,25 +178,25 @@ def _render_element_profile_ui(profile: dict[str, Any]) -> None:
     props = profile["properties"]
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("الاسم والرمز الكيميائي", f"{basic['name_ar']} ({basic['symbol']})")
+    m1.metric("الاسم والرمز (Element Symbol)", f"{basic['name_ar']} ({basic['symbol']})")
     m2.metric("العدد الذري (Atomic Number)", str(basic["atomic_number"]))
     m3.metric("الكتلة الذرية (Atomic Mass)", str(basic["atomic_mass"]))
-    m4.metric("الحالة الفيزيائية", props["physical_state"].split(" ")[0])
+    m4.metric("الحالة الفيزيائية (Physical State)", props["physical_state"].split(" ")[0])
 
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>1. المعلومات الأساسية والتركيب الذري والتوزيع الإلكتروني</h4>
-  <p><strong>الاسم الإنجليزي:</strong> <span class="ltr-inline">{basic['name_en']}</span> | <strong>الاسم العربي:</strong> {basic['name_ar']}</p>
-  <p><strong>الرمز الكيميائي:</strong> <code class="ltr-inline">{basic['symbol']}</code> | <strong>العدد الذري (Z):</strong> <code class="ltr-inline">{basic['atomic_number']}</code></p>
-  <p><strong>عدد البروتونات والإلكترونات:</strong> <code class="ltr-inline">{atomic['protons_count']} بروتون / {atomic['electrons_count']} إلكترون</code></p>
+  <h4>1. المعلومات الأساسية والتركيب الذري (Atomic Structure &amp; Configuration)</h4>
+  <p><strong>الاسم العلمي (Scientific Name):</strong> {basic['name_ar']} | <span class="ltr-inline">{basic['name_en']}</span></p>
+  <p><strong>الرمز الكيميائي (Symbol):</strong> <code class="ltr-inline">{basic['symbol']}</code> | <strong>العدد الذري (Atomic Number Z):</strong> <code class="ltr-inline">{basic['atomic_number']}</code></p>
+  <p><strong>عدد البروتونات والإلكترونات:</strong> <code class="ltr-inline">{atomic['protons_count']} Protons / {atomic['electrons_count']} Electrons</code></p>
   <p><strong>التوزيع الإلكتروني (Electron Configuration):</strong> <code class="ltr-inline">{atomic['electron_configuration']}</code></p>
-  <p><strong>توزيع الأغلفة الإلكترونية:</strong> <code class="ltr-inline">{atomic.get('electron_shells') or 'غير محدد'}</code></p>
+  <p><strong>توزيع الأغلفة الإلكترونية (Electron Shells):</strong> <code class="ltr-inline">{atomic.get('electron_shells') or 'غير محدد'}</code></p>
   <p><strong>الموقع في الجدول الدوري:</strong> {atomic.get('group', '')} — {atomic.get('period', '')} ({atomic.get('block', '')})</p>
-  <p><strong>حالات الأكسدة الشائعة:</strong> <span class="ltr-inline">{atomic.get('oxidation_states') or 'غير محدد'}</span></p>
-  <p><strong>البنية البلورية الذرية:</strong> {atomic.get('crystal_structure') or 'شبكة بلورية عنصرية'}</p>
+  <p><strong>حالات الأكسدة الشائعة (Oxidation States):</strong> <span class="ltr-inline">{atomic.get('oxidation_states') or 'غير محدد'}</span></p>
+  <p><strong>البنية البلورية الذرية (Crystal Structure):</strong> {atomic.get('crystal_structure') or 'شبكة بلورية عنصرية'}</p>
 </div>
 """,
             unsafe_allow_html=True,
@@ -194,12 +205,12 @@ def _render_element_profile_ui(profile: dict[str, Any]) -> None:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>2. الخصائص الفيزيائية والكيميائية للعنصر</h4>
-  <p><strong>الحالة الفيزيائية:</strong> {props['physical_state']}</p>
-  <p><strong>الكثافة:</strong> <span class="ltr-inline">{props['density']}</span></p>
-  <p><strong>درجة الانصهار:</strong> <span class="ltr-inline">{props['melting_point']}</span></p>
-  <p><strong>درجة الغليان:</strong> <span class="ltr-inline">{props['boiling_point']}</span></p>
-  <p><strong>السلوك والتفاعلية الكيميائية:</strong> {props['chemical_behavior']}</p>
+  <h4>2. الخصائص الفيزيائية والكيميائية (Physical &amp; Chemical Properties)</h4>
+  <p><strong>الحالة الفيزيائية (Physical State):</strong> {props['physical_state']}</p>
+  <p><strong>الكثافة (Density):</strong> <span class="ltr-inline">{props['density']}</span></p>
+  <p><strong>درجة الانصهار (Melting Point):</strong> <span class="ltr-inline">{props['melting_point']}</span></p>
+  <p><strong>درجة الغليان (Boiling Point):</strong> <span class="ltr-inline">{props['boiling_point']}</span></p>
+  <p><strong>السلوك والتفاعلية الكيميائية (Chemical Reactivity):</strong> {props['chemical_behavior']}</p>
 </div>
 """,
             unsafe_allow_html=True,
@@ -211,22 +222,23 @@ def _render_compound_profile_ui(profile: dict[str, Any]) -> None:
     comp = profile["composition"]
     struct = profile["structure"]
     props = profile["properties"]
+    disp_formula = basic.get("formatted_formula") or format_chemical_formula_display(basic["formula"])
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("الاسم", f"{basic['name_ar']} ({basic['name_en']})")
-    m2.metric("الصيغة الكيميائية", basic["formula"])
-    m3.metric("الكتلة المولية", basic["molar_mass"])
-    m4.metric("إجمالي عدد الذرات في الجزيء", str(comp.get("total_atoms", 0)))
+    m1.metric("الاسم العلمي (Compound Name)", f"{basic['name_ar']} ({basic['name_en']})")
+    m2.metric("الصيغة الجزيئية (Molecular Formula)", disp_formula)
+    m3.metric("الكتلة المولية (Molar Mass)", basic["molar_mass"])
+    m4.metric("إجمالي الذرات (Total Atoms)", str(comp.get("total_atoms", 0)))
 
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>1. المعلومات الأساسية والتركيب والمكونات</h4>
-  <p><strong>الاسم الإنجليزي:</strong> <span class="ltr-inline">{basic['name_en']}</span> | <strong>الاسم العربي:</strong> {basic['name_ar']}</p>
-  <p><strong>الاسم النظامي (IUPAC):</strong> <code class="ltr-inline">{basic.get('iupac_name') or 'N/A'}</code></p>
-  <p><strong>الصيغة الجزيئية:</strong> <code class="ltr-inline">{basic['formula']}</code> | <strong>الكتلة المولية:</strong> <code class="ltr-inline">{basic['molar_mass']}</code></p>
+  <h4>1. المعلومات الأساسية والتركيب الذري (Composition &amp; Formula)</h4>
+  <p><strong>الاسم العلمي:</strong> {basic['name_ar']} | <span class="ltr-inline">{basic['name_en']}</span></p>
+  <p><strong>الاسم النظامي (IUPAC Name):</strong> <code class="ltr-inline">{basic.get('iupac_name') or 'N/A'}</code></p>
+  <p><strong>الصيغة الجزيئية (Molecular Formula):</strong> <code class="ltr-inline">{disp_formula}</code> | <strong>الكتلة المولية (Molar Mass):</strong> <code class="ltr-inline">{basic['molar_mass']}</code></p>
   <p><strong>ملخص التركيب الذري:</strong> {comp.get('summary_ar', '')}</p>
 </div>
 """,
@@ -236,48 +248,70 @@ def _render_compound_profile_ui(profile: dict[str, Any]) -> None:
             comp_df = pd.DataFrame(
                 [
                     {
-                        "العنصر": f"{item['name_ar']} ({item['symbol']})",
-                        "عدد الذرات": item["count"],
-                        "الوصف": item["description_ar"],
-                        "الكتلة الذرية (u)": item["atomic_mass"],
-                        "النسبة الكتلية (%)": f"{item['mass_percentage']}%",
+                        "العنصر (Element)": f"{item['name_ar']} ({item['symbol']})",
+                        "عدد الذرات (Count)": int(item["count"]),
+                        "الوصف الذري": item["description_ar"],
+                        "الكتلة الذرية (Atomic Mass u)": float(item["atomic_mass"]),
+                        "النسبة الكتلية (Mass %)": f"{item['mass_percentage']:.2f}%",
                     }
                     for item in comp["components"]
                 ]
             )
-            st.dataframe(comp_df, use_container_width=True, hide_index=True)
+            st.dataframe(
+                comp_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "عدد الذرات (Count)": st.column_config.NumberColumn(format="%d"),
+                    "الكتلة الذرية (Atomic Mass u)": st.column_config.NumberColumn(format="%.4f u"),
+                },
+            )
 
     with c2:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>2. البنية الجزيئية والروابط الكيميائية</h4>
-  <p><strong>شكل الجزيء (Molecular Geometry):</strong> {struct['molecular_geometry']}</p>
-  <p><strong>التهجين المداري:</strong> {struct.get('hybridization', 'غير محدد')}</p>
-  <p><strong>الروابط الكيميائية:</strong> {struct['chemical_bonds']}</p>
-  <p><strong>القطبية وعزم ثنائي القطب:</strong> {struct.get('dipole_moment', 'غير محدد')}</p>
-  <p><strong>التمثيل ثلاثي الأبعاد:</strong> {struct['representation_3d_note']}</p>
+  <h4>2. البنية الجزيئية والروابط الكيميائية (Molecular Structure &amp; Bonding)</h4>
+  <p><strong>الشكل الهندسي للجزيء (Molecular Geometry):</strong> {struct['molecular_geometry']}</p>
+  <p><strong>التهجين المداري (Orbital Hybridization):</strong> {struct.get('hybridization', 'غير محدد')}</p>
+  <p><strong>الروابط الكيميائية (Chemical Bonds):</strong> {struct['chemical_bonds']}</p>
+  <p><strong>القطبية وعزم ثنائي القطب (Dipole Moment):</strong> {struct.get('dipole_moment', 'غير محدد')}</p>
+  <p><strong>التمثيل الفراغي ثلاثي الأبعاد (3D Representation):</strong> {struct['representation_3d_note']}</p>
 </div>
 """,
             unsafe_allow_html=True,
         )
         if struct.get("pubchem_3d_url"):
             st.markdown(
-                f"<p><a href='{struct['pubchem_3d_url']}' target='_blank'>فتح عارض البنية ثلاثية الأبعاد التفاعلي في PubChem 3D</a></p>",
+                f"<p><a href='{struct['pubchem_3d_url']}' target='_blank'>فتح عارض البنية ثلاثية الأبعاد التفاعلي في PubChem 3D Conformer</a></p>",
                 unsafe_allow_html=True,
             )
 
     st.markdown(
         f"""
 <div class="ml-card">
-  <h4>3. الخصائص الفيزيائية والكيميائية</h4>
-  <p><strong>الحالة الفيزيائية:</strong> {props['physical_state']}</p>
-  <p><strong>الكثافة:</strong> <span class="ltr-inline">{props['density']}</span> | <strong>درجة الانصهار:</strong> <span class="ltr-inline">{props['melting_point']}</span> | <strong>درجة الغليان:</strong> <span class="ltr-inline">{props['boiling_point']}</span></p>
-  <p><strong>الخصائص والتفاعلية الكيميائية:</strong> {props['chemical_properties_summary']} {props.get('reactivity', '')}</p>
+  <h4>3. الخصائص الفيزيائية والكيميائية (Physicochemical Properties)</h4>
+  <p><strong>الحالة الفيزيائية (Physical State):</strong> {props['physical_state']}</p>
+  <p><strong>الكثافة (Density):</strong> <span class="ltr-inline">{props['density']}</span> | <strong>درجة الانصهار (Melting Point):</strong> <span class="ltr-inline">{props['melting_point']}</span> | <strong>درجة الغليان (Boiling Point):</strong> <span class="ltr-inline">{props['boiling_point']}</span></p>
+  <p><strong>السلوك والتفاعلية الكيميائية (Chemical Reactivity):</strong> {props['chemical_properties_summary']} {props.get('reactivity', '')}</p>
 </div>
 """,
         unsafe_allow_html=True,
     )
+
+    safety = profile.get("lab_safety")
+    if safety and profile.get("profile_kind") != ENTITY_DRUG_SUBSTANCE:
+        st.markdown(
+            f"""
+<div class="ml-safety-card">
+  <h4 style="margin-top:0;color:#b45309;">إرشادات السلامة المخبرية لما قبل المختبر (Pre-Lab Safety &amp; Handling)</h4>
+  <p><strong>المخاطر الكيميائية (Hazard Profile):</strong> {safety.get('hazard_ar', '')}</p>
+  <p><strong>أدوات الوقاية الشخصية (Required PPE):</strong> {safety.get('ppe_ar', '')}</p>
+  <p style="margin-bottom:0;"><strong>احتياطات التداول المخبري (Safe Lab Handling):</strong> {safety.get('handling_ar', '')}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_drug_profile_ui(profile: dict[str, Any]) -> None:
@@ -285,28 +319,43 @@ def _render_drug_profile_ui(profile: dict[str, Any]) -> None:
     pharm = profile.get("pharmacology", {})
     brands = "، ".join(profile.get("brand_names", [])) or "غير متوفر"
     desc = pharm.get("calculated_drug_descriptors") or {}
+    prelab = pharm.get("prelab_safety_and_qc") or {}
 
     st.markdown(
         f"""
 <div class="ml-card">
-  <h4>4. الملف الدوائي والنشاط الحيوي الموثق (Pharmacology &amp; Bioactivity)</h4>
-  <p><strong>الأسماء التجارية المسجلة:</strong> {brands} | <strong>حالة الاعتماد:</strong> {pharm.get('approval_status_ar', '')}</p>
-  <p><strong>الفئة العلاجية:</strong> {pharm.get('therapeutic_class_ar', '')}</p>
-  <p><strong>الاستطباب الدوائي:</strong> {pharm.get('indication_ar', '')}</p>
-  <p><strong>الهدف البروتيني الجزيئي:</strong> {pharm.get('target_protein_ar', '')}</p>
+  <h4>4. الملف الدوائي والنشاط الحيوي الموثق (Pharmacology &amp; Bioactivity — ChEMBL)</h4>
+  <p><strong>الأسماء التجارية (Brand Names):</strong> {brands} | <strong>حالة الاعتماد (Approval Status):</strong> {pharm.get('approval_status_ar', '')}</p>
+  <p><strong>الفئة العلاجية (Therapeutic Class):</strong> {pharm.get('therapeutic_class_ar', '')}</p>
+  <p><strong>الاستطباب الدوائي (Clinical Indication):</strong> {pharm.get('indication_ar', '')}</p>
+  <p><strong>الهدف البروتيني الجزيئي (Molecular Target):</strong> {pharm.get('target_protein_ar', '')}</p>
   <p><strong>آلية العمل الدوائية (Mechanism of Action):</strong> {pharm.get('mechanism_of_action_ar', '')}</p>
-  <p><strong>النشاط الحيوي التجريبي المنشور (ChEMBL):</strong> <span class="ltr-inline">{pharm.get('documented_bioactivity_ar', '')}</span></p>
+  <p><strong>النشاط الحيوي التجريبي المنشور (Documented Bioactivity):</strong> <span class="ltr-inline">{pharm.get('documented_bioactivity_ar', '')}</span></p>
 </div>
 """,
         unsafe_allow_html=True,
     )
     if desc:
         d1, d2, d3, d4, d5 = st.columns(5)
-        d1.metric("الوزن الجزيئي (MW)", f"{desc['molecular_weight']} Da")
-        d2.metric("معامل الدهنية (LogP)", str(desc["logp"]))
-        d3.metric("مانحات / مستقبلات H", f"HBD={desc['hbd']} | HBA={desc['hba']}")
-        d4.metric("السطح القطبي (TPSA)", f"{desc['tpsa']} Å²")
-        d5.metric("قاعدة Lipinski", "متوافق" if desc["lipinski_compliant"] else "مخالف")
+        d1.metric("الوزن الجزيئي (Molecular Weight)", f"{desc['molecular_weight']} Da")
+        d2.metric("معامل التوزع الدهني (LogP)", str(desc["logp"]))
+        d3.metric("الروابط الهيدروجينية (HBD / HBA)", f"HBD={desc['hbd']} | HBA={desc['hba']}")
+        d4.metric("مساحة السطح القطبي (TPSA)", f"{desc['tpsa']} Å²")
+        d5.metric("قاعدة ليبينسكي (Lipinski Rule)", "متوافق (Compliant)" if desc["lipinski_compliant"] else "مخالف (Non-compliant)")
+
+    if prelab:
+        st.markdown(
+            f"""
+<div class="ml-safety-card">
+  <h4 style="margin-top:0;color:#b45309;">5. بطاقة تهيئة طالب الصيدلة قبل المختبر (Pharmacy Pre-Lab Safety &amp; QC Protocol)</h4>
+  <p><strong>تقييم المخاطر الدوائية (Hazard Assessment):</strong> {prelab.get('hazard_ar', '')}</p>
+  <p><strong>معدات الوقاية الشخصية (Required PPE):</strong> {prelab.get('ppe_ar', '')}</p>
+  <p><strong>اختبار الهوية والنقاوة الدستوري (Pharmacopoeial QC Test):</strong> {prelab.get('quality_test_ar', '')}</p>
+  <p style="margin-bottom:0;"><strong>التداول والحفظ في المختبر (Handling &amp; Storage):</strong> {prelab.get('handling_ar', '')}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_protein_profile_ui(profile: dict[str, Any]) -> None:
@@ -315,22 +364,22 @@ def _render_protein_profile_ui(profile: dict[str, Any]) -> None:
     struct = profile["structure"]
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("اسم البروتين", basic["name_ar"])
+    m1.metric("اسم البروتين (Protein Name)", basic["name_ar"])
     m2.metric("معرف UniProt", str(bio.get("uniprot_id", "N/A")))
-    m3.metric("الكائن الحي", str(bio.get("organism", "Homo sapiens")))
-    m4.metric("الكتلة الجزيئية", str(basic.get("molar_mass", "N/A")))
+    m3.metric("الكائن الحي (Organism)", str(bio.get("organism", "Homo sapiens")))
+    m4.metric("الكتلة الجزيئية (Molecular Mass)", str(basic.get("molar_mass", "N/A")))
 
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>1. الهوية البيولوجية والوظيفة الحيوية (UniProt)</h4>
-  <p><strong>الاسم الإنجليزي:</strong> <span class="ltr-inline">{basic['name_en']}</span> | <strong>الاسم العربي:</strong> {basic['name_ar']}</p>
-  <p><strong>رمز الجين (Gene):</strong> <code class="ltr-inline">{bio.get('gene_name', '')}</code> | <strong>معرف UniProt:</strong> <code class="ltr-inline">{bio.get('uniprot_id', '')}</code></p>
-  <p><strong>طول التسلسل الأميني:</strong> {bio.get('sequence_length', '')}</p>
-  <p><strong>الموقع الخلوي/الحيوي:</strong> {bio.get('subcellular_location', '')}</p>
-  <p><strong>الوظيفة الحيوية والفسيولوجية:</strong> {bio.get('biological_function_ar', '')}</p>
+  <h4>1. الهوية البيولوجية والوظيفة الحيوية (Biological Identity — UniProt)</h4>
+  <p><strong>الاسم العلمي:</strong> {basic['name_ar']} | <span class="ltr-inline">{basic['name_en']}</span></p>
+  <p><strong>رمز الجين (Gene Symbol):</strong> <code class="ltr-inline">{bio.get('gene_name', '')}</code> | <strong>معرف UniProtKB:</strong> <code class="ltr-inline">{bio.get('uniprot_id', '')}</code></p>
+  <p><strong>طول التسلسل الأميني (Sequence Length):</strong> {bio.get('sequence_length', '')}</p>
+  <p><strong>الموقع الخلوي (Subcellular Location):</strong> {bio.get('subcellular_location', '')}</p>
+  <p><strong>الوظيفة الحيوية والفسيولوجية (Biological Function):</strong> {bio.get('biological_function_ar', '')}</p>
 </div>
 """,
             unsafe_allow_html=True,
@@ -340,8 +389,8 @@ def _render_protein_profile_ui(profile: dict[str, Any]) -> None:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>2. البنية الفراغية ثلاثية الأبعاد (RCSB PDB)</h4>
-  <p><strong>البنية الجزيئية:</strong> {struct.get('molecular_geometry', '')}</p>
+  <h4>2. البنية الفراغية ثلاثية الأبعاد (3D Crystal Structure — RCSB PDB)</h4>
+  <p><strong>البنية الجزيئية (Quaternary/Tertiary Geometry):</strong> {struct.get('molecular_geometry', '')}</p>
   <p><strong>الروابط والجسور المثبتة للبنية:</strong> {struct.get('chemical_bonds', '')}</p>
   <p><strong>التراكيب البلورية المسجلة في PDB:</strong> <code class="ltr-inline">{pdb_items}</code></p>
   <p><strong>ملاحظة تركيبية:</strong> {struct.get('representation_3d_note', '')}</p>
@@ -365,26 +414,25 @@ def _render_explanation_and_applications_ui(profile: dict[str, Any]) -> None:
         st.markdown(
             f"""
 <div class="ml-card">
-  <h4>التطبيقات والاستخدامات العلمية والعملية</h4>
-  <p><strong>1. الاستخدامات اليومية:</strong> {apps.get('daily', '')}</p>
-  <p><strong>2. الاستخدامات الصناعية:</strong> {apps.get('industrial', '')}</p>
-  <p><strong>3. الاستخدامات العلمية والبحثية:</strong> {apps.get('scientific', '')}</p>
+  <h4>التطبيقات والاستخدامات العلمية والعملية (Scientific &amp; Practical Applications)</h4>
+  <p><strong>1. الاستخدامات اليومية والطبية (Daily &amp; Medical):</strong> {apps.get('daily', '')}</p>
+  <p><strong>2. الاستخدامات الصناعية والدوائية (Industrial &amp; Pharmaceutical):</strong> {apps.get('industrial', '')}</p>
+  <p><strong>3. الاستخدامات العلمية والمخبرية (Laboratory &amp; Research):</strong> {apps.get('scientific', '')}</p>
 </div>
 """,
             unsafe_allow_html=True,
         )
     with c_exp:
-        st.markdown('<div class="ml-card"><h4>التفسير العلمي (Scientific Explanation)</h4>', unsafe_allow_html=True)
+        st.markdown('<div class="ml-card"><h4>التفسير العلمي المتدرج (Scientific Explanation)</h4>', unsafe_allow_html=True)
         level_choice = st.radio(
             "اختر مستوى الشرح العلمي:",
-            ["شرح مبسط للطالب", "شرح جامعي متقدم"],
+            ["شرح مبسط للطالب (Student Level)", "شرح جامعي متقدم (Advanced University Level)"],
             horizontal=True,
             key=f"exp_lvl_{profile['reaction_lab_entity']['key']}",
         )
-        if level_choice == "شرح مبسط للطالب":
+        if "مبسط" in level_choice:
             st.info(exp.get("student_level_ar", ""))
         else:
             st.info(exp.get("advanced_level_ar", ""))
         st.caption(exp.get("methodology_distinction_ar", ""))
         st.markdown("</div>", unsafe_allow_html=True)
-

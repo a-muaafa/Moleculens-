@@ -1,10 +1,28 @@
 # سجل التغييرات (Changelog) — MolecuLens
 
+## [2.1.0] - 2026-11-11 — مرحلة تحسين الجودة وضبط الدقة العلمية (Polishing & Quality Assurance)
+- **إصلاح الأخطاء البرمجية والمنطقية (Scientific & Logic Fixes):**
+  - تفعيل الفلترة الفعلية لمجال التفاعل (`domain`: الكيمياء العضوية، الكيمياء الحيوية، الأحماض والقواعد، الأكسدة والترسيب، الكيمياء العامة) في `reaction_registry.py` و `reaction_service.py` وواجهة `reaction_lab_view.py`.
+  - إضافة محرك التحقق من توافق ظروف التفاعل (`evaluate_reaction_conditions_compatibility`) لمطابقة درجة الحرارة والضغط والمذيب والعامل الحفاز مع شروط التفاعل الموثق وتنبيه المستخدم عند عدم التوافق.
+  - إضافة التحقق المزدوج من هوية المركب (`verify_substance_structure_identity` و `_verify_pubchem_record_identity`) للتأكد من تطابق البنية (`SMILES`) مع الصيغة الجزيئية والمعرف المرجعي للمادة المطلوبة.
+  - منع استخدام وحدة الحجم الغازي القياسي (`L_STP = 22.414 L/mol`) مع المواد الصلبة والسائلة والمحاليل المائية في `core/validators.py` و `reaction_engine/stoichiometry.py`.
+  - تطوير الربط بين قواعد البيانات (`PubChem` و `ChEMBL` و `ChEBI`) بالاعتماد على `InChIKey` و `Canonical SMILES` والصيغة الجزيئية عبر `match_records_by_structure_and_identifiers`.
+  - استكمال تكامل البحث الفعلي عن التفاعلات العضوية في `data_integrations/ord_client.py` (`search_ord_reactions`) مع التحقق الصارم من حفظ الذرات.
+  - إضافة بطاقات تهيئة وسلامة طالب الصيدلة قبل المختبر (`Pharmacy Pre-Lab Safety & QC Protocol`) في `pharmacy/pharmacology_module.py` و `entity_profiles/compound_profile.py`.
+- **التحسينات اللغوية والشكلية وتجربة المستخدم (UI/UX & Bilingual Standardization):**
+  - توحيد عرض المصطلحات العلمية بالجمع بين المصطلح العربي الدقيق والمقابل الإنجليزي المعتمد (`المتفاعل المحدد (Limiting Reagent)`، `الناتج النظري (Theoretical Yield)`، `الكتلة المولية (Molar Mass)`، `الصيغة الجزيئية (Molecular Formula)`).
+  - تنسيق الصيغ الكيميائية بالأرقام السفلية الصحيحة (`H₂O`، `CH₃COOH`) وتوحيد عرض المعادلات الكيميائية من اليسار إلى اليمين (`LTR`).
+  - توحيد تصميم البطاقات، العناوين، الأزرار، الجداول، والفصل البصري الثلاثي بين (التفاعل الموثق، النتيجة المحسوبة، التوقع النظري) في `frontend/styles.py`.
+- **التوثيق وتنظيف المستودع والاختبارات (Documentation & QA Testing):**
+  - تصحيح تفصيل إحصائية المواد في `README.md` ليطابق المجموع الفعلي (`241 مادة` موزعة على 15 فئة) وتوثيق مراجع التفاعلات الـ `87`.
+  - إزالة مسارات Windows المحلية من `SOURCES_AND_LICENSES.md` وحذف الملفات المؤقتة (`scratch_check.py` و `scratch_patch.py`) وإزالة `UTF-8 BOM`.
+  - توسيع حزمة الاختبارات الآلية إلى `103 اختبارات` شاملة ناجحة بنسبة 100%.
+
+---
+
 ## [2.0.0] - 2026-11-11 — إعادة بناء شاملة للمنصة (Platform Architecture Rebuild)
 - إعادة بناء مشروع **MolecuLens** من الصفر كمنصة تعليمية واستكشافية علمية (`Scientific Learning & Exploration Platform`) قائمة على قسمين رئيسيين فقط: `Explore & Understand` و `Reaction Lab`.
-- إزالة الواجهات والملفات القديمة المتمحورة حول مراحل DPP4 الخمس.
-- إنشاء الهيكل المعماري الجديد المكون من 11 طبقة (`config`, `core`, `search`, `data_integrations`, `entity_profiles`, `chemistry_engine`, `reaction_engine`, `pharmacy`, `biology`, `education`, `frontend`).
+- إنشاء الهيكل المعماري المكون من 11 طبقة (`config`, `core`, `search`, `data_integrations`, `entity_profiles`, `chemistry_engine`, `reaction_engine`, `pharmacy`, `biology`, `education`, `frontend`).
 - بناء محرك تصنيف الكيانات العلمية (`عنصر كيميائي`، `مركب كيميائي`، `مادة دوائية`، `بروتين أو جزيء حيوي`) وبناء ملفات علمية مخصصة لكل فئة.
 - بناء `Data Manager` موحد للاتصال بمصادر `PubChem`, `ChEMBL`, `UniProt`, `RCSB PDB`, و `Rhea` مع نظام تخزين مؤقت (`Cache Store`).
-- بناء محرك التفاعلات (`Reaction Engine`) لموازنة المعادلات جبريا، والتحقق من حفظ الذرات، وحساب المتفاعل المحدد والفائض والناتج النظري، ورفض اختلاق التفاعلات غير المدعومة.
-- بناء حزمة اختبارات آلية شاملة (`24/24` اختبار ناجح في `tests/`).
+- بناء محرك التفاعلات (`Reaction Engine`) لموازنة المعادلات جبرياً، والتحقق من حفظ الذرات، وحساب المتفاعل المحدد والفائض والناتج النظري، ورفض اختلاق التفاعلات غير المدعومة.

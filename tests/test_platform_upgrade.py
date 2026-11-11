@@ -3,15 +3,33 @@ import os
 import re
 import tempfile
 
-import pytest
-from rdkit import Chem
+try:
+    import pytest
+except ImportError:
+    class _DummyPytest:
+        @staticmethod
+        def approx(val, rel=1e-6, abs=1e-6):
+            return val
+
+        class mark:
+            @staticmethod
+            def parametrize(argnames, argvalues):
+                def decorator(func):
+                    func._parametrize = (argnames, argvalues)
+                    return func
+                return decorator
+
+    pytest = _DummyPytest()  # type: ignore
 
 from chemistry_engine.formula_analyzer import parse_chemical_formula
 from chemistry_engine.structure_analyzer import (
+    HAS_RDKIT,
+    Chem,
     analyze_molecular_structure,
     generate_3d_conformer_data,
     render_molecule_2d_svg,
     structure_matches_formula,
+    validate_and_parse_smiles,
 )
 from config.settings import CLOSED_DROPDOWN_OPTIONS
 from data_integrations.local_db import SmartLocalDatabase
@@ -73,7 +91,8 @@ def test_case_sensitive_formula_priority():
     assert _sel("CO")["key"] == "carbon_monoxide"
     assert _sel("Co")["key"] == "element_co"
     res = search_scientific_entity("co", allow_network=False)
-    assert res["is_ambiguous"]    
+    assert res["is_ambiguous"]
+
 
 def test_isopropanol_and_propanol_are_separated():
     assert _sel("(CH3)2CHOH")["key"] == "isopropanol"
@@ -128,6 +147,7 @@ def test_results_ranked_by_match_quality():
 def test_catalog_coverage_and_integrity():
     keys = [e["key"] for e in LOCAL_SCIENTIFIC_CATALOG]
     assert len(keys) == len(set(keys))
+    assert len(LOCAL_SCIENTIFIC_CATALOG) == 241
     elements = [e for e in LOCAL_SCIENTIFIC_CATALOG if e["entity_type"] == "chemical_element"]
     assert len(elements) == 118
     subclasses = {e.get("subclass") for e in LOCAL_SCIENTIFIC_CATALOG}
@@ -140,8 +160,13 @@ def test_every_structure_is_valid_and_matches_its_substance():
         smiles = e.get("canonical_smiles")
         if not smiles:
             continue
-        assert Chem.MolFromSmiles(smiles) is not None, e["key"]
+        if HAS_RDKIT and Chem is not None:
+            assert Chem.MolFromSmiles(smiles) is not None, e["key"]
+        else:
+            mol, _, _ = validate_and_parse_smiles(smiles)
+            assert mol is not None, e["key"]
         assert structure_matches_formula(smiles, e["symbol_or_formula"]), (e["key"], e["symbol_or_formula"])
+
 
 def test_structure_analysis_bonds_rings_groups():
     acetic = analyze_molecular_structure(get_catalog_entity_by_key("acetic_acid")["canonical_smiles"])
@@ -157,7 +182,7 @@ def test_2d_svg_and_3d_conformer_generation():
     svg = render_molecule_2d_svg("CC(=O)O", 400, 300)
     assert svg and "<svg" in svg
     bigger = render_molecule_2d_svg("CC(=O)O", 800, 600)
-    assert 'width=\'800px\'' in bigger or 'width="800px"' in bigger or "800" in bigger
+    assert "width='800px'" in bigger or 'width="800px"' in bigger or "800" in bigger
     conf = generate_3d_conformer_data("CC(=O)O")
     assert conf["atom_count"] == 8
     assert conf["bond_count"] == 7
@@ -234,23 +259,24 @@ def test_reaction_substance_options_filtering():
 
 
 def test_registry_size_unique_and_atom_conservation_for_every_reaction():
-    assert len(VERIFIED_REACTIONS_REGISTRY) >= 45
+    assert len(VERIFIED_REACTIONS_REGISTRY) == 87
     ids = [r["reaction_id"] for r in VERIFIED_REACTIONS_REGISTRY]
     assert len(ids) == len(set(ids))
     categories = {r["category"] for r in VERIFIED_REACTIONS_REGISTRY}
     assert {"neutralization", "combustion", "precipitation", "single_displacement", "redox_synthesis", "decomposition", "organic_reaction", "biochemical_reaction"} <= categories
     for r in VERIFIED_REACTIONS_REGISTRY:
+        assert r.get("source"), r["reaction_id"]
         for s in r["reactants"] + r["products"]:
             assert parse_chemical_formula(s["formula"]), (r["reaction_id"], s["formula"])
         assert verify_atom_conservation(r["reactants"], r["products"])["is_balanced"], r["reaction_id"]
 
 
-def _run(formulas_amounts, reaction_type="all"):
+def _run(formulas_amounts, reaction_type="all", domain="all_domains"):
     inputs = []
     for f, amt in formulas_amounts:
         ent = {"symbol_or_formula": f, "name_ar": f}
         inputs.append({"substance": ent, "formula": f, "amount": amt, "unit": "mol"})
-    return analyze_chemical_reaction(inputs, custom_conditions={"reaction_type": reaction_type})
+    return analyze_chemical_reaction(inputs, domain=domain, custom_conditions={"reaction_type": reaction_type})
 
 
 def test_acetic_acid_neutralization_and_limiting_reagent():
@@ -259,7 +285,7 @@ def test_acetic_acid_neutralization_and_limiting_reagent():
     assert res["equation_text"] == "CH3COOH + NaOH -> CH3COONa + H2O"
     assert res["limiting_reagent"]["formula"] == "NaOH"
     yields = {y["formula"]: y["theoretical_yield_mol"] for y in res["theoretical_yields"]}
-    assert yields["CH3COONa"] == pytest.approx(1.0)
+    assert abs(yields["CH3COONa"] - 1.0) < 1e-6
     assert res["excess_reagents"][0]["formula"] == "CH3COOH"
 
 
@@ -272,7 +298,7 @@ def test_stoichiometry_mass_units_and_nonunit_coefficients():
     res = _run([("H2SO4", 1.0), ("NaOH", 1.0)])
     assert res["supported"] and res["limiting_reagent"]["formula"] == "NaOH"
     y = {p["formula"]: p["theoretical_yield_mol"] for p in res["theoretical_yields"]}
-    assert y["Na2SO4"] == pytest.approx(0.5)
+    assert abs(y["Na2SO4"] - 0.5) < 1e-6
 
 
 @pytest.mark.parametrize(
@@ -315,6 +341,10 @@ def test_search_reactions_by_substance_formula():
     assert all(any(s["formula"] == "CH3COOH" for s in r["reactants"] + r["products"]) for r in found)
     assert find_verified_reactions(["HCl", "NaOH"])
     assert not search_reactions_by_substance("HCOOCH3")
+    # Domain filtering on substance reaction search
+    org_only = search_reactions_by_substance("CH3COOH", domain="organic_chemistry")
+    assert len(org_only) == 2
+    assert all(r["domain"] == "organic_chemistry" for r in org_only)
 
 
 def test_no_emoji_in_project_sources():
@@ -324,4 +354,3 @@ def test_no_emoji_in_project_sources():
             if fname.endswith(".py"):
                 text = open(os.path.join(ROOT, folder, fname), encoding="utf-8-sig").read()
                 assert not emoji.search(text), (folder, fname)
-

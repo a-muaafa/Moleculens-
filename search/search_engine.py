@@ -1,9 +1,12 @@
 from difflib import SequenceMatcher
 from typing import Any
 
-from rdkit import Chem
-
-from chemistry_engine.formula_analyzer import normalize_chemical_formula, parse_chemical_formula
+from chemistry_engine.formula_analyzer import (
+    format_chemical_formula_display,
+    normalize_chemical_formula,
+    parse_chemical_formula,
+)
+from chemistry_engine.structure_analyzer import HAS_RDKIT, Chem, validate_and_parse_smiles
 from core.validators import validate_search_query
 from data_integrations.data_manager import DataManager
 from search.entity_classifier import classify_scientific_entity
@@ -33,15 +36,22 @@ DEFAULT_DID_YOU_MEAN = [
 _INDEX_CACHE: list[dict[str, Any]] | None = None
 
 
+def _canonicalize_smiles(smiles: str) -> str:
+    if not smiles:
+        return ""
+    if HAS_RDKIT and Chem is not None:
+        mol = Chem.MolFromSmiles(smiles)
+        return Chem.MolToSmiles(mol) if mol is not None else ""
+    _, canon, _ = validate_and_parse_smiles(smiles)
+    return canon or ""
+
+
 def _build_index() -> list[dict[str, Any]]:
     index = []
     for entry in LOCAL_SCIENTIFIC_CATALOG:
         formula = entry.get("symbol_or_formula", "")
         smiles = entry.get("canonical_smiles", "")
-        canon = ""
-        if smiles:
-            mol = Chem.MolFromSmiles(smiles)
-            canon = Chem.MolToSmiles(mol) if mol is not None else ""
+        canon = _canonicalize_smiles(smiles)
         index.append(
             {
                 "entry": entry,
@@ -86,6 +96,7 @@ def _decorate_and_unify(
     raw_copy["match_score"] = round(float(match_score), 2)
     unified = DataManager.unify_entity_record(raw_copy, allow_network_enrichment=allow_network)
     unified["classification"] = classification
+    unified["formatted_formula"] = format_chemical_formula_display(unified["symbol_or_formula"])
     unified["highlighted_name_ar"] = highlight_matched_text(unified["name_ar"], query)
     unified["highlighted_name_en"] = highlight_matched_text(unified["name_en"], query)
     unified["highlighted_formula"] = highlight_matched_text(unified["symbol_or_formula"], query)
@@ -161,10 +172,9 @@ def _smiles_match(raw_q: str, idx_list: list[dict[str, Any]]) -> list[dict[str, 
     q = raw_q.strip()
     if " " in q or len(q) < 2:
         return []
-    mol = Chem.MolFromSmiles(q)
-    if mol is None:
+    canon = _canonicalize_smiles(q)
+    if not canon:
         return []
-    canon = Chem.MolToSmiles(mol)
     return [i for i in idx_list if i["canon_smiles"] and i["canon_smiles"] == canon]
 
 
@@ -260,7 +270,7 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
         (exact if cat == "Exact Match" else partial).append(item)
 
     if exact:
-        return _finalize_group(exact, "يحتمل المدخل أكثر من مادة علمية؛ يرجى اختيار المادة المقصودة.", input_type)
+        return _finalize_group(exact, "يحتمل المدخل أكثر من مادة علمية؛ يرجى اختيار المادة المقصودة من القائمة أدناه.", input_type)
 
     smiles_hits = _smiles_match(cleaned_q, index)
     if smiles_hits:
@@ -268,7 +278,7 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             _decorate_and_unify(i["entry"], "exact_smiles", "Exact Match", "تطابق تام مع البنية الجزيئية (SMILES) بعد التوحيد القياسي عبر RDKit", 97.0, query=cleaned_q)
             for i in smiles_hits
         ]
-        return _finalize_group(items, "يطابق المدخل أكثر من مادة؛ يرجى الاختيار.", input_type)
+        return _finalize_group(items, "يطابق المدخل أكثر من مادة؛ يرجى اختيار المادة المقصودة.", input_type)
 
     if query_is_formula:
         hill_hits = _hill_equivalents(cleaned_q, index)
@@ -280,29 +290,29 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
                 )
                 for i in hill_hits
             ]
-            res = _finalize_group(items, "تشترك عدة مواد في هذه الصيغة الجزيئية وتختلف في بنيتها؛ يرجى اختيار المادة المقصودة.", input_type)
+            res = _finalize_group(items, "تشترك عدة مواد في هذه الصيغة الجزيئية وتختلف في بنيتها الفراغية/البنائية (Isomers)؛ يرجى اختيار المادة المقصودة.", input_type)
             if len(items) > 1:
                 res["is_ambiguous"] = True
                 res["selected"] = None
                 res["candidates"] = items
-                res["ambiguity_message"] = "تشترك عدة مواد في هذه الصيغة الجزيئية وتختلف في بنيتها؛ يرجى اختيار المادة المقصودة."
+                res["ambiguity_message"] = "تشترك عدة مواد في هذه الصيغة الجزيئية وتختلف في بنيتها الفراغية/البنائية (Isomers)؛ يرجى اختيار المادة المقصودة."
             return res
 
     if partial:
-        res = _finalize_group(partial, "تم العثور على عدة نتائج متقاربة؛ يرجى اختيار المادة المقصودة.", input_type,
+        res = _finalize_group(partial, "تم العثور على عدة نتائج متقاربة؛ يرجى اختيار المادة المقصودة بدقة.", input_type,
                               did_you_mean=[f"{c['name_ar']} ({c['symbol_or_formula']})" for c in sorted(partial, key=lambda x: -x['match_score'])[:4]])
         res["is_ambiguous"] = len(partial) > 1
         res["selected"] = None if len(partial) > 1 else partial[0]
         res["candidates"] = sorted(partial, key=lambda x: -x["match_score"])
         if res["is_ambiguous"]:
-            res["ambiguity_message"] = "تم العثور على عدة نتائج متقاربة؛ يرجى اختيار المادة المقصودة."
+            res["ambiguity_message"] = "تم العثور على عدة نتائج متقاربة؛ يرجى اختيار المادة المقصودة بدقة."
         return res
 
     ext = DataManager.resolve_external_substances(cleaned_q, is_formula=query_is_formula, allow_network=allow_network)
     if ext.get("ok") and ext.get("records"):
         origin_ar = "قاعدة البيانات المحلية الذكية" if ext["origin"] == "local_database" else "المصادر العلمية الخارجية (PubChem / ChEMBL / ChEBI)"
         ext_cands = [
-            _decorate_and_unify(rec, "external_source", "Exact Match", f"تم استرجاع المادة والتحقق من بنيتها عبر {origin_ar}", 95.0, query=cleaned_q)
+            _decorate_and_unify(rec, "external_source", "Exact Match", f"تم استرجاع المادة والتحقق من هويتها وبنيتها عبر {origin_ar}", 95.0, query=cleaned_q)
             for rec in ext["records"]
         ]
         is_ambig = len(ext_cands) > 1
@@ -310,7 +320,7 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             "found": True, "is_ambiguous": is_ambig,
             "ambiguity_message": "تتعدد المواد المطابقة؛ يرجى اختيار المادة المقصودة." if is_ambig else None,
             "selected": None if is_ambig else ext_cands[0], "candidates": ext_cands, "did_you_mean": [],
-            "message": "تم جلب بيانات المادة وتوحيدها عبر Data Manager وتخزينها في قاعدة البيانات المحلية.", "input_type": input_type,
+            "message": "تم جلب بيانات المادة والتحقق من هويتها وتوحيدها عبر Data Manager وتخزينها في قاعدة البيانات المحلية.", "input_type": input_type,
         }
 
     if approx:
@@ -323,7 +333,9 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             "message": approx[0]["match_reason_ar"], "input_type": input_type,
         }
 
-    res = _empty_result(f"لم يتم العثور على مادة علمية مطابقة للمدخل '{cleaned_q}'.")
+    res = _empty_result(
+        f"لم يتم العثور على مادة علمية مطابقة للمدخل '{cleaned_q}'. يرجى التأكد من صحة الإملاء أو الصيغة الكيميائية أو اختيار إحدى المقترحات أدناه."
+    )
     res["input_type"] = input_type
     return res
 
@@ -383,7 +395,8 @@ def get_catalog_dropdown_options() -> list[dict[str, Any]]:
     for i in _get_index():
         entry = i["entry"]
         u = _decorate_and_unify(entry, "catalog", "Exact Match", "اختيار مباشر", 100.0)
-        u["dropdown_label"] = f"{u['name_ar']} | {u['name_en']} ({u['symbol_or_formula']}) — [{u['entity_type_label_ar']}]"
+        f_disp = format_chemical_formula_display(u["symbol_or_formula"])
+        u["dropdown_label"] = f"{u['name_ar']} | {u['name_en']} ({f_disp}) — [{u['entity_type_label_ar']}]"
         items.append(u)
     return items
 
@@ -410,14 +423,16 @@ def get_reaction_substance_options(category: str = "all") -> list[dict[str, Any]
             continue
         if allowed is not None and entry.get("subclass") not in allowed:
             continue
+        f_disp = format_chemical_formula_display(entry["symbol_or_formula"])
         options.append(
             {
                 "key": entry["key"],
                 "formula": entry["symbol_or_formula"],
+                "formatted_formula": f_disp,
                 "name_ar": entry["name_ar"],
                 "name_en": entry["name_en"],
                 "subclass": entry.get("subclass", ""),
-                "label": f"{entry['name_ar']} | {entry['name_en']} ({entry['symbol_or_formula']})",
+                "label": f"{entry['name_ar']} | {entry['name_en']} ({f_disp})",
             }
         )
     return options

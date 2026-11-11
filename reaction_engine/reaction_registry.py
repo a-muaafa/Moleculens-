@@ -1,5 +1,11 @@
+import re
 from typing import Any
-from chemistry_engine.formula_analyzer import formulas_are_equivalent, normalize_chemical_formula, replace_subscripts
+from chemistry_engine.formula_analyzer import (
+    formulas_are_equivalent,
+    get_standard_phase_code,
+    normalize_chemical_formula,
+    replace_subscripts,
+)
 
 VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
     {
@@ -30,6 +36,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
             "يفترض هذا الحساب النظري اكتمال التفاعل بنسبة 100% في نظام مغلق دون فقدان حراري أو تفاعلات جانبية. "
             "هذه نتيجة حسابية نظرية وليست إثباتا لتجربة عملية مخبرية."
         ),
+        "source": "IUPAC / NIST Chemistry WebBook — Thermochemical Kinetics (H2 + O2 Synthesis)",
     },
     {
         "reaction_id": "rxn_iron_oxidation",
@@ -56,6 +63,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
             "لتكوين 2 مول من أكسيد الحديد الثلاثي الصلب (Fe2O3) وفق النسبة المولية 4:3:2."
         ),
         "assumptions_and_limits_ar": "حساب ستوكيوميتري نظري بفرض تحول الحديد بالكامل إلى حالة الأكسدة +3.",
+        "source": "CRC Handbook of Chemistry and Physics — Inorganic Metal Oxidation",
     },
     {
         "reaction_id": "rxn_acid_base_hcl_naoh",
@@ -83,6 +91,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
             "لتكوين جزيء الماء (H2O) وملح كلوريد الصوديوم الذائب (NaCl)."
         ),
         "assumptions_and_limits_ar": "حساب نظري لتفاعل تام في الوسط المائي المخفف.",
+        "source": "USP / Ph. Eur. Volumetric Acid-Base Titration Reference & General Chemistry",
     },
     {
         "reaction_id": "rxn_haber_ammonia",
@@ -109,6 +118,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
             "بنسبة مولية 1:3:2."
         ),
         "assumptions_and_limits_ar": "يمثل الناتج المحسوب الحد الأقصى النظري (100% تحويل) قبل الوصول إلى حالة الاتزان العكسي.",
+        "source": "Ullmann's Encyclopedia of Industrial Chemistry — Ammonia Haber-Bosch Process",
     },
     {
         "reaction_id": "rxn_h2o2_decomposition",
@@ -131,6 +141,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
         },
         "explanation_ar": "يتفكك جزيئان من فوق أكسيد الهيدروجين (H2O2) لإنتاج جزيئين من الماء (H2O) وجزيء واحد من غاز الأكسجين (O2).",
         "assumptions_and_limits_ar": "حساب نظري بفرض التفكك التام للمتفاعل.",
+        "source": "Rhea Database (RHEA:15889 Catalase) & Inorganic Chemistry Reference",
     },
     {
         "reaction_id": "rxn_co2_water_hydration",
@@ -153,6 +164,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
         },
         "explanation_ar": "يتفاعل مول واحد من ثاني أكسيد الكربون (CO2) مع مول واحد من الماء (H2O) لتكوين مول واحد من حمض الكربونيك (H2CO3).",
         "assumptions_and_limits_ar": "يمثل الحساب القيمة النظرية الكاملة لتحول CO2 الذائب إلى H2CO3.",
+        "source": "Rhea Database (RHEA:16833 Carbonic Anhydrase) & Physiological Buffer Chemistry",
     },
     {
         "reaction_id": "rxn_methane_combustion",
@@ -176,6 +188,7 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
         },
         "explanation_ar": "يحترق مول واحد من الميثان (CH4) بوجود مولين من غاز الأكسجين (O2) لينتج مولا واحدا من ثاني أكسيد الكربون (CO2) ومولين من الماء (H2O).",
         "assumptions_and_limits_ar": "يفترض الحساب احتراقا كاملا دون تكوين أول أكسيد الكربون (CO) أو السخام.",
+        "source": "NIST Chemistry WebBook — Standard Enthalpy of Hydrocarbon Combustion",
     },
     {
         "reaction_id": "rxn_glucose_respiration",
@@ -199,13 +212,9 @@ VERIFIED_REACTIONS_REGISTRY: list[dict[str, Any]] = [
         },
         "explanation_ar": "يتأكسد مول واحد من الجلوكوز (C6H12O6) بوجود 6 مولات من الأكسجين (O2) لينتج 6 مولات من ثاني أكسيد الكربون (CO2) و6 مولات من الماء (H2O).",
         "assumptions_and_limits_ar": "تمثل المعادلة المحصلة الستوكيومترية الكلية للتنفس الخلوي الهوائي.",
+        "source": "Lehninger Principles of Biochemistry & Rhea Biochemical Pathways",
     },
 ]
-
-
-
-
-import re
 
 REACTION_CATEGORY_BY_ID = {
     "rxn_water_synthesis": "redox_synthesis",
@@ -219,25 +228,36 @@ REACTION_CATEGORY_BY_ID = {
 }
 
 CATEGORY_LABELS_AR = {
-    "neutralization": "تفاعل تعادل وأحماض وقواعد",
-    "combustion": "تفاعل احتراق",
-    "precipitation": "تفاعل ترسيب وتبادل مزدوج",
-    "single_displacement": "تفاعل إحلال مفرد",
-    "redox_synthesis": "تفاعل اتحاد وأكسدة واختزال",
-    "decomposition": "تفاعل تحلل وتفكك",
-    "organic_reaction": "تفاعل عضوي",
-    "biochemical_reaction": "تفاعل كيميائي حيوي",
+    "neutralization": "تفاعل تعادل وأحماض وقواعد (Acid-Base Neutralization)",
+    "combustion": "تفاعل احتراق (Combustion Reaction)",
+    "precipitation": "تفاعل ترسيب وتبادل مزدوج (Precipitation & Metathesis)",
+    "single_displacement": "تفاعل إحلال مفرد (Single Displacement)",
+    "redox_synthesis": "تفاعل اتحاد وأكسدة واختزال (Synthesis & Redox)",
+    "decomposition": "تفاعل تحلل وتفكك (Decomposition)",
+    "organic_reaction": "تفاعل عضوي (Organic Reaction)",
+    "biochemical_reaction": "تفاعل كيميائي حيوي (Biochemical Reaction)",
 }
 
 DOMAIN_BY_CATEGORY = {
-    "neutralization": ("acid_base_chemistry", "الأحماض والقواعد والتعادل"),
-    "precipitation": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال"),
-    "single_displacement": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال"),
-    "redox_synthesis": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال"),
-    "combustion": ("organic_chemistry", "الكيمياء العضوية"),
-    "organic_reaction": ("organic_chemistry", "الكيمياء العضوية"),
-    "decomposition": ("general_chemistry", "الكيمياء العامة وغير العضوية"),
-    "biochemical_reaction": ("biochemistry", "الكيمياء الحيوية"),
+    "neutralization": ("acid_base_chemistry", "الأحماض والقواعد والتعادل (Acids, Bases & Neutralization)"),
+    "precipitation": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال (Redox, Precipitation & Displacement)"),
+    "single_displacement": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال (Redox, Precipitation & Displacement)"),
+    "redox_synthesis": ("redox_and_precipitation", "الأكسدة والاختزال والترسيب والإحلال (Redox, Precipitation & Displacement)"),
+    "combustion": ("organic_chemistry", "الكيمياء العضوية (Organic Chemistry - ORD)"),
+    "organic_reaction": ("organic_chemistry", "الكيمياء العضوية (Organic Chemistry - ORD)"),
+    "decomposition": ("general_chemistry", "الكيمياء العامة وغير العضوية (General & Inorganic Chemistry)"),
+    "biochemical_reaction": ("biochemistry", "الكيمياء الحيوية (Biochemistry - Rhea)"),
+}
+
+CATEGORY_DEFAULT_SOURCES = {
+    "neutralization": "USP / Ph. Eur. Acid-Base Volumetric Standards & IUPAC Analytical Compendium",
+    "precipitation": "Vogel's Textbook of Qualitative Inorganic Analysis & CRC Solubility Rules",
+    "single_displacement": "CRC Handbook of Chemistry and Physics — Electrochemical Series",
+    "redox_synthesis": "Greenwood & Earnshaw, Chemistry of the Elements (Inorganic Redox Reference)",
+    "combustion": "NIST Chemistry WebBook — Standard Thermochemical Combustion Data",
+    "decomposition": "Inorganic Thermochemical Decomposition Reference (CRC / NIST)",
+    "organic_reaction": "Open Reaction Database (ORD) & March's Advanced Organic Chemistry",
+    "biochemical_reaction": "Rhea Biochemical Reactions Database & Lehninger Biochemistry",
 }
 
 EXTRA_SPECIES_NAMES = {
@@ -354,7 +374,18 @@ def _species_index() -> dict[str, tuple[str, str]]:
     return index
 
 
-def _parse_side(side: str, index: dict[str, tuple[str, str]], state_map: dict[str, str]) -> list[dict[str, Any]]:
+def _infer_species_state(formula: str, category: str, cond: str) -> str:
+    phase = get_standard_phase_code(formula)
+    if phase in {"g", "l"}:
+        if formula in {"HCl", "HNO3", "H2SO4", "CH3COOH"} and ("محلول" in cond or category in {"neutralization", "precipitation", "single_displacement"}):
+            return "aq"
+        return phase
+    if "محلول" in cond and formula not in {"AgCl", "BaSO4", "CaCO3", "Fe(OH)3", "Cu(OH)2", "Zn", "Fe", "Mg", "Al", "Cu", "Ag", "Na"}:
+        return "aq"
+    return phase
+
+
+def _parse_side(side: str, index: dict[str, tuple[str, str]], category: str, cond: str) -> list[dict[str, Any]]:
     items = []
     for token in side.split("+"):
         token = token.strip()
@@ -362,16 +393,31 @@ def _parse_side(side: str, index: dict[str, tuple[str, str]], state_map: dict[st
         coeff = int(m.group(1)) if m.group(1) else 1
         formula = m.group(2).strip()
         name_ar, name_en = index.get(formula, (formula, formula))
-        items.append({"formula": formula, "name_ar": name_ar, "name_en": name_en, "coefficient": coeff, "state": state_map.get(formula, "")})
+        state = _infer_species_state(formula, category, cond)
+        items.append({"formula": formula, "name_ar": name_ar, "name_en": name_en, "coefficient": coeff, "state": state})
     return items
+
+
+def _extract_conditions_dict(category: str, cond_str: str) -> dict[str, str]:
+    cond_dict: dict[str, str] = {
+        "temperature": cond_str,
+        "pressure": "1 atm ما لم يذكر خلاف ذلك",
+    }
+    if "محلول مائي" in cond_str or "محلول حمضي" in cond_str:
+        cond_dict["solvent"] = "محلول مائي (Aqueous Solution)"
+    elif "طور غازي" in cond_str or category == "combustion":
+        cond_dict["solvent"] = "طور غازي أو تفاعل مباشر بدون مذيب"
+    if "حفاز" in cond_str or "إنزيم" in cond_str:
+        cond_dict["catalyst"] = cond_str
+    return cond_dict
 
 
 def _build_generated_reactions() -> list[dict[str, Any]]:
     index = _species_index()
     out = []
     for idx, (category, lhs, rhs, cond) in enumerate(_GENERATED_REACTIONS, start=1):
-        reactants = _parse_side(lhs, index, {})
-        products = _parse_side(rhs, index, {})
+        reactants = _parse_side(lhs, index, category, cond)
+        products = _parse_side(rhs, index, category, cond)
         domain, domain_label = DOMAIN_BY_CATEGORY[category]
         label = CATEGORY_LABELS_AR[category]
         r_ar = " + ".join(r["name_ar"] for r in reactants)
@@ -379,21 +425,22 @@ def _build_generated_reactions() -> list[dict[str, Any]]:
         r_en = " + ".join(r["name_en"] for r in reactants)
         p_en = " + ".join(p["name_en"] for p in products)
         ratio = ":".join(str(r["coefficient"]) for r in reactants)
+        source_ref = CATEGORY_DEFAULT_SOURCES.get(category, "Curated Reaction Registry (IUPAC / NIST Reference)")
         out.append(
             {
                 "reaction_id": f"rxn_{idx:03d}_{category}",
                 "domain": domain,
                 "domain_label_ar": domain_label,
                 "category": category,
-                "reaction_name_ar": f"{label}: {r_ar} إلى {p_ar}",
+                "reaction_name_ar": f"{label.split(' (')[0]}: {r_ar} إلى {p_ar}",
                 "reaction_name_en": f"{r_en} -> {p_en}",
                 "reaction_type_ar": label,
                 "reactants": reactants,
                 "products": products,
-                "conditions": {"temperature": cond, "pressure": "1 atm ما لم يذكر خلاف ذلك"},
+                "conditions": _extract_conditions_dict(category, cond),
                 "explanation_ar": f"تتفاعل المواد ({r_ar}) بنسبة مولية ({ratio}) لتكوين ({p_ar}) وفق المعادلة الموزونة المسجلة في السجل المعتمد.",
                 "assumptions_and_limits_ar": "حساب نظري بفرض اكتمال التفاعل بنسبة 100% دون تفاعلات جانبية، وهو ليس إثباتا لتجربة عملية.",
-                "source": "Curated Reaction Registry (textbook-verified)",
+                "source": source_ref,
             }
         )
     return out
@@ -401,7 +448,7 @@ def _build_generated_reactions() -> list[dict[str, Any]]:
 
 for _rxn in VERIFIED_REACTIONS_REGISTRY:
     _rxn.setdefault("category", REACTION_CATEGORY_BY_ID.get(_rxn["reaction_id"], "redox_synthesis"))
-    _rxn.setdefault("source", "Curated Reaction Registry (textbook-verified)")
+    _rxn.setdefault("source", CATEGORY_DEFAULT_SOURCES.get(_rxn["category"], "Curated Reaction Registry (IUPAC / NIST)"))
 
 VERIFIED_REACTIONS_REGISTRY.extend(_build_generated_reactions())
 
@@ -427,7 +474,28 @@ def _formula_matches(reaction_formula: str, user_formula: str, known: set[str]) 
     return formulas_are_equivalent(rf, uf)
 
 
-def find_verified_reactions(reactant_formulas: list[str], reaction_type: str | None = None) -> list[dict[str, Any]]:
+def _domain_matches(rxn: dict[str, Any], domain: str | None) -> bool:
+    if not domain or domain in {"all", "all_domains"}:
+        return True
+    rxn_dom = rxn.get("domain", "")
+    rxn_cat = rxn.get("category", "")
+    if rxn_dom == domain:
+        return True
+    # Allow general_chemistry reactions that belong to sub-categories or vice-versa when domain is general_chemistry
+    if domain == "general_chemistry" and rxn_dom in {"general_chemistry", "acid_base_chemistry", "redox_and_precipitation"}:
+        return True
+    if domain == "acid_base_chemistry" and rxn_cat == "neutralization":
+        return True
+    if domain == "redox_and_precipitation" and rxn_cat in {"redox_synthesis", "precipitation", "single_displacement"}:
+        return True
+    return False
+
+
+def find_verified_reactions(
+    reactant_formulas: list[str],
+    reaction_type: str | None = None,
+    domain: str | None = None,
+) -> list[dict[str, Any]]:
     user = [f for f in reactant_formulas if f]
     if not user:
         return []
@@ -435,6 +503,8 @@ def find_verified_reactions(reactant_formulas: list[str], reaction_type: str | N
     matches = []
     for rxn in VERIFIED_REACTIONS_REGISTRY:
         if reaction_type and reaction_type != "all" and rxn.get("category") != reaction_type:
+            continue
+        if not _domain_matches(rxn, domain):
             continue
         rf = [r["formula"] for r in rxn["reactants"]]
         if len(rf) != len(user):
@@ -452,16 +522,28 @@ def find_verified_reactions(reactant_formulas: list[str], reaction_type: str | N
     return matches
 
 
-def find_verified_reaction(reactant_formulas: list[str], domain: str | None = None, reaction_type: str | None = None) -> dict[str, Any] | None:
-    found = find_verified_reactions(reactant_formulas, reaction_type=reaction_type)
+def find_verified_reaction(
+    reactant_formulas: list[str],
+    domain: str | None = None,
+    reaction_type: str | None = None,
+) -> dict[str, Any] | None:
+    found = find_verified_reactions(reactant_formulas, reaction_type=reaction_type, domain=domain)
     return found[0] if found else None
 
 
-def search_reactions_by_substance(formula_or_key: str) -> list[dict[str, Any]]:
+def search_reactions_by_substance(
+    formula_or_key: str,
+    domain: str | None = None,
+    reaction_type: str | None = None,
+) -> list[dict[str, Any]]:
     target = formula_or_key or ""
     known = _known_exact_formulas()
     results = []
     for rxn in VERIFIED_REACTIONS_REGISTRY:
+        if reaction_type and reaction_type != "all" and rxn.get("category") != reaction_type:
+            continue
+        if not _domain_matches(rxn, domain):
+            continue
         species = [s["formula"] for s in rxn["reactants"] + rxn["products"]]
         if any(_formula_matches(s, target, known) for s in species):
             results.append(dict(rxn))

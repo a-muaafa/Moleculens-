@@ -1,4 +1,4 @@
-﻿from config.settings import (
+from config.settings import (
     ENTITY_BIOMOLECULE_PROTEIN,
     ENTITY_CHEMICAL_COMPOUND,
     ENTITY_CHEMICAL_ELEMENT,
