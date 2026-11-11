@@ -19,7 +19,7 @@ LOCK_SELECT_SCRIPT = """
 """
 
 
-def inject_platform_styles() -> None:
+def inject_platform_styles(lang: str = "ar") -> None:
     st.markdown(
         """
 <style>
@@ -39,8 +39,6 @@ def inject_platform_styles() -> None:
 
 html, body, [class*="css"], .stApp {
     font-family: 'Cairo', sans-serif;
-    direction: rtl;
-    text-align: right;
 }
 
 .block-container {
@@ -509,6 +507,19 @@ div[data-baseweb="select"] input {
         margin-right: 0;
     }
 }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+    dir_css = "rtl" if lang == "ar" else "ltr"
+    align_css = "right" if lang == "ar" else "left"
+    st.markdown(
+        f"""
+<style>
+html, body, [class*="css"], .stApp {{
+    direction: {dir_css} !important;
+    text-align: {align_css} !important;
+}}
 </style>
 """,
         unsafe_allow_html=True,

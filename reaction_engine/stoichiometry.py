@@ -39,7 +39,9 @@ def compute_reaction_stoichiometry(
     for r_spec in rxn_reactants:
         formula = r_spec["formula"]
         coeff = int(r_spec["coefficient"])
-        mm = calculate_molar_mass(formula) or 1.0
+        mm = calculate_molar_mass(formula)
+        if not mm:
+            raise ValueError(f"Scientific Error: cannot compute molar mass for '{formula}'; refusing to use a default value.")
         r_state = r_spec.get("state", "")
 
         matched_user = None

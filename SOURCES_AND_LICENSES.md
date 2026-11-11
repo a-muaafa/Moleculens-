@@ -30,6 +30,8 @@
 5. **Ullmann's Encyclopedia of Industrial Chemistry (Wiley-VCH, 2012)**: العمليات الصناعية القياسية (عملية هابر-بوش، طريقة التلامس، كلسنة الحجر الجيري، التحليل الكهربائي للماء).
 6. **Smith, M.B., March's Advanced Organic Chemistry (8th Ed., Wiley, 2020)** & **Vogel's Textbook of Practical Organic Chemistry (5th Ed., 1989)**: تفاعلات أسترة فيشر، الهدرجة الحفزية، الهلجنة، والنترتة العطرية.
 7. **Nelson, D.L. & Cox, M.M., Lehninger Principles of Biochemistry (8th Ed., W.H. Freeman, 2021)**: المعادلات الستوكيومترية الكلية للتنفس الخلوي الهوائي، البناء الضوئي، والتخمر الكحولي.
+8. **Skoog, D.A., West, D.M., Holler, F.J., Crouch, S.R., Fundamentals of Analytical Chemistry (9th Ed., Cengage Learning, 2014)**: نماذج التوازن الكيميائي، منحنيات المعايرة حمض-قاعدة، وسعة المحاليل المنظمة.
+9. **FDA Approved Drug Products with Therapeutic Equivalence Evaluations (Orange Book)** & **British National Formulary (BNF 85)**: مصفوفة التداخلات الدوائية (DDI) ومستويات الخطورة وتوصيات التدبير السريري.
 
 ---
 

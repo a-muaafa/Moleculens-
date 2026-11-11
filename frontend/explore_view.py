@@ -10,6 +10,7 @@ from config.settings import (
 )
 from core.orchestrator import MolecuLensCore
 from frontend.structure_viewer import render_structure_viewer
+from frontend.ai_assistant_view import render_ai_assistant_component
 from search.normalizer import detect_query_input_type
 
 EXPLORE_QUERY_KEY = "ml_explore_query"
@@ -58,7 +59,7 @@ def _render_suggestions(query_text: str) -> None:
             )
 
 
-def render_explore_section(on_open_reaction_lab) -> None:
+def render_explore_section(on_open_reaction_lab, lang: str = "ar") -> None:
     if EXPLORE_QUERY_KEY not in st.session_state:
         st.session_state[EXPLORE_QUERY_KEY] = "CH3COOH"
 
@@ -157,6 +158,8 @@ def render_explore_section(on_open_reaction_lab) -> None:
         render_structure_viewer(entity)
 
     _render_explanation_and_applications_ui(profile)
+
+    render_ai_assistant_component(compound_data=profile, lang=lang)
 
     st.markdown('<div class="ml-card">', unsafe_allow_html=True)
     st.markdown(

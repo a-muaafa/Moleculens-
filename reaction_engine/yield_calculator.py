@@ -10,7 +10,9 @@ def compute_theoretical_yields(
     for p_spec in rxn_products:
         formula = p_spec["formula"]
         coeff = int(p_spec["coefficient"])
-        mm = calculate_molar_mass(formula) or 1.0
+        mm = calculate_molar_mass(formula)
+        if not mm:
+            raise ValueError(f"Scientific Error: cannot compute molar mass for '{formula}'; refusing to use a default value.")
         produced_mol = reaction_extent_mol * coeff
         produced_mass_g = produced_mol * mm
 

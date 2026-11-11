@@ -33,8 +33,9 @@ def build_entity_explanation(entity: dict[str, Any], composition: dict[str, Any]
 
     if not advanced_ar:
         molar_mass = entity.get("molar_mass") or (composition.get("molar_mass") if composition else None)
+        mm_text = f"الكتلة المولية: {molar_mass} g/mol" if molar_mass else "الكتلة المولية: غير متاحة"
         advanced_ar = (
-            f"من المنظور الكيميائي المتقدم، يخضع الكيان {name_ar} ({sym}، الكتلة المولية: {molar_mass} g/mol) "
+            f"من المنظور الكيميائي المتقدم، يخضع الكيان {name_ar} ({sym}، {mm_text}) "
             "لقواعد الترابط الإلكتروني والديناميكا الحرارية التي تحدد استقراره وتفاعليته في الأوساط المختلفة."
         )
 
