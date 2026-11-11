@@ -1,3 +1,4 @@
+import chemistry_engine.structure_analyzer as sa
 from chemistry_engine.formula_analyzer import (
     analyze_formula_composition,
     calculate_molar_mass,
@@ -9,7 +10,16 @@ from chemistry_engine.formula_analyzer import (
     parse_chemical_formula,
 )
 from chemistry_engine.periodic_table import VALID_ELEMENTS, get_element_basic_info
-from chemistry_engine.structure_analyzer import verify_substance_structure_identity
+from chemistry_engine.structure_analyzer import (
+    analyze_molecular_structure,
+    compute_rdkit_molecular_metrics,
+    generate_3d_conformer_data,
+    render_molecule_2d_png,
+    render_molecule_2d_svg,
+    structure_matches_formula,
+    verify_substance_structure_identity,
+)
+from pharmacy.pharmacology_module import build_pharmacology_section
 from search.local_catalog import get_catalog_entity_by_key
 
 
@@ -48,14 +58,50 @@ def test_compound_identity_verification():
     acetic = get_catalog_entity_by_key("acetic_acid")
     ver = verify_substance_structure_identity(acetic)
     assert ver["is_verified"] is True
+    assert ver["verification_status"] == "verified"
     assert ver["formula_matches"] is True
 
-    # Tampered formula should fail identity verification
+    # Tampered formula should fail identity verification with mismatch status
     tampered = dict(acetic, symbol_or_formula="C6H12O6")
     ver_bad = verify_substance_structure_identity(tampered)
     assert ver_bad["is_verified"] is False
+    assert ver_bad["verification_status"] == "mismatch"
     assert ver_bad["formula_matches"] is False
 
     comp = analyze_formula_composition("H2SO4")
     assert comp["is_valid"] is True
     assert comp["formatted_formula"] == "H₂SO₄"
+
+
+def test_no_fake_3d_or_hardcoded_descriptors_or_false_identity_without_rdkit(monkeypatch):
+    """
+    Verifies high-priority fixes #1 and #2:
+    When RDKit is unavailable, the system must return None (unavailable) instead of inventing
+    fake 8-atom 3D coordinates or hardcoded drug metrics (MW=407.31, LogP=1.5), and must NOT
+    claim structure_matches_formula=True or is_verified=True without actual RDKit verification.
+    """
+    monkeypatch.setattr(sa, "HAS_RDKIT", False)
+
+    assert generate_3d_conformer_data("CC(=O)O") is None
+    assert generate_3d_conformer_data("O") is None
+    assert compute_rdkit_molecular_metrics("CC(=O)O") is None
+    assert analyze_molecular_structure("CC(=O)O") is None
+    assert render_molecule_2d_svg("CC(=O)O") is None
+    assert render_molecule_2d_png("CC(=O)O") is None
+
+    # Even though "CH3COOH" and "C6H12O6" are valid formulas, structure_matches_formula must be False without RDKit
+    assert structure_matches_formula("CC(=O)O", "CH3COOH") is False
+    assert structure_matches_formula("CC(=O)O", "C6H12O6") is False
+
+    acetic = get_catalog_entity_by_key("acetic_acid")
+    ver = verify_substance_structure_identity(acetic)
+    assert ver["is_verified"] is False
+    assert ver["verification_status"] == "unconfirmed"
+    assert ver["formula_matches"] is False
+    assert "غير مؤكدة" in ver["status_ar"]
+
+    sita = get_catalog_entity_by_key("sitagliptin")
+    pharm = build_pharmacology_section(sita)
+    assert pharm["calculated_drug_descriptors"] is None
+    assert pharm["descriptors_available"] is False
+    assert "غير متاحة" in pharm["descriptors_status_ar"]

@@ -129,14 +129,14 @@ def render_explore_section(on_open_reaction_lab) -> None:
     <span class="ml-badge" style="background:#475569;">{entity.get('subclass_label_ar', '')}</span>
     <span class="ml-badge" style="background:#334155;">{entity.get('match_category', 'Exact Match')}</span>
   </div>
-  <h3 style="margin-top:0.65rem;margin-bottom:0.25rem;">
-    {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']} ({disp_formula})</span>
+  <h3 style="margin-top:0.65rem;margin-bottom:0.35rem;">
+    {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']}</span> <span class="ml-formula-pill">{disp_formula}</span>
   </h3>
   <p style="margin-bottom:0.2rem;color:#64748b;font-size:0.92rem;">
     <strong>سبب المطابقة (Match Reason):</strong> {entity.get('match_reason_ar', '')} |
     <strong>المصادر العلمية الموحدة (Verified Sources):</strong> <span class="ltr-inline">{", ".join(profile.get('sources', []))}</span>
   </p>
-  <p style="margin-bottom:0;color:#0f766e;font-size:0.88rem;font-weight:600;">
+  <p style="margin-bottom:0;color:{'#0f766e' if id_ver.get('is_verified') else '#b45309'};font-size:0.88rem;font-weight:700;">
     {id_ver.get('status_ar', '')}
   </p>
 </div>
@@ -342,6 +342,13 @@ def _render_drug_profile_ui(profile: dict[str, Any]) -> None:
         d3.metric("الروابط الهيدروجينية (HBD / HBA)", f"HBD={desc['hbd']} | HBA={desc['hba']}")
         d4.metric("مساحة السطح القطبي (TPSA)", f"{desc['tpsa']} Å²")
         d5.metric("قاعدة ليبينسكي (Lipinski Rule)", "متوافق (Compliant)" if desc["lipinski_compliant"] else "مخالف (Non-compliant)")
+    else:
+        st.info(
+            pharm.get(
+                "descriptors_status_ar",
+                "الخصائص الجزيئية الدوائية المحسوبة (MW, LogP, HBD, HBA, TPSA) غير متاحة حالياً لعدم إمكانية حسابها فعلياً، ويلتزم النظام بعدم عرض قيم افتراضية.",
+            )
+        )
 
     if prelab:
         st.markdown(

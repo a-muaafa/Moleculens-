@@ -234,25 +234,44 @@ def render_reaction_lab_section() -> None:
     doc = rxn_result["documented_reaction_info"]
     calc = rxn_result["calculated_stoichiometry_result"]
     theo = rxn_result["theoretical_prediction_notes"]
+    bounds = compat.get("reference_bounds") or {}
+    t_range_str = f"[{bounds.get('temp_c_min', 25):g} – {bounds.get('temp_c_max', 25):g} °C]" if bounds else "25 °C"
+    p_range_str = f"[{bounds.get('pressure_atm_min', 1):g} – {bounds.get('pressure_atm_max', 1):g} atm]" if bounds else "1 atm"
+    ref_link_html = (
+        f'<a href="{doc["reference_url"]}" target="_blank" class="ltr-inline">{doc.get("source_id", "Reference Link")}</a>'
+        if doc.get("reference_url")
+        else f'<span class="ltr-inline">{doc.get("source_id", "")}</span>'
+    )
 
     st.markdown(
         f"""
 <div class="ml-tri-grid">
   <div class="ml-tri-card ml-tri-documented">
-    <div class="ml-tri-title" style="color:#1d4ed8;">1. {doc.get('label_bilingual', 'التفاعل الموثق (Documented Reaction)')}</div>
-    <p style="margin-bottom:0.3rem;"><strong>المصدر المرجعي (Source):</strong> <span class="ltr-inline">{doc['source']}</span></p>
-    <p style="margin-bottom:0.3rem;"><strong>التصنيف:</strong> {doc['reaction_type_ar']}</p>
+    <div>
+      <div class="ml-tri-title" style="color:#1d4ed8;">1. {doc.get('label_bilingual', 'التفاعل الموثق (Documented Reaction)')}</div>
+      <span class="ml-tri-badge" style="background:rgba(29,78,216,0.14);color:#1e3a8a;">{doc.get('documentation_label_ar', 'تفاعل موثق')}</span>
+      <p style="margin-bottom:0.3rem;"><strong>معرف السجل (Source ID):</strong> {ref_link_html}</p>
+      <p style="margin-bottom:0.3rem;"><strong>المرجع العلمي المحدد (Citation):</strong> <span class="ltr-inline">{doc['source']}</span></p>
+      <p style="margin-bottom:0.3rem;"><strong>التصنيف:</strong> {doc['reaction_type_ar']}</p>
+    </div>
     <p style="margin-bottom:0;"><strong>المعادلة المرجعية:</strong> <span class="ltr-inline">{eq_unicode}</span></p>
   </div>
   <div class="ml-tri-card ml-tri-calculated">
-    <div class="ml-tri-title" style="color:#0f766e;">2. {calc.get('label_bilingual', 'النتيجة المحسوبة (Calculated Result)')}</div>
-    <p style="margin-bottom:0.3rem;"><strong>حفظ الذرات (Atom Conservation):</strong> {'متحقق (Verified 100%)' if calc['atom_conservation_verified'] else 'غير متحقق'}</p>
-    <p style="margin-bottom:0.3rem;"><strong>الحالة المولية:</strong> {rxn_result['stoichiometric_status_ar']}</p>
+    <div>
+      <div class="ml-tri-title" style="color:#0f766e;">2. {calc.get('label_bilingual', 'النتيجة المحسوبة (Calculated Result)')}</div>
+      <span class="ml-tri-badge" style="background:rgba(15,118,110,0.14);color:#0f766e;">حساب رياضي وستوكيومتري حتمي</span>
+      <p style="margin-bottom:0.3rem;"><strong>حفظ الذرات (Atom Conservation):</strong> {'متحقق (Verified 100%)' if calc['atom_conservation_verified'] else 'غير متحقق'}</p>
+      <p style="margin-bottom:0.3rem;"><strong>الحالة المولية:</strong> {rxn_result['stoichiometric_status_ar']}</p>
+    </div>
     <p style="margin-bottom:0;"><strong>محرك الحساب:</strong> Algebraic Balancer &amp; Stoichiometry Engine</p>
   </div>
   <div class="ml-tri-card ml-tri-theoretical">
-    <div class="ml-tri-title" style="color:#b45309;">3. {theo.get('label_bilingual', 'التوقع النظري (Theoretical Prediction)')}</div>
-    <p style="margin-bottom:0.3rem;"><strong>الفرضيات العلمية:</strong> {theo['notes_ar']}</p>
+    <div>
+      <div class="ml-tri-title" style="color:#b45309;">3. {theo.get('label_bilingual', 'التوقع النظري (Theoretical Prediction)')}</div>
+      <span class="ml-tri-badge" style="background:rgba(180,83,9,0.14);color:#92400e;">مقارنة الحدود الكمية والافتراضات</span>
+      <p style="margin-bottom:0.3rem;"><strong>النطاق الحراري والضغطي المسموح:</strong> <span class="ltr-inline">T: {t_range_str} | P: {p_range_str}</span></p>
+      <p style="margin-bottom:0.3rem;"><strong>الفرضيات العلمية:</strong> {theo['notes_ar']}</p>
+    </div>
     <p style="margin-bottom:0;"><strong>توافق الظروف:</strong> {compat.get('status_ar', '')}</p>
   </div>
 </div>
@@ -368,9 +387,11 @@ def _render_substance_reaction_search(
             rows.append(
                 {
                     "المعادلة الموزونة (Balanced Equation)": eq_disp,
+                    "تصنيف التوثيق (Evidence Classification)": r.get("documentation_label_ar", ""),
                     "المجال (Domain)": r.get("domain_label_ar", ""),
                     "نوع التفاعل (Reaction Type)": CATEGORY_LABELS_AR.get(r.get("category", ""), r.get("category", "")),
-                    "المصدر المرجعي (Reference Source)": r.get("source", ""),
+                    "معرف المرجع (Source ID)": r.get("source_id", ""),
+                    "المصدر المرجعي المحدد (Specific Citation)": r.get("source", ""),
                 }
             )
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

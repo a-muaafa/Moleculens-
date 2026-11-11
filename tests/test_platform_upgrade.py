@@ -262,10 +262,21 @@ def test_registry_size_unique_and_atom_conservation_for_every_reaction():
     assert len(VERIFIED_REACTIONS_REGISTRY) == 87
     ids = [r["reaction_id"] for r in VERIFIED_REACTIONS_REGISTRY]
     assert len(ids) == len(set(ids))
+    source_ids = [r.get("source_id") for r in VERIFIED_REACTIONS_REGISTRY]
+    assert all(source_ids), "Every reaction must have a specific source_id"
+    assert len(source_ids) == len(set(source_ids)), "Every reaction must have a distinct specific source_id"
+    sources = [r.get("source") for r in VERIFIED_REACTIONS_REGISTRY]
+    assert len(set(sources)) == 87, "Every reaction must have its own specific scientific citation"
+    doc_types = {r.get("documentation_type") for r in VERIFIED_REACTIONS_REGISTRY}
+    assert doc_types == {"experimentally_documented", "literature_referenced", "theoretical_model"}
     categories = {r["category"] for r in VERIFIED_REACTIONS_REGISTRY}
     assert {"neutralization", "combustion", "precipitation", "single_displacement", "redox_synthesis", "decomposition", "organic_reaction", "biochemical_reaction"} <= categories
     for r in VERIFIED_REACTIONS_REGISTRY:
-        assert r.get("source"), r["reaction_id"]
+        assert r.get("source") and len(r["source"]) > 25, r["reaction_id"]
+        assert r.get("reference_url", "").startswith("https://"), r["reaction_id"]
+        assert r.get("documentation_label_ar"), r["reaction_id"]
+        spec = r.get("reference_conditions_spec")
+        assert isinstance(spec, dict) and "temp_c_min" in spec and "temp_c_max" in spec and "pressure_atm_min" in spec, r["reaction_id"]
         for s in r["reactants"] + r["products"]:
             assert parse_chemical_formula(s["formula"]), (r["reaction_id"], s["formula"])
         assert verify_atom_conservation(r["reactants"], r["products"])["is_balanced"], r["reaction_id"]
@@ -354,3 +365,32 @@ def test_no_emoji_in_project_sources():
             if fname.endswith(".py"):
                 text = open(os.path.join(ROOT, folder, fname), encoding="utf-8-sig").read()
                 assert not emoji.search(text), (folder, fname)
+
+
+def test_streamlit_ui_pages_render_cleanly():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(os.path.join(ROOT, "app.py"), default_timeout=20)
+    at.run()
+    assert not at.exception
+
+    # Default page is 'explore' with CH3COOH loaded
+    assert len(at.text_input) == 1
+    assert at.text_input[0].value == "CH3COOH"
+
+    # Search for a drug (Sitagliptin) in Explore & Understand
+    at.text_input[0].set_value("Sitagliptin").run()
+    assert not at.exception
+    assert any("Sitagliptin" in m.value or "سيتاجليبتين" in m.value for m in at.markdown)
+
+    # Switch navigation radio to Reaction Lab
+    at.radio[0].set_value("reaction_lab").run()
+    assert not at.exception
+    assert any("Reaction Lab" in m.value for m in at.markdown)
+    assert any("التفاعل الموثق" in m.value for m in at.markdown)
+
+    # Switch navigation radio to Home Overview
+    at.radio[0].set_value("home").run()
+    assert not at.exception
+    assert any("Explore &amp; Understand" in m.value or "Explore & Understand" in m.value for m in at.markdown)
+

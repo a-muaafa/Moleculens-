@@ -10,27 +10,35 @@ def _verify_pubchem_record_identity(
     prop: dict,
     query: str,
     is_formula: bool = False,
-) -> tuple[bool, str, str]:
+) -> tuple[bool, bool, str, str]:
     """
     Verifies that a parsed SMILES from PubChem genuinely corresponds to the requested substance:
-    1) Checks that SMILES is syntactically valid and its molecular formula matches PubChem's MolecularFormula.
-    2) If queried by formula, ensures the resolved formula matches the user query formula.
+    Returns (record_usable, structure_identity_verified, canonical_smiles, formula).
     """
     smi = prop.get("IsomericSMILES") or prop.get("CanonicalSMILES") or ""
     mol, canon_smi, _ = validate_and_parse_smiles(smi)
     pub_formula = prop.get("MolecularFormula", "")
     if mol is None and not pub_formula:
-        return False, "", "بنية غير صالحة"
+        return False, False, "", "بنية غير صالحة"
 
-    rd_formula = extract_rdkit_formula(canon_smi) if canon_smi else ""
+    rd_formula = extract_rdkit_formula(canon_smi) if canon_smi else None
     final_formula = pub_formula or rd_formula or ""
+    if not final_formula:
+        return False, False, "", "لا توجد صيغة جزيئية"
+
     if pub_formula and rd_formula and not formulas_are_equivalent(pub_formula, rd_formula):
-        return False, "", "عدم تطابق صيغة SMILES مع الصيغة الجزيئية المسجلة"
+        return False, False, "", "عدم تطابق صيغة SMILES مع الصيغة الجزيئية المسجلة"
 
     if is_formula and not formulas_are_equivalent(query, final_formula):
-        return False, "", "عدم تطابق الصيغة الجزيئية مع المدخل"
+        return False, False, "", "عدم تطابق الصيغة الجزيئية مع المدخل"
 
-    return True, canon_smi or smi, final_formula
+    structure_verified = bool(
+        canon_smi
+        and rd_formula
+        and pub_formula
+        and formulas_are_equivalent(pub_formula, rd_formula)
+    )
+    return True, structure_verified, canon_smi or smi, final_formula
 
 
 def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECONDS) -> dict:
@@ -58,7 +66,7 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
         props = resp.json().get("PropertyTable", {}).get("Properties", [])
         records = []
         for p in props[:6]:
-            ok_id, canon_smi, formula = _verify_pubchem_record_identity(p, clean_q, is_formula=False)
+            ok_id, struct_verified, canon_smi, formula = _verify_pubchem_record_identity(p, clean_q, is_formula=False)
             if not ok_id:
                 continue
             inchikey = p.get("InChIKey") or compute_inchikey(canon_smi) or ""
@@ -70,7 +78,7 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
                     "symbol_or_formula": formula,
                     "canonical_smiles": canon_smi,
                     "inchikey": inchikey,
-                    "identity_verified": True,
+                    "identity_verified": struct_verified,
                     "molar_mass": float(p["MolecularWeight"]) if p.get("MolecularWeight") else None,
                     "source": "PubChem PUG REST",
                 }
@@ -131,7 +139,7 @@ def fetch_pubchem_by_formula(formula: str, timeout: int = EXTERNAL_API_TIMEOUT_S
         records = []
         seen_smi = set()
         for p in props:
-            ok_id, canon_smi, verified_formula = _verify_pubchem_record_identity(p, norm_formula, is_formula=True)
+            ok_id, struct_verified, canon_smi, verified_formula = _verify_pubchem_record_identity(p, norm_formula, is_formula=True)
             if not ok_id or not canon_smi:
                 continue
             if canon_smi in seen_smi:
@@ -146,7 +154,7 @@ def fetch_pubchem_by_formula(formula: str, timeout: int = EXTERNAL_API_TIMEOUT_S
                     "symbol_or_formula": verified_formula,
                     "canonical_smiles": canon_smi,
                     "inchikey": inchikey,
-                    "identity_verified": True,
+                    "identity_verified": struct_verified,
                     "molar_mass": float(p["MolecularWeight"]) if p.get("MolecularWeight") else None,
                     "source": "PubChem PUG REST (Formula Pathway)",
                 }

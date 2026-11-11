@@ -86,6 +86,12 @@ def build_pharmacology_section(entity: dict[str, Any]) -> dict[str, Any]:
         "approval_status_ar": pharm.get("approval_status_ar", "مسجل في قواعد البيانات الدوائية المعتمدة"),
         "pdb_complex_id": pharm.get("pdb_complex_id"),
         "calculated_drug_descriptors": rdkit_metrics,
+        "descriptors_available": rdkit_metrics is not None,
+        "descriptors_status_ar": (
+            "تم حساب الخصائص الجزيئية الدوائية حتمياً من البنية الكيميائية عبر RDKit."
+            if rdkit_metrics is not None
+            else "الخصائص الجزيئية الدوائية المحسوبة (MW, LogP, HBD, HBA, TPSA) غير متاحة حالياً لعدم توفر محرك التحليل البنيوي (RDKit)؛ يلتزم النظام بعدم عرض قيم افتراضية."
+        ),
         "prelab_safety_and_qc": prelab,
         "retrieval_provenance": build_provenance_tag(
             OP_SCIENTIFIC_RETRIEVAL,
@@ -94,7 +100,11 @@ def build_pharmacology_section(entity: dict[str, Any]) -> dict[str, Any]:
         ),
         "calculation_provenance": build_provenance_tag(
             OP_SCIENTIFIC_CALCULATION,
-            sources=["RDKit Chemistry Engine"],
-            notes_ar="الخصائص الجزيئية الدوائية (MW, LogP, HBD, HBA, TPSA, Lipinski Rule of Five) محسوبة حتمياً من البنية الكيميائية.",
+            sources=["RDKit Chemistry Engine"] if rdkit_metrics is not None else [],
+            notes_ar=(
+                "الخصائص الجزيئية الدوائية (MW, LogP, HBD, HBA, TPSA, Lipinski Rule of Five) محسوبة حتمياً من البنية الكيميائية."
+                if rdkit_metrics is not None
+                else "تعذر حساب الخصائص الدوائية لعدم توفر محرك RDKit؛ لم يتم توليد أي قيم افتراضية."
+            ),
         ),
     }

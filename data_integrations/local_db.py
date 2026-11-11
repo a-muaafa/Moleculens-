@@ -178,9 +178,10 @@ class SmartLocalDatabase:
                     )
             return sub_id
 
-    def upsert_reaction(self, reaction: dict[str, Any], source: str = "Curated Reaction Registry") -> None:
+    def upsert_reaction(self, reaction: dict[str, Any], source: str | None = None) -> None:
         now = _now()
         rxn = dict(reaction)
+        src_val = source or rxn.get("source") or "Curated Reaction Registry"
         lhs = " + ".join(f"{r['coefficient'] if r.get('coefficient', 1) > 1 else ''}{r['formula']}" for r in rxn.get("reactants", []))
         rhs = " + ".join(f"{p['coefficient'] if p.get('coefficient', 1) > 1 else ''}{p['formula']}" for p in rxn.get("products", []))
         eq_text = rxn.get("equation_text") or f"{lhs} -> {rhs}"
@@ -194,13 +195,13 @@ class SmartLocalDatabase:
                 conn.execute(
                     "UPDATE reactions SET domain=?, category=?, equation_text=?, reactant_formulas=?, product_formulas=?, "
                     "source=?, payload_json=?, updated_at=? WHERE id=?",
-                    (rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, source, payload, now, row["id"]),
+                    (rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, src_val, payload, now, row["id"]),
                 )
             else:
                 conn.execute(
                     "INSERT INTO reactions (reaction_id, domain, category, equation_text, reactant_formulas, product_formulas, "
                     "source, payload_json, fetched_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (rxn["reaction_id"], rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, source, payload, now, now),
+                    (rxn["reaction_id"], rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, src_val, payload, now, now),
                 )
 
     def seed(self, catalog: list[dict[str, Any]], reactions: list[dict[str, Any]]) -> dict[str, int]:

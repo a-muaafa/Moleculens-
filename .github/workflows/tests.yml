@@ -2,9 +2,10 @@ name: MolecuLens Automated Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, "feature/**" ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -25,7 +26,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Pytest suite
+      - name: Verify clean SQLite seed and run full Pytest suite
         run: |
-          pytest -v
-
+          pytest -v --tb=short

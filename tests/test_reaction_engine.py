@@ -2,7 +2,11 @@ from reaction_engine.equation_balancer import (
     balance_reaction_algebraically,
     verify_atom_conservation,
 )
-from reaction_engine.reaction_service import analyze_chemical_reaction
+from reaction_engine.reaction_service import (
+    analyze_chemical_reaction,
+    parse_pressure_to_atm,
+    parse_temperature_to_celsius,
+)
 
 
 def test_algebraic_equation_balancer_and_atom_conservation():
@@ -94,7 +98,7 @@ def test_domain_filtering_and_condition_compatibility():
     assert res_org_mismatch["supported"] is False
     assert res_org_mismatch["error_type"] == "reaction_domain_mismatch"
 
-    # Esterification CH3COOH + C2H5OH succeeds under organic_chemistry
+    # Esterification CH3COOH + C2H5OH succeeds under organic_chemistry, but flags 25 °C & no catalyst quantitatively
     res_org_ok = analyze_chemical_reaction(
         [
             {"formula": "CH3COOH", "amount": 1.0, "unit": "mol"},
@@ -105,7 +109,44 @@ def test_domain_filtering_and_condition_compatibility():
     )
     assert res_org_ok["supported"] is True
     assert res_org_ok["conditions_compatibility"]["is_compatible"] is False
-    assert len(res_org_ok["conditions_compatibility"]["warnings_ar"]) >= 1
+    assert len(res_org_ok["conditions_compatibility"]["warnings_ar"]) >= 2
+    assert res_org_ok["conditions_compatibility"]["parameter_checks"]["temperature"]["ok"] is False
+    assert res_org_ok["conditions_compatibility"]["parameter_checks"]["catalyst"]["ok"] is False
+
+
+def test_quantitative_unit_conversion_and_condition_bounds():
+    assert parse_temperature_to_celsius("298.15 K") == 25.0
+    assert parse_temperature_to_celsius("212 °F") == 100.0
+    assert parse_temperature_to_celsius({"value": 310.15, "unit": "K"}) == 37.0
+
+    assert parse_pressure_to_atm("101.325 kPa") == 1.0
+    assert parse_pressure_to_atm("760 mmHg") == 1.0
+    assert parse_pressure_to_atm({"value": 20265.0, "unit": "kPa"}) == 200.0
+
+    # Haber-Bosch N2 + 3H2 -> 2NH3 requires T in [380, 550] °C, P in [150, 300] atm, catalyst fe_haber
+    haber_low = analyze_chemical_reaction(
+        [
+            {"formula": "N2", "amount": 1.0, "unit": "mol"},
+            {"formula": "H2", "amount": 3.0, "unit": "mol"},
+        ],
+        custom_conditions={"temperature": "300 K", "pressure": "101.325 kPa", "catalyst": "fe_haber", "solvent": "neat_gas_solid"},
+    )
+    assert haber_low["supported"] is True
+    assert haber_low["conditions_compatibility"]["is_compatible"] is False
+    assert haber_low["conditions_compatibility"]["parameter_checks"]["temperature"]["ok"] is False
+    assert haber_low["conditions_compatibility"]["parameter_checks"]["pressure"]["ok"] is False
+
+    haber_valid = analyze_chemical_reaction(
+        [
+            {"formula": "N2", "amount": 1.0, "unit": "mol"},
+            {"formula": "H2", "amount": 3.0, "unit": "mol"},
+        ],
+        custom_conditions={"temperature": "723.15 K", "pressure": "20265 kPa", "catalyst": "fe_haber", "solvent": "neat_gas_solid"},
+    )
+    assert haber_valid["supported"] is True
+    assert haber_valid["conditions_compatibility"]["is_compatible"] is True
+    assert haber_valid["conditions_compatibility"]["parameter_checks"]["temperature"]["ok"] is True
+    assert haber_valid["conditions_compatibility"]["parameter_checks"]["pressure"]["ok"] is True
 
 
 def test_stp_volume_rejected_for_solids_and_liquids_allowed_for_gases():
