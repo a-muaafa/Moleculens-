@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -75,14 +76,19 @@ class SmartLocalDatabase:
         if parent:
             os.makedirs(parent, exist_ok=True)
         self._lock = threading.RLock()
-        with self._connect() as conn:
+        with self._session() as conn:
             conn.executescript(_SCHEMA)
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _session(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _find_existing_id(self, conn: sqlite3.Connection, entry: dict[str, Any]) -> int | None:
         row = conn.execute("SELECT id FROM substances WHERE key = ?", (entry.get("key"),)).fetchone()
@@ -109,7 +115,7 @@ class SmartLocalDatabase:
         formula = replace_subscripts(entry.get("symbol_or_formula", "") or "")
         hill = normalize_chemical_formula(formula) or ""
         now = _now()
-        with self._lock, self._connect() as conn:
+        with self._lock, self._session() as conn:
             existing_id = self._find_existing_id(conn, entry)
             if existing_id is not None and not source.startswith("Curated"):
                 src_row = conn.execute("SELECT source FROM substances WHERE id = ?", (existing_id,)).fetchone()
@@ -174,22 +180,27 @@ class SmartLocalDatabase:
 
     def upsert_reaction(self, reaction: dict[str, Any], source: str = "Curated Reaction Registry") -> None:
         now = _now()
-        reactants = ",".join(sorted(r["formula"] for r in reaction.get("reactants", [])))
-        products = ",".join(sorted(p["formula"] for p in reaction.get("products", [])))
-        with self._lock, self._connect() as conn:
-            row = conn.execute("SELECT id FROM reactions WHERE reaction_id = ?", (reaction["reaction_id"],)).fetchone()
-            payload = json.dumps(reaction, ensure_ascii=False, default=str)
+        rxn = dict(reaction)
+        lhs = " + ".join(f"{r['coefficient'] if r.get('coefficient', 1) > 1 else ''}{r['formula']}" for r in rxn.get("reactants", []))
+        rhs = " + ".join(f"{p['coefficient'] if p.get('coefficient', 1) > 1 else ''}{p['formula']}" for p in rxn.get("products", []))
+        eq_text = rxn.get("equation_text") or f"{lhs} -> {rhs}"
+        rxn["equation_text"] = eq_text
+        reactants = ",".join(sorted(r["formula"] for r in rxn.get("reactants", [])))
+        products = ",".join(sorted(p["formula"] for p in rxn.get("products", [])))
+        with self._lock, self._session() as conn:
+            row = conn.execute("SELECT id FROM reactions WHERE reaction_id = ?", (rxn["reaction_id"],)).fetchone()
+            payload = json.dumps(rxn, ensure_ascii=False, default=str)
             if row:
                 conn.execute(
                     "UPDATE reactions SET domain=?, category=?, equation_text=?, reactant_formulas=?, product_formulas=?, "
                     "source=?, payload_json=?, updated_at=? WHERE id=?",
-                    (reaction.get("domain", ""), reaction.get("category", ""), reaction.get("equation_text", ""), reactants, products, source, payload, now, row["id"]),
+                    (rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, source, payload, now, row["id"]),
                 )
             else:
                 conn.execute(
                     "INSERT INTO reactions (reaction_id, domain, category, equation_text, reactant_formulas, product_formulas, "
                     "source, payload_json, fetched_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (reaction["reaction_id"], reaction.get("domain", ""), reaction.get("category", ""), reaction.get("equation_text", ""), reactants, products, source, payload, now, now),
+                    (rxn["reaction_id"], rxn.get("domain", ""), rxn.get("category", ""), eq_text, reactants, products, source, payload, now, now),
                 )
 
     def seed(self, catalog: list[dict[str, Any]], reactions: list[dict[str, Any]]) -> dict[str, int]:
@@ -210,7 +221,7 @@ class SmartLocalDatabase:
         norm = normalize_search_input(query)
         if not norm:
             return []
-        with self._connect() as conn:
+        with self._session() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT s.* FROM substances s JOIN synonyms y ON y.substance_id = s.id WHERE y.term_norm = ?",
                 (norm,),
@@ -220,7 +231,7 @@ class SmartLocalDatabase:
     def lookup_by_formula(self, formula: str) -> list[dict[str, Any]]:
         hill = normalize_chemical_formula(formula) or ""
         raw = replace_subscripts(formula)
-        with self._connect() as conn:
+        with self._session() as conn:
             rows = conn.execute(
                 "SELECT * FROM substances WHERE formula = ? OR (hill_formula = ? AND hill_formula != '')",
                 (raw, hill),
@@ -231,7 +242,7 @@ class SmartLocalDatabase:
         norm = normalize_search_input(query)
         if not norm:
             return []
-        with self._connect() as conn:
+        with self._session() as conn:
             rows = conn.execute(
                 "SELECT DISTINCT s.* FROM substances s JOIN synonyms y ON y.substance_id = s.id "
                 "WHERE y.term_norm LIKE ? ORDER BY length(y.term_norm) LIMIT ?",
@@ -240,23 +251,26 @@ class SmartLocalDatabase:
         return [self._row_to_entry(r) for r in rows]
 
     def list_external_substances(self) -> list[dict[str, Any]]:
-        with self._connect() as conn:
+        with self._session() as conn:
             rows = conn.execute("SELECT * FROM substances WHERE source NOT LIKE 'Curated%'").fetchall()
         return [self._row_to_entry(r) for r in rows]
 
     def search_reactions_by_formula(self, formula: str) -> list[dict[str, Any]]:
         target = normalize_chemical_formula(formula) or replace_subscripts(formula)
         results = []
-        with self._connect() as conn:
+        with self._session() as conn:
             rows = conn.execute("SELECT * FROM reactions").fetchall()
         for r in rows:
             formulas = [f for f in (r["reactant_formulas"] + "," + r["product_formulas"]).split(",") if f]
             if any((normalize_chemical_formula(f) or f) == target for f in formulas):
-                results.append(json.loads(r["payload_json"]))
+                payload = json.loads(r["payload_json"])
+                if "equation_text" not in payload:
+                    payload["equation_text"] = r["equation_text"]
+                results.append(payload)
         return results
 
     def get_database_statistics(self) -> dict[str, int]:
-        with self._connect() as conn:
+        with self._session() as conn:
             subs = conn.execute("SELECT COUNT(*) AS n FROM substances").fetchone()["n"]
             syns = conn.execute("SELECT COUNT(*) AS n FROM synonyms").fetchone()["n"]
             rxns = conn.execute("SELECT COUNT(*) AS n FROM reactions").fetchone()["n"]

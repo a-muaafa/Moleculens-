@@ -38,7 +38,10 @@ def clean_formula_token(formula_str: str) -> str:
     if not formula_str:
         return ""
     s = replace_subscripts(formula_str.strip()).replace(" ", "")
-    s = re.sub(r"[\^]?[0-9]*[+\-]$", "", s)
+    s = re.sub(r"\^[0-9]*[+\-]?", "", s)
+    s = re.sub(r"\([0-9]*[+\-]\)", "", s)
+    s = re.sub(r"(^[A-Z][a-z]?)\d*[+\-]\d*$", r"\1", s)
+    s = re.sub(r"[+\-]\d*$", "", s)
     return s
 
 

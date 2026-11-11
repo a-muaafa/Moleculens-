@@ -73,8 +73,7 @@ def test_case_sensitive_formula_priority():
     assert _sel("CO")["key"] == "carbon_monoxide"
     assert _sel("Co")["key"] == "element_co"
     res = search_scientific_entity("co", allow_network=False)
-    assert res["is_ambiguous"]
-
+    assert res["is_ambiguous"]    
 
 def test_isopropanol_and_propanol_are_separated():
     assert _sel("(CH3)2CHOH")["key"] == "isopropanol"
@@ -143,7 +142,6 @@ def test_every_structure_is_valid_and_matches_its_substance():
             continue
         assert Chem.MolFromSmiles(smiles) is not None, e["key"]
         assert structure_matches_formula(smiles, e["symbol_or_formula"]), (e["key"], e["symbol_or_formula"])
-
 
 def test_structure_analysis_bonds_rings_groups():
     acetic = analyze_molecular_structure(get_catalog_entity_by_key("acetic_acid")["canonical_smiles"])

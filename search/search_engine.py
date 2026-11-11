@@ -106,7 +106,7 @@ def _match_entry(raw_q: str, norm_q: str, fkey_q: str, idx: dict[str, Any], quer
         if norm_q == nab and orig.lower() != formula.lower():
             return ("exact_abbreviation", "Exact Match", f"تطابق تام مع الاختصار العلمي ({orig})", 96.0)
     if fkey_q and fkey_q.lower() == idx["fkey"].lower():
-        return ("exact_formula", "Exact Match", f"تطابق مع الصيغة أو الرمز الكيميائي بصرف النظر عن حالة الأحرف ({formula})", 95.0)
+        return ("exact_formula", "Exact Match", f"تطابق مع الصيغة أو الرمز الكيميائي بصرف النظر عن حالة الأحرف ({formula})", 88.0)
     for orig, nbr in idx["brands"]:
         if norm_q == nbr:
             return ("exact_brand", "Exact Match", f"تطابق تام مع الاسم التجاري ({orig})", 94.0)
@@ -122,12 +122,13 @@ def _match_entry(raw_q: str, norm_q: str, fkey_q: str, idx: dict[str, Any], quer
     if query_is_formula or len(norm_q) < 2:
         return None
 
-    candidates_ar = [(entry["name_ar"], idx["norm_ar"], "العربي")] + [(o, n, "العربي") for o, n in idx["syns_ar"]]
-    candidates_en = [(entry["name_en"], idx["norm_en"], "الإنجليزي")] + [(o, n, "الإنجليزي") for o, n in idx["syns_en"] + idx["brands"]]
-    for orig, n, lang in candidates_ar + candidates_en:
+    candidates_ar = [(entry["name_ar"], idx["norm_ar"], "العربي", True)] + [(o, n, "العربي", False) for o, n in idx["syns_ar"]]
+    candidates_en = [(entry["name_en"], idx["norm_en"], "الإنجليزي", True)] + [(o, n, "الإنجليزي", False) for o, n in idx["syns_en"] + idx["brands"]]
+    for orig, n, lang, is_primary in candidates_ar + candidates_en:
         if n.startswith(norm_q):
-            return ("prefix_name", "Partial Match", f"تطابق في بداية الاسم أو المرادف {lang} ({orig})", 80.0 if orig == entry["name_ar"] else 78.0)
-    for orig, n, lang in candidates_ar + candidates_en:
+            score = 82.0 if (is_primary and lang == "العربي") else (80.0 if is_primary else 76.0)
+            return ("prefix_name", "Partial Match", f"تطابق في بداية الاسم أو المرادف {lang} ({orig})", score)
+    for orig, n, lang, _ in candidates_ar + candidates_en:
         if norm_q in n and not is_chemical_formula_input(orig):
             return ("substring_name", "Partial Match", f"تطابق جزئي مع الاسم أو المرادف {lang} ({orig})", 72.0)
     return None
@@ -365,7 +366,15 @@ def get_live_suggestions(query: str, limit: int = 8) -> list[dict[str, Any]]:
         except Exception:
             pass
 
-    ranked = sorted(items.values(), key=lambda x: (-x["match_score"], len(x["name_en"])))
+    ranked = sorted(
+        items.values(),
+        key=lambda x: (
+            -x["match_score"],
+            0 if x["name_en"].lower().startswith(norm_q) else 1,
+            len(x["name_en"].split()[0]),
+            len(x["name_en"]),
+        ),
+    )
     return ranked[:limit]
 
 
