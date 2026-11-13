@@ -1,5 +1,18 @@
 # سجل التغييرات (Changelog) — MolecuLens
 
+## [2.3.1] - 2026-11-13 — تخزين مؤقت محدود وكبح الطلبات الشبكية (Cache & Request Throttling)
+- **تخزين مؤقت محسّن (`data_integrations/cache_store.py`):**
+  - إخراج بخوارزمية LRU مع حد أقصى لعدد المدخلات (`configure_cache`) يمنع تضخّم الذاكرة.
+  - حماية كل العمليات بـ `threading.RLock` (Streamlit يعمل في خيوط متوازية).
+  - `cache_statistics()` لقياس معدل الإصابة وعدد الإدخالات والإخراجات.
+  - استمرارية اختيارية على القرص (`enable_disk_persistence` / `persist_to_disk` / `disable_disk_persistence`).
+- **كبح الطلبات الشبكية (`search/search_engine.py`):**
+  - فاصل زمني (`NETWORK_DEBOUNCE_SECONDS = 2.0`) بين استعلامين خارجيين متتاليين لتقليل الطلبات أثناء الكتابة.
+  - نتائج السجل المحلي لا تتأثر بالكبح إطلاقاً، ويظهر تنبيه صريح مع زر «تحديث من المصادر الخارجية» (`force_network=True`) عند التأجيل.
+  - `MolecuLensCore.explore_entity` وواجهة الاستكشاف يدعمان الآن `force_network`.
+- **الاختبارات:** `tests/test_cache_store.py` (7) و `tests/test_search_debounce.py` (4) → إجمالي **170 اختباراً ناجحاً**.
+- **الهندسة:** `pytest-cov` مضاف إلى `requirements.txt`،/workflow CI صار يقيس التغطية ويرفع `coverage.xml` كartifact.
+
 ## [2.3.0] - 2026-11-13 — مختبر التوقع الكيميائي (Reaction Prediction — Virtual Lab)
 - **محرك التوقع بمستويات الدليل الثلاثة (`reaction_engine/prediction.py`):**
   - بنية محرك جديدة تقبل **أي مادتين أو أكثر** (عنصر + عنصر، عنصر + مركب، حمض + قاعدة، ملح + ملح...) وتقرأ السؤال الحقيقي: هل سيحدث تفاعل؟ وما نواتجه؟

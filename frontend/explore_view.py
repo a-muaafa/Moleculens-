@@ -87,10 +87,15 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
 
     _render_suggestions(query_text)
 
-    res = MolecuLensCore.explore_entity(query_text, allow_network=True)
+    force_network = bool(st.session_state.pop("exp_force_network_once", False))
+    res = MolecuLensCore.explore_entity(query_text, allow_network=True, force_network=force_network)
 
     if not res["found"]:
         st.warning(res["message"])
+        if res.get("network_deferred"):
+            if st.button("تحديث من المصادر الخارجية (Refresh from external sources)", key="exp_force_network"):
+                st.session_state["exp_force_network_once"] = True
+                st.rerun()
         if res["did_you_mean"]:
             st.markdown("<strong>مقترحات بديلة يمكنك اختيارها مباشرة (Suggested Alternatives):</strong>", unsafe_allow_html=True)
             d_cols = st.columns(min(len(res["did_you_mean"]), 5))

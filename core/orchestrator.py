@@ -16,6 +16,7 @@ class MolecuLensCore:
         search_type: str = "auto",
         allow_network: bool = True,
         selected_candidate: dict[str, Any] | None = None,
+        force_network: bool = False,
     ) -> dict[str, Any]:
         if selected_candidate is not None:
             profile = build_scientific_profile(selected_candidate)
@@ -28,9 +29,15 @@ class MolecuLensCore:
                 "candidates": [selected_candidate],
                 "did_you_mean": [],
                 "message": selected_candidate.get("match_reason_ar", "تم اختيار المادة بنجاح."),
+                "network_deferred": False,
             }
 
-        search_res = search_scientific_entity(query, search_type=search_type, allow_network=allow_network)
+        search_res = search_scientific_entity(
+            query,
+            search_type=search_type,
+            allow_network=allow_network,
+            force_network=force_network,
+        )
         if not search_res["found"] or search_res["is_ambiguous"]:
             return {
                 "found": search_res["found"],
@@ -41,6 +48,7 @@ class MolecuLensCore:
                 "candidates": search_res["candidates"],
                 "did_you_mean": search_res["did_you_mean"],
                 "message": search_res["message"],
+                "network_deferred": search_res.get("network_deferred", False),
             }
 
         entity = search_res["selected"]
@@ -54,6 +62,7 @@ class MolecuLensCore:
             "candidates": search_res["candidates"],
             "did_you_mean": [],
             "message": search_res["message"],
+            "network_deferred": False,
         }
 
     @staticmethod

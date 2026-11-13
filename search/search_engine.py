@@ -1,4 +1,6 @@
 from difflib import SequenceMatcher
+import threading
+import time
 from typing import Any
 
 from chemistry_engine.formula_analyzer import (
@@ -34,6 +36,45 @@ DEFAULT_DID_YOU_MEAN = [
 ]
 
 _INDEX_CACHE: list[dict[str, Any]] | None = None
+
+# --------------------------------------------------------------------------------------
+# Network debouncing — prevents a burst of external API calls while the user is typing
+# --------------------------------------------------------------------------------------
+
+NETWORK_DEBOUNCE_SECONDS = 2.0
+_NETWORK_STATE: dict[str, float] = {"last_request": 0.0}
+_NETWORK_LOCK = threading.RLock()
+
+
+def set_network_debounce_seconds(seconds: float) -> None:
+    """Sets the minimum interval (seconds) between two consecutive external lookups."""
+    global NETWORK_DEBOUNCE_SECONDS
+    NETWORK_DEBOUNCE_SECONDS = max(float(seconds), 0.0)
+
+
+def network_debounce_status() -> dict[str, Any]:
+    """Returns the current debounce state (for diagnostics and for the UI notice)."""
+    with _NETWORK_LOCK:
+        elapsed = time.time() - _NETWORK_STATE["last_request"]
+    return {
+        "interval_seconds": NETWORK_DEBOUNCE_SECONDS,
+        "seconds_since_last_request": round(elapsed, 3),
+        "slot_available": elapsed >= NETWORK_DEBOUNCE_SECONDS,
+    }
+
+
+def _claim_network_slot(force: bool = False) -> bool:
+    """Claims the right to perform an external lookup, respecting the debounce interval."""
+    if force:
+        with _NETWORK_LOCK:
+            _NETWORK_STATE["last_request"] = time.time()
+        return True
+    with _NETWORK_LOCK:
+        now = time.time()
+        if now - _NETWORK_STATE["last_request"] < NETWORK_DEBOUNCE_SECONDS:
+            return False
+        _NETWORK_STATE["last_request"] = now
+        return True
 
 
 def _canonicalize_smiles(smiles: str) -> str:
@@ -203,6 +244,7 @@ def _empty_result(message: str, did_you_mean: list[str] | None = None) -> dict[s
         "did_you_mean": did_you_mean if did_you_mean is not None else list(DEFAULT_DID_YOU_MEAN),
         "message": message,
         "input_type": None,
+        "network_deferred": False,
     }
 
 
@@ -220,10 +262,16 @@ def _finalize_group(items: list[dict[str, Any]], ambiguity_message: str, input_t
         "did_you_mean": did_you_mean or [],
         "message": items[0]["match_reason_ar"],
         "input_type": input_type,
+        "network_deferred": False,
     }
 
 
-def search_scientific_entity(query: str, search_type: str = "auto", allow_network: bool = True) -> dict[str, Any]:
+def search_scientific_entity(
+    query: str,
+    search_type: str = "auto",
+    allow_network: bool = True,
+    force_network: bool = False,
+) -> dict[str, Any]:
     is_valid, cleaned_q, err_msg = validate_search_query(query)
     if not is_valid:
         return _empty_result(err_msg)
@@ -247,6 +295,7 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
         return {
             "found": True, "is_ambiguous": True, "ambiguity_message": ambig["reason_ar"], "selected": None,
             "candidates": cands, "did_you_mean": [], "message": ambig["reason_ar"], "input_type": input_type,
+            "network_deferred": False,
         }
 
     exact: list[dict[str, Any]] = []
@@ -308,7 +357,8 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             res["ambiguity_message"] = "تم العثور على عدة نتائج متقاربة؛ يرجى اختيار المادة المقصودة بدقة."
         return res
 
-    ext = DataManager.resolve_external_substances(cleaned_q, is_formula=query_is_formula, allow_network=allow_network)
+    network_allowed = allow_network and _claim_network_slot(force=force_network)
+    ext = DataManager.resolve_external_substances(cleaned_q, is_formula=query_is_formula, allow_network=network_allowed)
     if ext.get("ok") and ext.get("records"):
         origin_ar = "قاعدة البيانات المحلية الذكية" if ext["origin"] == "local_database" else "المصادر العلمية الخارجية (PubChem / ChEMBL / ChEBI)"
         ext_cands = [
@@ -321,6 +371,7 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             "ambiguity_message": "تتعدد المواد المطابقة؛ يرجى اختيار المادة المقصودة." if is_ambig else None,
             "selected": None if is_ambig else ext_cands[0], "candidates": ext_cands, "did_you_mean": [],
             "message": "تم جلب بيانات المادة والتحقق من هويتها وتوحيدها عبر Data Manager وتخزينها في قاعدة البيانات المحلية.", "input_type": input_type,
+            "network_deferred": False,
         }
 
     if approx:
@@ -331,12 +382,19 @@ def search_scientific_entity(query: str, search_type: str = "auto", allow_networ
             "selected": approx[0] if len(approx) == 1 else None, "candidates": approx[:4],
             "did_you_mean": [f"{c['name_ar']} ({c['name_en']})" for c in approx[:4]],
             "message": approx[0]["match_reason_ar"], "input_type": input_type,
+            "network_deferred": False,
         }
 
     res = _empty_result(
         f"لم يتم العثور على مادة علمية مطابقة للمدخل '{cleaned_q}'. يرجى التأكد من صحة الإملاء أو الصيغة الكيميائية أو اختيار إحدى المقترحات أدناه."
     )
     res["input_type"] = input_type
+    res["network_deferred"] = bool(allow_network and not network_allowed)
+    if res["network_deferred"]:
+        res["message"] = (
+            "لم يتم العثور على المادة في السجل المحلي، وقد تم تأجيل الاستعلام عن المصادر الخارجية مؤقتاً "
+            "لتقليل الطلبات المتكررة أثناء الكتابة. اضغط «تحديث من المصادر الخارجية» لجلب البيانات الآن."
+        )
     return res
 
 
