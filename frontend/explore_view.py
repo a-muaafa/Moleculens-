@@ -59,7 +59,7 @@ def _render_suggestions(query_text: str) -> None:
             )
 
 
-def render_explore_section(on_open_reaction_lab, lang: str = "ar") -> None:
+def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, lang: str = "ar") -> None:
     if EXPLORE_QUERY_KEY not in st.session_state:
         st.session_state[EXPLORE_QUERY_KEY] = "CH3COOH"
 
@@ -167,11 +167,20 @@ def render_explore_section(on_open_reaction_lab, lang: str = "ar") -> None:
         f"<p>هل ترغب في اختبار تفاعلات <strong>{entity['name_ar']} ({disp_formula})</strong> وحساب المتفاعل المحدد (Limiting Reagent) والناتج النظري (Theoretical Yield)؟</p>",
         unsafe_allow_html=True,
     )
-    if st.button(
-        f"Explore Reactions / Open Reaction Lab — نقل ({disp_formula}) إلى مختبر التفاعلات",
-        key="btn_pass_to_reaction_lab",
-    ):
-        on_open_reaction_lab(profile["reaction_lab_entity"])
+    nav_cols = st.columns(2)
+    with nav_cols[0]:
+        if st.button(
+            f"Explore Reactions / Open Reaction Lab — نقل ({disp_formula}) إلى مختبر التفاعلات",
+            key="btn_pass_to_reaction_lab",
+        ):
+            on_open_reaction_lab(profile["reaction_lab_entity"])
+    if on_open_prediction_lab is not None:
+        with nav_cols[1]:
+            if st.button(
+                f"Reaction Prediction — نقل ({disp_formula}) إلى مختبر التوقع",
+                key="btn_pass_to_prediction_lab",
+            ):
+                on_open_prediction_lab(profile["reaction_lab_entity"])
     st.markdown("</div>", unsafe_allow_html=True)
 
 

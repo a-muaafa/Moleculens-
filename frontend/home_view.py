@@ -73,7 +73,29 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>2. Reaction Lab</h3>
+  <h3>2. Reaction Prediction</h3>
+  <p><strong>{('مختبر التوقع: ماذا سيحدث عند جمع المواد؟' if is_ar else 'Prediction Lab: What happens when you mix these substances?')}</strong></p>
+  <p>
+    {('أدخل أي مادتين أو أكثر، فيحكم المحرك: هل يتفاعلان؟ وما النواتج؟ وما التغيّر في الحموضة والملاحظات المتوقعة؟ '
+      'مع فصل واضح بين التفاعل الموثّق والاستنتاج القواعدي وغياب الأدلة — دون اختلاق أي ناتج.' if is_ar
+      else 'Enter any two or more substances and the engine decides whether they react, what the products are, and the expected pH shift and lab observations — '
+      'clearly separating documented reactions from rule-based inference and lack of evidence, without inventing products.')}
+  </p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        if st.button("الدخول إلى Reaction Prediction" if is_ar else "Open Reaction Prediction", key="home_go_prediction"):
+            on_navigate("prediction")
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    c3, c4, c5 = st.columns(3)
+
+    with c3:
+        st.markdown(
+            f"""
+<div class="ml-section-card">
+  <h3>3. Reaction Lab</h3>
   <p><strong>{('مختبر تحليل التفاعلات والموازنة والحسابات الستوكيومترية' if is_ar else 'Reaction Analysis & Stoichiometric Yields')}</strong></p>
   <p>
     {('موازنة المعادلات الكيميائية جبرياً، وتحديد المتفاعل المحدد (Limiting Reagent)، وحساب المردود النظري مع التحقق من شروط التفاعل وقواعد بيانات ORD.' if is_ar
@@ -87,13 +109,13 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             on_navigate("reaction_lab")
 
     st.markdown("<br/>", unsafe_allow_html=True)
-    c3, c4, c5 = st.columns(3)
+    c6, c7, c8 = st.columns(3)
 
-    with c3:
+    with c6:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>3. Titration Lab</h3>
+  <h3>4. Titration Lab</h3>
   <p><strong>{('مختبر المعايرة الافتراضي' if is_ar else 'Virtual Titration Lab')}</strong></p>
   <p>
     {('محاكاة ديناميكية لمنحنيات pH لتفاعلات حمض-قاعدة قوية وضعيفة، ونقاط التكافؤ ونصف التكافؤ واختيار الكواشف اللونية.' if is_ar
@@ -106,11 +128,11 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Titration Lab" if is_ar else "Open Titration Lab", key="home_go_titration"):
             on_navigate("titration")
 
-    with c4:
+    with c7:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>4. Concentration Lab</h3>
+  <h3>5. Concentration Lab</h3>
   <p><strong>{('حاسبة التراكيز وإعداد المحاليل' if is_ar else 'Concentration Calculator')}</strong></p>
   <p>
     {('حسابات المولارية، العيارية، النسب المئوية، أجزاء المليون، وقانون التخفيف C1V1=C2V2 مع بروتوكولات التحضير المعملية خطوة بخطوة.' if is_ar
@@ -123,11 +145,11 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Concentration Lab" if is_ar else "Open Concentration Lab", key="home_go_concentration"):
             on_navigate("concentration")
 
-    with c5:
+    with c8:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>5. Drug Interactions</h3>
+  <h3>6. Drug Interactions</h3>
   <p><strong>{('فاحص التداخلات الدوائية (DDI)' if is_ar else 'Drug-Drug Interactions')}</strong></p>
   <p>
     {('فحص التداخلات الدوائية الثنائية والوصفات المتعددة، وتحديد الآليات الحركية والديناميكية ودرجة الخطورة مع التنبيه السريري الإلزامي.' if is_ar

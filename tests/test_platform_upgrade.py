@@ -230,15 +230,33 @@ def _walk_widgets(path):
     return [n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]
 
 
-def test_exactly_one_free_text_input_in_whole_frontend():
+def test_free_text_inputs_are_limited_to_search_and_prediction_lab():
+    """
+    The platform keeps free-text entry to exactly two places:
+      1. the global scientific search (explore_view), and
+      2. the Reaction Prediction lab, where the user types the materials to be mixed.
+    Every other scientific input stays a closed dropdown to protect data integrity.
+    """
+    per_file: dict[str, list[str]] = {}
     total = 0
     for fname in os.listdir(os.path.join(ROOT, "frontend")):
         if fname.endswith(".py"):
             calls = _walk_widgets(os.path.join(ROOT, "frontend", fname))
+            per_file[fname] = calls
             total += calls.count("text_input") + calls.count("text_area")
-    assert total == 1
-    assert "text_input" in _walk_widgets(os.path.join(ROOT, "frontend", "explore_view.py"))
-    assert "text_input" not in _walk_widgets(os.path.join(ROOT, "frontend", "reaction_lab_view.py"))
+    assert total == 2
+    assert "text_input" in per_file["explore_view.py"]
+    assert "text_input" in per_file["prediction_view.py"]
+    assert "text_input" not in per_file["reaction_lab_view.py"]
+
+
+def test_prediction_view_resolves_free_text_through_the_search_engine():
+    """The free-text input of the prediction lab must be validated, never trusted blindly."""
+    src = open(os.path.join(ROOT, "frontend", "prediction_view.py"), encoding="utf-8").read()
+    assert "search_scientific_entity" in src
+    assert "predict_reaction" in src
+    # no raw formula is handed to the engine without passing through the resolver
+    assert "_resolve_token" in src
 
 
 def test_explore_has_no_search_type_dropdown_and_dropdowns_are_closed():

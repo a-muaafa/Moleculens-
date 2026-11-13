@@ -314,6 +314,116 @@ class AIScientificAssistant:
         return steps
 
     @classmethod
+    def explain_reaction_prediction(cls, prediction: dict[str, Any], lang: str = "ar") -> str:
+        """
+        Explains a reaction-prediction result in Arabic, strictly grounded in the computed data.
+
+        The assistant never invents products: it only narrates the verdict, the applied rule,
+        the balanced equation, the stoichiometry and the declared limitations.
+        """
+        if not prediction:
+            return "لا تتوفر نتيجة تحليل لشرحها حالياً."
+
+        mode = prediction.get("mode", "")
+        mode_label = prediction.get("mode_label_ar", "")
+        verdict = prediction.get("verdict_ar", "")
+        lines: list[str] = []
+
+        lines.append("### قراءة النتيجة (Evidence Tier)")
+        lines.append(f"- **مستوى الدليل:** {mode_label}")
+        lines.append(f"- **الخلاصة:** {verdict}")
+
+        confidence = prediction.get("confidence", {}) or {}
+        if confidence.get("label_ar"):
+            lines.append(f"- **مستوى الثقة:** {confidence['label_ar']}")
+            if confidence.get("basis_ar"):
+                lines.append(f"- **أساس الثقة:** {confidence['basis_ar']}")
+
+        reactants = prediction.get("reactants", []) or []
+        products = prediction.get("products", []) or []
+        if reactants:
+            lines.append("\n### المواد المتفاعلة")
+            for r in reactants:
+                coeff = r.get("coefficient", 1)
+                prefix = f"{coeff} " if coeff and coeff > 1 else ""
+                lines.append(f"- {prefix}{r.get('name_ar', '')} ({r.get('formula', '')}) — {r.get('kind_label_ar', '')}")
+        if products:
+            lines.append("\n### النواتج")
+            for p in products:
+                coeff = p.get("coefficient", 1)
+                prefix = f"{coeff} " if coeff and coeff > 1 else ""
+                lines.append(f"- {prefix}{p.get('name_ar', '')} ({p.get('formula', '')})")
+
+        if prediction.get("equation_unicode"):
+            lines.append("\n### المعادلة الموزونة")
+            lines.append(f"`{prediction['equation_unicode']}`")
+
+        if prediction.get("net_ionic"):
+            lines.append(f"\n### المعادلة الصافية (Net Ionic Equation)\n`{prediction['net_ionic']}`")
+
+        conservation = prediction.get("atom_conservation") or {}
+        if conservation:
+            status = "متحقق" if conservation.get("is_balanced") else "غير متحقق"
+            lines.append(f"\n### التحقق الرياضي\n- حفظ الذرات: **{status}**.")
+
+        observations = prediction.get("observations", []) or []
+        if observations:
+            lines.append("\n### الملاحظات المتوقعة في المختبر")
+            for obs in observations:
+                lines.append(f"- {obs.get('text_ar', '')}")
+
+        ph = prediction.get("ph_analysis") or {}
+        if ph.get("available"):
+            lines.append(f"\n### التغيّر في درجة الحموضة (pH)\n- {ph.get('summary_ar', '')} {ph.get('detail_ar', '')}".rstrip())
+
+        stoich = prediction.get("stoichiometry") or {}
+        if stoich and "error_ar" not in stoich:
+            lim = stoich.get("limiting_reagent")
+            if lim:
+                lines.append(
+                    f"\n### المتفاعل المحدد (Limiting Reagent)\n- **{lim.get('name_ar', '')} ({lim.get('formula', '')})** "
+                    f"بكمية {lim.get('initial_mol', 0):g} مول، وهو المتفاعل الذي يحدد كمية النواتج النظرية."
+                )
+            elif stoich.get("is_exact_stoichiometric_ratio"):
+                lines.append("\n### النسبة المولية\n- الكميات المدخلة متكافئة تماماً مع النسبة المولية للتفاعل.")
+
+        yields = prediction.get("theoretical_yields", []) or []
+        if yields:
+            lines.append("\n### النواتج النظرية (Theoretical Yield)")
+            for y in yields:
+                lines.append(
+                    f"- {y.get('name_ar', '')} ({y.get('formula', '')}): {y.get('theoretical_yield_mol', 0):g} mol "
+                    f"({y.get('theoretical_yield_g', 0):g} g)"
+                )
+
+        evidence = prediction.get("evidence", []) or []
+        if evidence:
+            lines.append("\n### الدليل العلمي (Evidence & Sources)")
+            for ev in evidence:
+                lines.append(f"- **{ev.get('rule_name_ar', '')}**")
+                if ev.get("basis_ar"):
+                    lines.append(f"  - الأساس العلمي: {ev['basis_ar']}")
+                if ev.get("source"):
+                    lines.append(f"  - المرجع: {ev['source']}")
+
+        limits = prediction.get("limitations_ar", []) or []
+        if limits:
+            lines.append("\n### حدود التنبؤ (Limits of Prediction)")
+            for lim in limits:
+                lines.append(f"- {lim}")
+
+        if prediction.get("missing_information_ar"):
+            lines.append("\n### البيانات الناقصة المطلوبة")
+            for miss in prediction["missing_information_ar"]:
+                lines.append(f"- {miss}")
+
+        lines.append(
+            "\n---\n"
+            "*ملاحظة منهجية: هذا الشرح يعرض النتائج المحسوبة كما هي دون تعديلها أو إضافة نتائج غير موجودة في محرك MolecuLens.*"
+        )
+        return "\n".join(lines)
+
+    @classmethod
     def answer_student_question(
         cls,
         question: str,
@@ -322,6 +432,22 @@ class AIScientificAssistant:
     ) -> str:
         q_lower = (question or "").lower()
         is_ar = lang == "ar"
+
+        if any(k in q_lower for k in ["تفاعل", "تفاعلات", "reaction", "نواتج", "متفاعل"]):
+            return (
+                "يعتمد محرك التفاعلات في منصة MolecuLens على ثلاثة مستويات من الدليل: "
+                "(1) تفاعل موثّق في سجل مرجعي علمي محدّد (مرجع تجريبي أو مواصفة دستية صيدلانية أو كتاب تحليل معتمد)، "
+                "(2) استنتاج من قاعدة كيميائية عامة معلنة مع ذكر مرجعها وحدودها، "
+                "(3) غياب الأدلة كخيار علمي صريح: في الحالتين الأولى والثانية يذكر النظام مصدر كل نتيجة، "
+                "وفي الحالة الثالثة يعرض «لا تتوفر بيانات كافية» بدل اختلاق معادلة. "
+                "كما يُجرى تحقّق رياضي آلي من حفظ الذرات (Atom Conservation)، "
+                "وتُعرض النسب المولية والمتفاعل المحدد والناتج النظري للحسابات المدخلة."
+                if is_ar
+                else "MolecuLens separates reaction evidence into three tiers: (1) a reaction recorded in a referenced scientific registry, "
+                "(2) an inference from a declared general chemistry rule with its source and limits, and "
+                "(3) an explicit lack-of-evidence outcome instead of an invented equation. "
+                "Atom conservation is verified automatically, and stoichiometry, limiting reagent and theoretical yield are computed."
+            )
 
         if "logp" in q_lower or "التقسيم" in q_lower or "توزع" in q_lower:
             return (

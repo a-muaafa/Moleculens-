@@ -9,6 +9,7 @@ import streamlit as st
 from config.settings import APP_NAME, APP_SLOGAN
 from frontend.explore_view import render_explore_section
 from frontend.home_view import render_hero_header, render_home_overview
+from frontend.prediction_view import render_prediction_section
 from frontend.reaction_lab_view import render_reaction_lab_section
 from frontend.titration_view import render_titration_view
 from frontend.concentration_view import render_concentration_view
@@ -54,24 +55,34 @@ def _open_reaction_lab_with_entity(entity_info: dict[str, Any]) -> None:
     st.rerun()
 
 
+def _open_prediction_with_entity(entity_info: dict[str, Any]) -> None:
+    formula = entity_info.get("symbol_or_formula", "")
+    if formula:
+        st.session_state["pred_free_input"] = formula
+    st.session_state["active_section"] = "prediction"
+    st.rerun()
+
+
 render_hero_header(lang=app_lang)
 
 nav_options_ar = {
     "home": "الصفحة الرئيسية (Home)",
     "explore": "1. Explore & Understand (استكشاف المادة)",
-    "reaction_lab": "2. Reaction Lab (مختبر التفاعلات)",
-    "titration": "3. Titration Lab (مختبر المعايرة)",
-    "concentration": "4. Concentration Lab (حاسبة التراكيز)",
-    "ddi": "5. Drug Interactions (التداخلات الدوائية)",
+    "prediction": "2. Reaction Prediction (توقع التفاعل)",
+    "reaction_lab": "3. Reaction Lab (مختبر التفاعلات)",
+    "titration": "4. Titration Lab (مختبر المعايرة)",
+    "concentration": "5. Concentration Lab (حاسبة التراكيز)",
+    "ddi": "6. Drug Interactions (التداخلات الدوائية)",
 }
 
 nav_options_en = {
     "home": "Home Overview",
     "explore": "1. Explore & Understand",
-    "reaction_lab": "2. Reaction Lab",
-    "titration": "3. Titration Lab",
-    "concentration": "4. Concentration Lab",
-    "ddi": "5. Drug Interactions (DDI)",
+    "prediction": "2. Reaction Prediction",
+    "reaction_lab": "3. Reaction Lab",
+    "titration": "4. Titration Lab",
+    "concentration": "5. Concentration Lab",
+    "ddi": "6. Drug Interactions (DDI)",
 }
 
 nav_options = nav_options_ar if is_ar else nav_options_en
@@ -95,7 +106,9 @@ active_tab = st.session_state["active_section"]
 if active_tab == "home":
     render_home_overview(_navigate_to, lang=app_lang)
 elif active_tab == "explore":
-    render_explore_section(_open_reaction_lab_with_entity, lang=app_lang)
+    render_explore_section(_open_reaction_lab_with_entity, _open_prediction_with_entity, lang=app_lang)
+elif active_tab == "prediction":
+    render_prediction_section()
 elif active_tab == "reaction_lab":
     render_reaction_lab_section()
 elif active_tab == "titration":

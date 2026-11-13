@@ -1,5 +1,6 @@
 from typing import Any
 from entity_profiles.profile_builder import build_scientific_profile
+from reaction_engine.prediction import predict_reaction
 from reaction_engine.reaction_service import analyze_chemical_reaction
 from search.search_engine import (
     get_catalog_dropdown_options,
@@ -62,6 +63,19 @@ class MolecuLensCore:
         custom_conditions: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return analyze_chemical_reaction(
+            reactant_inputs=reactant_inputs,
+            domain=domain,
+            custom_conditions=custom_conditions,
+        )
+
+    @staticmethod
+    def run_reaction_prediction(
+        reactant_inputs: list[dict[str, Any]],
+        domain: str | None = None,
+        custom_conditions: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Explores whether the supplied substances will react, and what the products would be."""
+        return predict_reaction(
             reactant_inputs=reactant_inputs,
             domain=domain,
             custom_conditions=custom_conditions,
