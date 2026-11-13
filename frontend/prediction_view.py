@@ -151,9 +151,10 @@ def render_prediction_section() -> None:
     notes: list[str] = []
 
     if input_mode == "free":
+        if "pred_free_input" not in st.session_state:
+            st.session_state["pred_free_input"] = "HCl + NaOH"
         raw = st.text_input(
             "اكتب المواد مفصولة بفاصلة أو علامة + (مثال: HCl + NaOH أو حديد , أكسجين):",
-            value=st.session_state.get("pred_free_input", "HCl + NaOH"),
             key="pred_free_input",
         )
         tokens = _split_materials(raw)
