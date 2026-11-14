@@ -89,7 +89,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             on_navigate("prediction")
 
     st.markdown("<br/>", unsafe_allow_html=True)
-    c3, c4, c5 = st.columns(3)
+    c3, c4 = st.columns(2)
 
     with c3:
         st.markdown(
@@ -108,14 +108,31 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Reaction Lab" if is_ar else "Open Reaction Lab", key="home_go_reaction"):
             on_navigate("reaction_lab")
 
-    st.markdown("<br/>", unsafe_allow_html=True)
-    c6, c7, c8 = st.columns(3)
-
-    with c6:
+    with c4:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>4. Titration Lab</h3>
+  <h3>4. Molecular Intelligence</h3>
+  <p><strong>{('الذكاء الجزيئي والتعديل البنيوي ومقارنة التشابه' if is_ar else 'Molecular Intelligence & Structure Modification')}</strong></p>
+  <p>
+    {('حساب بصمات مورغان (Morgan Fingerprints) ومعامل تانيموتو، التعديل البنيوي للمجموعات الوظيفية مع دراسة الفروق الدوائية، وتقييم تنبؤات LogP بفواصل ثقة 95%.' if is_ar
+      else 'Morgan Fingerprints and Tanimoto similarity, functional group structure editing with delta ADMET metrics, and LogP benchmark evaluation with 95% CI.')}
+  </p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        if st.button("الدخول إلى Molecular Intelligence" if is_ar else "Open Molecular Intelligence", key="home_go_molecular_intelligence"):
+            on_navigate("molecular_intelligence")
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    c5, c6, c7 = st.columns(3)
+
+    with c5:
+        st.markdown(
+            f"""
+<div class="ml-section-card">
+  <h3>5. Titration Lab</h3>
   <p><strong>{('مختبر المعايرة الافتراضي' if is_ar else 'Virtual Titration Lab')}</strong></p>
   <p>
     {('محاكاة ديناميكية لمنحنيات pH لتفاعلات حمض-قاعدة قوية وضعيفة، ونقاط التكافؤ ونصف التكافؤ واختيار الكواشف اللونية.' if is_ar
@@ -128,11 +145,11 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Titration Lab" if is_ar else "Open Titration Lab", key="home_go_titration"):
             on_navigate("titration")
 
-    with c7:
+    with c6:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>5. Concentration Lab</h3>
+  <h3>6. Concentration Lab</h3>
   <p><strong>{('حاسبة التراكيز وإعداد المحاليل' if is_ar else 'Concentration Calculator')}</strong></p>
   <p>
     {('حسابات المولارية، العيارية، النسب المئوية، أجزاء المليون، وقانون التخفيف C1V1=C2V2 مع بروتوكولات التحضير المعملية خطوة بخطوة.' if is_ar
@@ -145,11 +162,11 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Concentration Lab" if is_ar else "Open Concentration Lab", key="home_go_concentration"):
             on_navigate("concentration")
 
-    with c8:
+    with c7:
         st.markdown(
             f"""
 <div class="ml-section-card">
-  <h3>6. Drug Interactions</h3>
+  <h3>7. Drug Interactions</h3>
   <p><strong>{('فاحص التداخلات الدوائية (DDI)' if is_ar else 'Drug-Drug Interactions')}</strong></p>
   <p>
     {('فحص التداخلات الدوائية الثنائية والوصفات المتعددة، وتحديد الآليات الحركية والديناميكية ودرجة الخطورة مع التنبيه السريري الإلزامي.' if is_ar

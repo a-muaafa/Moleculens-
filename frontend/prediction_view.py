@@ -13,6 +13,8 @@ import streamlit as st
 from chemistry_engine.formula_analyzer import format_chemical_formula_display
 from education.ai_assistant import AIScientificAssistant
 from reaction_engine.prediction import predict_reaction
+from reaction_engine.visualizer import ReactionVisualizer
+from reaction_engine.what_if import WhatIfAnalyzer
 from search.search_engine import get_reaction_substance_options, search_scientific_entity
 
 
@@ -106,6 +108,145 @@ def _render_species_table(items: list[dict[str, Any]], title: str, kind_key: str
         )
     st.markdown(f"**{title}**")
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+def _render_visual_molecules(reactants: list[dict[str, Any]], products: list[dict[str, Any]]) -> None:
+    """Renders 2D visual structures of reactants and products before and after reaction."""
+    st.markdown("#### التصور البصري للجزيئات (Molecular Structures Before & After)")
+    c_r, c_arrow, c_p = st.columns([5, 1, 5])
+    with c_r:
+        st.markdown("**المتفاعلات قبل التفاعل (Reactants):**")
+        r_cols = st.columns(max(len(reactants), 1))
+        for idx, r in enumerate(reactants):
+            with r_cols[idx]:
+                coeff = int(r.get("coefficient", 1))
+                coeff_str = f"{coeff} × " if coeff > 1 else ""
+                f_disp = format_chemical_formula_display(r.get("formula", ""))
+                svg = ReactionVisualizer.get_species_svg(r.get("formula", ""))
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:8px;text-align:center;">
+                        <strong style="color:#38bdf8;">{coeff_str}{_esc(r.get('name_ar', ''))}</strong>
+                        <div style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
+                        <div>{svg}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+    with c_arrow:
+        st.markdown("<div style='text-align:center;font-size:2.2rem;color:#0f766e;margin-top:60px;'>→</div>", unsafe_allow_html=True)
+    with c_p:
+        st.markdown("**النواتج بعد التفاعل (Products):**")
+        p_cols = st.columns(max(len(products), 1))
+        for idx, p in enumerate(products):
+            with p_cols[idx]:
+                coeff = int(p.get("coefficient", 1))
+                coeff_str = f"{coeff} × " if coeff > 1 else ""
+                f_disp = format_chemical_formula_display(p.get("formula", ""))
+                svg = ReactionVisualizer.get_species_svg(p.get("formula", ""))
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b;border:1px solid #059669;border-radius:10px;padding:8px;text-align:center;">
+                        <strong style="color:#34d399;">{coeff_str}{_esc(p.get('name_ar', ''))}</strong>
+                        <div style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
+                        <div>{svg}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+
+def _render_bonds_and_energy(prediction: dict[str, Any]) -> None:
+    """Renders bond transformation breakdown and Plotly reaction energy coordinate diagram."""
+    reactants = prediction.get("reactants", [])
+    products = prediction.get("products", [])
+    if not reactants or not products:
+        return
+
+    with st.expander("تحليل الروابط ومسار الطاقة (Bond Transformations & Energy Profile)", expanded=False):
+        c1, c2 = st.columns([1, 1])
+        bonds_data = ReactionVisualizer.analyze_bond_transformations(
+            reactants, products, category=prediction.get("category", "")
+        )
+
+        with c1:
+            st.markdown(f"**الروابط المتكسرة والمتكونة ({bonds_data['thermodynamic_type_ar']}):**")
+            st.info(bonds_data["summary_ar"])
+
+            st.markdown("**1. الروابط المتكسرة في المتفاعلات (Bonds Broken):**")
+            for b in bonds_data["bonds_broken"]:
+                e_txt = f" ({b['total_kj']} kJ/mol)" if b.get("total_kj") else ""
+                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}")
+
+            st.markdown("**2. الروابط المتكونة في النواتج (Bonds Formed):**")
+            for b in bonds_data["bonds_formed"]:
+                e_txt = f" ({b['total_kj']} kJ/mol)" if b.get("total_kj") else ""
+                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}")
+
+            st.markdown("**التحقق من حفظ الذرات (Atom Conservation Matrix):**")
+            audit_rows = ReactionVisualizer.audit_atom_conservation(reactants, products)
+            st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
+
+        with c2:
+            r_str = " + ".join(r.get("formula", "") for r in reactants)
+            p_str = " + ".join(p.get("formula", "") for p in products)
+            fig = ReactionVisualizer.create_reaction_energy_diagram(
+                r_str, p_str,
+                is_exothermic=bonds_data["is_exothermic"],
+                delta_h_kj=bonds_data["estimated_delta_h_kj"],
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_what_if_panel(reactant_inputs: list[dict[str, Any]], prediction: dict[str, Any]) -> None:
+    """Renders the What-If comparative scenario analysis panel."""
+    with st.expander("تحليل سيناريوهات «ماذا لو؟» (What-If Scenario Analysis)", expanded=False):
+        st.markdown(
+            """
+            جرب تعديل كميات المواد أو ظروف التفاعل ولاحظ كيف يتغير المتفاعل المحدد،
+            وكمية الناتج النظري، وسلوك التفاعل مقارنةً بالتجربة المرجعية الأصلية:
+            """
+        )
+
+        mod_inputs = []
+        cols = st.columns(len(reactant_inputs))
+        for idx, item in enumerate(reactant_inputs):
+            with cols[idx]:
+                orig_amt = float(item.get("amount", 1.0))
+                form = item.get("formula", "")
+                mod_amt = st.number_input(
+                    f"كمية {form} المعدلة (mol):",
+                    min_value=0.01,
+                    value=round(orig_amt, 3),
+                    step=0.5,
+                    key=f"whatif_amt_{idx}_{form}",
+                )
+                mod_inputs.append({
+                    "formula": form,
+                    "amount": float(mod_amt),
+                    "unit": item.get("unit", "mol"),
+                })
+
+        c_t, c_p = st.columns(2)
+        with c_t:
+            new_temp = st.slider("درجة الحرارة المعدلة (°C):", min_value=0.0, max_value=500.0, value=25.0, step=10.0, key="whatif_temp")
+        with c_p:
+            new_press = st.slider("الضغط المعدل (atm):", min_value=0.1, max_value=30.0, value=1.0, step=0.5, key="whatif_press")
+
+        comp_res = WhatIfAnalyzer.evaluate_what_if(
+            baseline_inputs=reactant_inputs,
+            modified_inputs=mod_inputs,
+            baseline_conditions={"temperature_c": 25.0, "pressure_atm": 1.0},
+            modified_conditions={"temperature_c": new_temp, "pressure_atm": new_press},
+        )
+
+        if comp_res.get("success"):
+            st.markdown(f"**التحليل العلمي للتغير (Comparative Insights):**")
+            st.success(comp_res["insights_ar"])
+            st.markdown("**جدول المقارنة المباشرة (Side-by-Side Comparison):**")
+            st.dataframe(pd.DataFrame(comp_res["table_rows"]), use_container_width=True, hide_index=True)
+        else:
+            st.warning(comp_res.get("error_ar", "تعذر حساب السيناريو المقارن."))
 
 
 def render_prediction_section() -> None:
@@ -262,6 +403,8 @@ def render_prediction_section() -> None:
     with c_prod:
         _render_species_table(prediction.get("products", []), "نواتج التفاعل (Products)")
 
+    _render_visual_molecules(prediction.get("reactants", []), prediction.get("products", []))
+
     observations = prediction.get("observations", []) or []
     if observations:
         st.markdown("**الملاحظات المتوقعة في المختبر (Expected Lab Observations):**")
@@ -276,6 +419,8 @@ def render_prediction_section() -> None:
 
     if prediction.get("conditions_required_ar"):
         st.markdown(f"**الظروف المطلوبة لحدوث التفاعل:** {_esc(prediction['conditions_required_ar'])}")
+
+    _render_bonds_and_energy(prediction)
 
     stoich = prediction.get("stoichiometry") or {}
     reactants_table = prediction.get("reactants_table") or []
@@ -306,6 +451,8 @@ def render_prediction_section() -> None:
                     f"{y_item['theoretical_yield_mol']:g} mol",
                     f"{y_item['theoretical_yield_g']:g} g",
                 )
+
+    _render_what_if_panel(reactant_inputs, prediction)
 
     evidence = prediction.get("evidence", []) or []
     if evidence:
