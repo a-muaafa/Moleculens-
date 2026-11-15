@@ -63,13 +63,36 @@ def _split_materials(raw_text: str) -> list[str]:
 
 
 def _resolve_token(token: str) -> tuple[dict[str, Any] | None, str]:
-    """Resolves a single token (name, formula or SMILES) into a catalog entity."""
-    res = search_scientific_entity(token, search_type="auto", allow_network=True)
+    """Resolves a single token (name, formula or SMILES) into a catalog entity or valid chemical formula."""
+    res = search_scientific_entity(token, search_type="auto", allow_network=False)
     if res.get("found") and res.get("selected"):
         entity = res["selected"]
         return entity, ""
     if res.get("is_ambiguous") and res.get("candidates"):
         entity = res["candidates"][0]
+        return entity, f"المادة «{token}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
+    from chemistry_engine.formula_analyzer import calculate_molar_mass
+    from reaction_engine.prediction import classify_species
+
+    spec = classify_species(token)
+    if spec.get("is_valid_formula") and spec.get("formula"):
+        mm = calculate_molar_mass(spec["formula"])
+        if mm > 0:
+            synth_entity = {
+                "key": f"formula_{spec['formula']}",
+                "symbol_or_formula": spec["formula"],
+                "name_ar": spec.get("name_ar") or spec["formula"],
+                "name_en": spec.get("name_en") or spec["formula"],
+                "molar_mass": round(mm, 3),
+                "entity_type": "chemical_compound",
+            }
+            return synth_entity, f"تم التعرف على الصيغة الكيميائية «{spec['formula']}» ({synth_entity['name_ar']}) بالتحليل التركيبي المباشر."
+    res_net = search_scientific_entity(token, search_type="auto", allow_network=True)
+    if res_net.get("found") and res_net.get("selected"):
+        entity = res_net["selected"]
+        return entity, ""
+    if res_net.get("is_ambiguous") and res_net.get("candidates"):
+        entity = res_net["candidates"][0]
         return entity, f"المادة «{token}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
     return None, f"تعذّر التعرف على المادة «{token}» (استخدم الاسم أو الصيغة الكيميائية أو SMILES)."
 
@@ -467,6 +490,7 @@ def render_prediction_section() -> None:
                 )
 
     _render_what_if_panel(reactant_inputs, prediction)
+    _render_end_to_end_experiment_walkthrough(prediction)
 
     evidence = prediction.get("evidence", []) or []
     if evidence:
@@ -506,3 +530,90 @@ def render_prediction_section() -> None:
 
     with st.expander("المساعد العلمي — شرح النتيجة خطوة بخطوة (AI Scientific Assistant)", expanded=True):
         st.markdown(AIScientificAssistant.explain_reaction_prediction(prediction), unsafe_allow_html=False)
+
+    from frontend.reaction_lab_view import _render_scientific_audit_panel
+
+    _render_scientific_audit_panel()
+
+
+def _render_end_to_end_experiment_walkthrough(prediction: dict[str, Any]) -> None:
+    """Renders the 4-stage visual chemical experiment walkthrough in the Chemical Playground."""
+    stages = ReactionVisualizer.build_end_to_end_experiment_stages(prediction)
+    s1 = stages["stage1_preparation"]
+    s2 = stages["stage2_active_vessel"]
+    s3 = stages["stage3_mass_balance"]
+    s4 = stages["stage4_final_inventory"]
+
+    st.markdown("---")
+    st.markdown(
+        "<h4>رحلة التجربة الكيميائية البصرية المتكاملة من البداية للنهاية (End-to-End Visual Experiment)</h4>"
+        "<p style='color:#475569;font-size:0.93rem;'>تتبع بصري شامل للتجربة من تحضير المواد المتفاعلة، إلى محاكاة وعاء التفاعل النشط، "
+        "وميزان حفظ الكتلة والذرات (قانون لافوازييه)، وصولاً إلى الجرد النهائي لمحتويات الوعاء بعد انتهاء التفاعل.</p>",
+        unsafe_allow_html=True,
+    )
+
+    exp_tab1, exp_tab2, exp_tab3, exp_tab4 = st.tabs([
+        "1. تحضير المتفاعلات",
+        "2. محاكاة وعاء التفاعل النشط",
+        "3. ميزان حفظ الكتلة والاستهلاك",
+        "4. جرد الوعاء النهائي",
+    ])
+
+    with exp_tab1:
+        st.caption(s1["title_ar"])
+        st.info(f"الحالة المولية للمزيج الابتدائي: {s1['stoichiometric_status_ar']}")
+        cols1 = st.columns(max(1, len(s1["reactant_cards"])))
+        for idx_c, card in enumerate(s1["reactant_cards"]):
+            with cols1[idx_c]:
+                st.markdown(
+                    f"""
+<div style="border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:#f8fafc;text-align:center;">
+  <div style="font-weight:700;color:#0f4c5c;">{_esc(card['name_ar'])} ({_esc(card['formula_display'])})</div>
+  <div style="font-size:0.82rem;color:#64748b;">الطور: ({_esc(card['state'])}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
+  <div style="font-weight:700;color:#1e3a8a;margin-top:6px;">الكمية المضافة: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
+  <div style="font-size:0.84rem;color:#0f766e;margin-top:3px;">{_esc(card['role_ar'])}</div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
+
+    with exp_tab2:
+        st.caption(s2["title_ar"])
+        st.markdown(s2["vessel_svg"], unsafe_allow_html=True)
+
+    with exp_tab3:
+        st.caption(s3["title_ar"])
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("كتلة المتفاعلات قبل التفاعل", f"{s3['total_initial_mass_g']:g} g")
+        mc2.metric("كتلة النواتج المتكونة", f"{s3['total_produced_mass_g']:g} g", f"مستهلك: {s3['total_consumed_mass_g']:g} g")
+        mc3.metric(
+            "إجمالي الكتلة بعد التفاعل",
+            f"{s3['total_final_vessel_mass_g']:g} g",
+            "محفوظ 100% (قانون لافوازييه)" if s3["mass_conserved"] else "تحقق من الموازنة",
+        )
+        mass_chart = ReactionVisualizer.create_stoichiometry_mass_chart(s3)
+        st.plotly_chart(mass_chart, use_container_width=True, key="pred_mass_conservation_chart")
+        for rc in s3["reactant_consumption"]:
+            st.markdown(
+                f"**{rc['name_ar']} ({rc['formula_display']})**: استُهلك `{rc['consumed_pct']}%` (`{rc['consumed_mass_g']:g} g`) "
+                f"| تبقّى `{rc['remaining_pct']}%` (`{rc['remaining_mass_g']:g} g`)"
+            )
+            st.progress(min(1.0, max(0.0, float(rc["consumed_pct"]) / 100.0)))
+
+    with exp_tab4:
+        st.caption(s4["title_ar"])
+        inv_cols = st.columns(max(1, len(s4["final_inventory"])))
+        for idx_i, item in enumerate(s4["final_inventory"]):
+            with inv_cols[idx_i]:
+                b_col = "#059669" if "ناتج" in item["kind_ar"] else "#d97706"
+                st.markdown(
+                    f"""
+<div style="border:2px solid {b_col};border-radius:10px;padding:10px;background:#ffffff;text-align:center;">
+  <div style="font-size:0.8rem;font-weight:700;color:{b_col};">{_esc(item['kind_ar'])}</div>
+  <div style="font-weight:700;color:#0f4c5c;margin-top:3px;">{_esc(item['name_ar'])} ({_esc(item['formula_display'])})</div>
+  <div style="font-weight:700;color:#1e293b;margin-top:5px;">{item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
+  <div style="font-size:0.82rem;color:#475569;margin-top:3px;">{_esc(item['status_ar'])}</div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )

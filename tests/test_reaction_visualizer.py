@@ -126,3 +126,74 @@ def test_create_illustrative_energy_diagram_hides_fake_numbers():
     assert "kJ" not in annotations_text
     assert "-150" not in annotations_text
 
+
+def test_end_to_end_experiment_stages_and_mass_conservation():
+    from reaction_engine.prediction import predict_reaction
+
+    pred = predict_reaction([
+        {"substance": {"symbol_or_formula": "HCl"}, "amount": 2.0, "unit": "mol"},
+        {"substance": {"symbol_or_formula": "NaOH"}, "amount": 1.0, "unit": "mol"},
+    ])
+    assert pred["supported"] is True
+
+    stages = ReactionVisualizer.build_end_to_end_experiment_stages(pred)
+    assert "stage1_preparation" in stages
+    assert "stage2_active_vessel" in stages
+    assert "stage3_mass_balance" in stages
+    assert "stage4_final_inventory" in stages
+
+    s1 = stages["stage1_preparation"]
+    assert len(s1["reactant_cards"]) == 2
+
+    s2 = stages["stage2_active_vessel"]
+    assert "<svg" in s2["vessel_svg"]
+    assert "HCl" in s2["vessel_svg"]
+
+    s3 = stages["stage3_mass_balance"]
+    assert s3["mass_conserved"] is True
+    assert abs(s3["total_initial_mass_g"] - s3["total_final_vessel_mass_g"]) <= 0.05
+    # Since HCl had 2 mol and NaOH had 1 mol, 1 mol of HCl remains in excess
+    assert s3["total_remaining_mass_g"] > 30.0
+
+    s4 = stages["stage4_final_inventory"]
+    # 2 products (NaCl, H2O) + 1 excess reactant (HCl) = 3 items in final vessel
+    assert len(s4["final_inventory"]) == 3
+
+    fig_mass = ReactionVisualizer.create_stoichiometry_mass_chart(s3)
+    assert isinstance(fig_mass, go.Figure)
+    assert len(fig_mass.data) >= 3
+
+
+def test_independent_scientific_audit_registry_and_rules():
+    from reaction_engine.scientific_audit import audit_registry_and_rules
+
+    report = audit_registry_and_rules()
+    assert report["overall_passed"] is True, f"Audit errors: {report['errors']}"
+    assert report["total_reactions"] == 87
+    assert report["passed_reactions"] == 87
+    assert report["unique_source_ids"] == 87
+    assert report["unique_bibliographic_sources"] == 87
+    assert report["total_rules"] == 13
+    assert report["passed_rules"] == 13
+    assert report["quantitative_enthalpy_reactions"] >= 60
+
+
+def test_preset8_ch3cooh_k2co3_and_resolve_token():
+    from frontend.prediction_view import _resolve_token
+    from reaction_engine.prediction import predict_reaction
+
+    ent, note = _resolve_token("K2CO3")
+    assert ent is not None
+    assert ent["symbol_or_formula"] == "K2CO3"
+    assert ent["molar_mass"] > 130.0
+
+    pred = predict_reaction([
+        {"substance": {"symbol_or_formula": "CH3COOH"}},
+        {"substance": ent},
+    ])
+    assert pred["supported"] is True
+    assert pred["mode"] == "rule_inferred"
+    prod_formulas = {p["formula"] for p in pred["products"]}
+    assert prod_formulas == {"KCH3COO", "H2O", "CO2"}
+    assert pred["atom_conservation"]["is_balanced"] is True
+

@@ -48,3 +48,24 @@ def test_prediction_explains_documented_reaction_with_source():
     body = " ".join(md.value for md in at.markdown)
     assert "موثّق" in body
     assert "USP" in body or "المرجع" in body
+
+
+def test_prediction_preset8_and_end_to_end_visual_walkthrough():
+    at = _open_prediction_tab()
+    at.text_input(key="pred_free_input").set_value("CH3COOH + K2CO3")
+    at.run()
+    assert not at.exception
+    body = " ".join(md.value for md in at.markdown)
+    assert "KCH3COO" in body or "خلات البوتاسيوم" in body
+    assert "رحلة التجربة الكيميائية البصرية المتكاملة" in body
+    assert "<svg" in body
+
+
+def test_molecular_intelligence_view_renders_120_qsar_and_cv():
+    at = AppTest.from_file(APP_FILE, default_timeout=180)
+    at.session_state["active_section"] = "molecular_intelligence"
+    at.run()
+    assert not at.exception
+    body = " ".join(md.value for md in at.markdown)
+    assert "120" in body
+    assert "5-Fold" in body or "التحقق المتقاطع" in body

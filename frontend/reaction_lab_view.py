@@ -353,6 +353,155 @@ def render_reaction_lab_section() -> None:
             unsafe_allow_html=True,
         )
 
+    _render_end_to_end_visual_experiment(rxn_result)
+    _render_scientific_audit_panel()
+
+
+def _render_end_to_end_visual_experiment(rxn_result: dict[str, Any]) -> None:
+    """Renders the 4-stage visual chemical experiment walkthrough from start to finish."""
+    from reaction_engine.visualizer import ReactionVisualizer
+
+    stages = ReactionVisualizer.build_end_to_end_experiment_stages(rxn_result)
+    s1 = stages["stage1_preparation"]
+    s2 = stages["stage2_active_vessel"]
+    s3 = stages["stage3_mass_balance"]
+    s4 = stages["stage4_final_inventory"]
+
+    st.markdown('<div class="ml-card">', unsafe_allow_html=True)
+    st.markdown(
+        "<h3>رحلة التجربة الكيميائية البصرية المتكاملة من البداية للنهاية (End-to-End Visual Chemical Experiment)</h3>"
+        "<p style='color:#475569;'>تتبع بصري خطوة بخطوة للتجربة المخبرية: من تحضير المتفاعلات وخلطها في وعاء التفاعل النشط، "
+        "إلى التحقق من قانون لافوازييه لحفظ الكتلة وجرد محتويات الوعاء النهائي.</p>",
+        unsafe_allow_html=True,
+    )
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "1. تحضير المتفاعلات",
+        "2. وعاء التفاعل والظواهر",
+        "3. ميزان حفظ الكتلة والاستهلاك",
+        "4. جرد الوعاء النهائي ومسار الطاقة",
+    ])
+
+    with tab1:
+        st.markdown(f"<h4>{s1['title_ar']}</h4>", unsafe_allow_html=True)
+        st.info(f"الحالة المولية للمزيج الابتدائي: {s1['stoichiometric_status_ar']}")
+        r_cols = st.columns(max(1, len(s1["reactant_cards"])))
+        for idx_c, card in enumerate(s1["reactant_cards"]):
+            with r_cols[idx_c]:
+                st.markdown(
+                    f"""
+<div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;background:#f8fafc;text-align:center;">
+  <div style="font-weight:700;color:#0f4c5c;font-size:1.05rem;">{card['name_ar']} ({card['formula_display']})</div>
+  <div style="font-size:0.85rem;color:#64748b;margin-bottom:6px;">الحالة: ({card['state']}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
+  <div style="display:flex;justify-content:center;margin:6px 0;">{card['svg']}</div>
+  <div style="font-weight:700;color:#1e3a8a;margin-top:6px;">الكمية الابتدائية: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
+  <div style="font-size:0.86rem;color:#0f766e;margin-top:4px;">الدور: {card['role_ar']}</div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
+
+    with tab2:
+        st.markdown(f"<h4>{s2['title_ar']}</h4>", unsafe_allow_html=True)
+        col_v1, col_v2 = st.columns([3, 2])
+        with col_v1:
+            st.markdown(s2["vessel_svg"], unsafe_allow_html=True)
+        with col_v2:
+            st.markdown("<h5>المشاهدات والظواهر المخبرية المسجلة:</h5>", unsafe_allow_html=True)
+            if s2["observations"]:
+                for obs in s2["observations"]:
+                    st.markdown(
+                        f"- **{obs.get('text_ar', '')}** *(الأساس العلمي: {obs.get('basis_ar', '')})*"
+                    )
+            else:
+                st.caption("تفاعل في طور متجانس دون راسب أو تصاعد غاز منفصل.")
+
+    with tab3:
+        st.markdown(f"<h4>{s3['title_ar']}</h4>", unsafe_allow_html=True)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("مجموع كتل المتفاعلات قبل التفاعل", f"{s3['total_initial_mass_g']:g} g")
+        m2.metric("كتلة النواتج المتكونة نظرياً", f"{s3['total_produced_mass_g']:g} g", f"مستهلك: {s3['total_consumed_mass_g']:g} g")
+        m3.metric(
+            "مجموع الكتل في الوعاء بعد التفاعل",
+            f"{s3['total_final_vessel_mass_g']:g} g",
+            "محفوظ 100% (قانون لافوازييه)" if s3["mass_conserved"] else "تحقق من الموازنة",
+        )
+        mass_fig = ReactionVisualizer.create_stoichiometry_mass_chart(s3)
+        st.plotly_chart(mass_fig, use_container_width=True, key="rxn_lab_mass_conservation_chart")
+
+        st.markdown("<h5>نسب استهلاك المتفاعلات والكميات الفائضة المتبقية:</h5>", unsafe_allow_html=True)
+        for rc in s3["reactant_consumption"]:
+            st.markdown(
+                f"**{rc['name_ar']} ({rc['formula_display']})** — استُهلك `{rc['consumed_pct']}%` "
+                f"(`{rc['consumed_mol']:g} mol` / `{rc['consumed_mass_g']:g} g`) | "
+                f"تبقّى `{rc['remaining_pct']}%` (`{rc['remaining_mol']:g} mol` / `{rc['remaining_mass_g']:g} g`)"
+            )
+            st.progress(min(1.0, max(0.0, float(rc["consumed_pct"]) / 100.0)))
+
+    with tab4:
+        st.markdown(f"<h4>{s4['title_ar']}</h4>", unsafe_allow_html=True)
+        inv_cols = st.columns(max(1, len(s4["final_inventory"])))
+        for idx_i, item in enumerate(s4["final_inventory"]):
+            with inv_cols[idx_i]:
+                border_col = "#059669" if "ناتج" in item["kind_ar"] else "#d97706"
+                st.markdown(
+                    f"""
+<div style="border:2px solid {border_col};border-radius:12px;padding:12px;background:#ffffff;text-align:center;">
+  <div style="font-size:0.82rem;font-weight:700;color:{border_col};">{item['kind_ar']}</div>
+  <div style="font-weight:700;color:#0f4c5c;font-size:1.05rem;margin-top:3px;">{item['name_ar']} ({item['formula_display']})</div>
+  <div style="display:flex;justify-content:center;margin:6px 0;">{item['svg']}</div>
+  <div style="font-weight:700;color:#1e293b;">الكمية في الوعاء النهائي: {item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
+  <div style="font-size:0.84rem;color:#475569;margin-top:4px;">{item['status_ar']}</div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
+
+        bond_info = s4["bond_transformations"]
+        st.info(f"**تصنيف بيانات الطاقة:** {bond_info['data_classification_ar']} — {bond_info['summary_ar']}")
+        r_str = " + ".join(c["formula_display"] for c in s1["reactant_cards"])
+        p_str = " + ".join(format_chemical_formula_display(y["formula"]) for y in s3["theoretical_yields"])
+        e_fig = ReactionVisualizer.create_reaction_energy_diagram(
+            reactants_str=r_str,
+            products_str=p_str,
+            is_exothermic=bond_info.get("is_exothermic"),
+            delta_h_kj=bond_info.get("estimated_delta_h_kj"),
+            is_illustrative=bond_info.get("is_illustrative", True),
+        )
+        st.plotly_chart(e_fig, use_container_width=True, key="rxn_lab_energy_profile_chart")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_scientific_audit_panel() -> None:
+    """Renders the independent scientific audit summary for the 87-reaction registry & 13 rules."""
+    from reaction_engine.scientific_audit import audit_registry_and_rules
+
+    with st.expander("تقرير التدقيق العلمي المستقل لقاعدة التفاعلات والمراجع (Independent Scientific Registry & Rules Audit)", expanded=False):
+        audit = audit_registry_and_rules()
+        a1, a2, a3, a4 = st.columns(4)
+        a1.metric("التفاعلات المدققة في السجل", f"{audit['passed_reactions']} / {audit['total_reactions']}")
+        a2.metric("المراجع العلمية المستقلة (Unique Citations)", f"{audit['unique_bibliographic_sources']}")
+        a3.metric("تفاعلات بإنثالبي ΔH° موثق رقمياً", f"{audit['quantitative_enthalpy_reactions']}")
+        a4.metric("قواعد الاستنتاج العام المدققة", f"{audit['passed_rules']} / {audit['total_rules']}")
+        if audit["overall_passed"]:
+            st.success(
+                "اجتازت جميع التفاعلات الموثقة (87 تفاعلاً) وقواعد الاستنتاج الكيميائي العام (13 قاعدة) "
+                "فحوص موازنة الذرات والكتلة، اتساق الأطوار الفيزيائية، توافق إشارة الإنثالبي الحرارية، وتفرد المراجع العلمية بنجاح 100%."
+            )
+        rule_rows = [
+            {
+                "معرّف القاعدة (Rule ID)": r["rule_id"],
+                "القاعدة الكيميائية": r["rule_name_ar"],
+                "تفاعل الاختبار المرجعي": " + ".join(r["probe_reactants"]),
+                "المعادلة الموزونة الناتجة": r["balanced_equation"],
+                "معرّف المرجع": r["source_id"],
+                "حالة التدقيق": "ناجح 100%" if r["passed"] else "فشل",
+            }
+            for r in audit["rule_reports"]
+        ]
+        st.dataframe(pd.DataFrame(rule_rows), use_container_width=True, hide_index=True)
+
 
 def _render_substance_reaction_search(
     options: list[dict[str, Any]],

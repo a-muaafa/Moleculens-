@@ -944,7 +944,7 @@ def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
     # R2 — alkali metal with water
     for sp in species:
         if sp["kind"] == KIND_METAL and sp["cation"] in ALKALI_METALS and by_formula.get("H2O"):
-            hydroxide = _salt_formula(sp["cation"], sp["cation_charge"], sp["cation_count"], "OH", 1)
+            hydroxide = _salt_formula(sp["cation"], METAL_ION_CHARGES.get(sp["cation"], 1), 1, "OH", 1)
             return _rule_result(
                 "alkali_water",
                 [sp, by_formula["H2O"]],
@@ -972,9 +972,10 @@ def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
                 continue
             if metal_activity_index(sym) < 0 or not is_more_active_metal(sym, "H"):
                 continue
-            anion = "Cl" if acid["formula"] == "HCl" else "SO4"
+            anion = acid["anion"] if acid.get("anion") else ("Cl" if acid["formula"] == "HCl" else "SO4")
+            anion_charge = acid.get("anion_charge", 1 if anion == "Cl" else 2)
             metal_charge = METAL_ION_CHARGES.get(sym, 2)
-            salt = _salt_formula(sym, metal_charge, 1, anion, 1)
+            salt = _salt_formula(sym, metal_charge, 1, anion, anion_charge)
             extra: dict[str, Any] = {
                 "net_ionic": f"{sym} + 2 H⁺ → {sym}²⁺ + H₂↑ (مع ملح مقابل في المحلول).",
                 "observations": [
@@ -993,7 +994,7 @@ def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
                 continue
             if sp["cation"] in {"H", "NH4"} and sp["anion"] == "CO3":
                 continue
-            salt = _salt_formula(sp["cation"], sp["cation_count"], sp["anion"], 1)
+            salt = _salt_formula(sp["cation"], sp["cation_charge"], sp["cation_count"], acid["anion"], acid["anion_charge"])
             return _rule_result(
                 "acid_carbonate",
                 [acid, sp],
@@ -1111,7 +1112,7 @@ def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
                     [a, b],
                     [precip["formula"], other["formula"]],
                     extra={
-                        "net_ionic": f"{precip['cation']}{_charge_text(precip['cation_charge'])} + {other['cation']}{_charge_text(other['cation_charge'])} → {precip['formula']}(↓)",
+                        "net_ionic": f"{precip['cation']}{_charge_text(precip['cation_charge'])} + {precip['anion']}{_charge_text(-precip['anion_charge'])} → {precip['formula']}(↓)",
                         "observations": obs,
                         "ph_analysis": {"available": False, "summary_ar": "لا يتأثر الـ pH جوهرياً في تبادل الأيونات (لا تُستهلك أيونات H⁺ أو OH⁻).", "detail_ar": ""},
                         "conditions_required_ar": "محلول مائي للطرفين.",
@@ -1185,7 +1186,7 @@ def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
         for sp in species:
             if sp["kind"] != KIND_ELEMENTAL_MOLECULE or sp["formula"] not in {"Cl2", "Br2", "I2", "F2"}:
                 continue
-            halogen = sp["formula"][0]
+            halogen = sp["formula"][:-1]
             halide = _salt_formula(metal["cation"], METAL_ION_CHARGES.get(metal["cation"], 2), 1, halogen, 1)
             return _rule_result(
                 "metal_halogen",
@@ -1358,7 +1359,7 @@ def predict_reaction(
     documented = find_verified_reactions(formulas, reaction_type=None, domain=None)
     if documented:
         rxn = documented[0]
-        payload = _documented_payload(rxn, species)
+        payload = _documented_payload(rxn, species, reactant_inputs)
         payload["alternatives"] = [
             {"reaction_id": r["reaction_id"], "reaction_name_ar": r["reaction_name_ar"], "category": r.get("category", "")}
             for r in documented[1:]
@@ -1381,7 +1382,11 @@ def predict_reaction(
     return _finalize_inferred(inference, species, reactant_inputs)
 
 
-def _documented_payload(rxn: dict[str, Any], species: list[dict[str, Any]]) -> dict[str, Any]:
+def _documented_payload(
+    rxn: dict[str, Any],
+    species: list[dict[str, Any]],
+    reactant_inputs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     reactants = [
         {
             "formula": r["formula"],
@@ -1409,6 +1414,38 @@ def _documented_payload(rxn: dict[str, Any], species: list[dict[str, Any]]) -> d
     eq = format_balanced_equation(rxn["reactants"], rxn["products"])
     conservation = verify_atom_conservation(rxn["reactants"], rxn["products"])
     observations, net_ionic, ph_analysis = _enrich_documented_analysis(rxn, products)
+
+    stoichiometry: dict[str, Any] | None = None
+    yields: list[dict[str, Any]] = []
+    reactants_table: list[dict[str, Any]] = []
+    limiting_reagent = None
+    if reactant_inputs and any(item.get("amount") is not None for item in reactant_inputs):
+        try:
+            user_inputs = [
+                {
+                    "substance": {
+                        "symbol_or_formula": item.get("substance", {}).get("symbol_or_formula", item.get("formula", "")),
+                        "name_ar": item.get("substance", {}).get("name_ar", ""),
+                        "name_en": item.get("substance", {}).get("name_en", ""),
+                    },
+                    "formula": item.get("formula", ""),
+                    "amount": item.get("amount") if item.get("amount") is not None else 1.0,
+                    "unit": item.get("unit", "mol"),
+                }
+                for item in reactant_inputs
+            ]
+            stoich = compute_reaction_stoichiometry(rxn["reactants"], user_inputs)
+            yields = compute_theoretical_yields(rxn["products"], stoich["reaction_extent_mol"])
+            reactants_table = stoich["reactants_breakdown"]
+            limiting_reagent = stoich["limiting_reagent"]
+            stoichiometry = {
+                "reaction_extent_mol": stoich["reaction_extent_mol"],
+                "is_exact_stoichiometric_ratio": stoich["is_exact_stoichiometric_ratio"],
+                "limiting_reagent": limiting_reagent,
+                "excess_reagents": stoich["excess_reagents"],
+            }
+        except Exception as exc:
+            stoichiometry = {"error_ar": f"تعذّر إتمام الحساب الستوكيومتري: {exc}"}
     return {
         "supported": True,
         "mode": "documented",
@@ -1451,6 +1488,10 @@ def _documented_payload(rxn: dict[str, Any], species: list[dict[str, Any]]) -> d
         "conditions": dict(rxn.get("conditions", {})),
         "reference_conditions_spec": dict(rxn.get("reference_conditions_spec", {})),
         "atom_conservation": conservation,
+        "stoichiometry": stoichiometry,
+        "reactants_table": reactants_table,
+        "theoretical_yields": yields,
+        "limiting_reagent": limiting_reagent,
         "explanation_ar": rxn.get("explanation_ar", ""),
         "assumptions_and_limits_ar": rxn.get("assumptions_and_limits_ar", ""),
         "alternatives": [],
