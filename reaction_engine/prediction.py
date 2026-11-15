@@ -1449,6 +1449,7 @@ def _documented_payload(rxn: dict[str, Any], species: list[dict[str, Any]]) -> d
         "documentation_type": rxn.get("documentation_type", ""),
         "documentation_label_ar": rxn.get("documentation_label_ar", ""),
         "conditions": dict(rxn.get("conditions", {})),
+        "reference_conditions_spec": dict(rxn.get("reference_conditions_spec", {})),
         "atom_conservation": conservation,
         "explanation_ar": rxn.get("explanation_ar", ""),
         "assumptions_and_limits_ar": rxn.get("assumptions_and_limits_ar", ""),

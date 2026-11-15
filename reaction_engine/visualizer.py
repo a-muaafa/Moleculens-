@@ -6,6 +6,7 @@ audits atom conservation, and generates interactive Plotly reaction energy coord
 
 from __future__ import annotations
 
+import re
 from typing import Any
 import html
 import plotly.graph_objects as go
@@ -119,23 +120,76 @@ class ReactionVisualizer:
         return audit_rows
 
     @classmethod
+    def _extract_documented_enthalpy_and_direction(
+        cls,
+        reaction_data: dict[str, Any] | None,
+        category: str = "",
+    ) -> tuple[float | None, bool | None]:
+        """
+        Extracts documented Delta H (kJ) if explicitly present in verified reaction conditions,
+        plus qualitative exothermic/endothermic nature when supported by reaction evidence.
+        Returns (documented_delta_h_kj, is_exothermic_or_none).
+        """
+        documented_delta_h: float | None = None
+        is_exothermic: bool | None = None
+
+        text_blobs: list[str] = []
+        if reaction_data:
+            conds = reaction_data.get("conditions") or {}
+            if isinstance(conds, dict):
+                for key in ("thermodynamics_ar", "temperature", "notes"):
+                    val = conds.get(key)
+                    if val:
+                        text_blobs.append(str(val))
+            for obs in reaction_data.get("observations") or []:
+                if isinstance(obs, dict) and obs.get("text_ar"):
+                    text_blobs.append(str(obs["text_ar"]))
+            if reaction_data.get("explanation_ar"):
+                text_blobs.append(str(reaction_data["explanation_ar"]))
+
+            thermo_text = str(conds.get("thermodynamics_ar", "")) if isinstance(conds, dict) else ""
+            if thermo_text:
+                m = re.search(r"ΔH°?[a-zA-Z]*\s*=\s*([+\-−]?\d+(?:\.\d+)?)\s*kJ", thermo_text)
+                if m:
+                    documented_delta_h = float(m.group(1).replace("−", "-"))
+                    is_exothermic = documented_delta_h < 0
+
+        joined = " ".join(text_blobs)
+        if is_exothermic is None:
+            if "طارد للحرارة" in joined or category == "combustion":
+                is_exothermic = True
+            elif "ماص للحرارة" in joined:
+                is_exothermic = False
+
+        return documented_delta_h, is_exothermic
+
+    @classmethod
     def analyze_bond_transformations(
         cls,
         reactants: list[dict[str, Any]],
         products: list[dict[str, Any]],
         category: str = "",
+        reaction_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Identifies and summarizes the chemical bonds broken and formed during the reaction.
+        Identifies bond transformations during a reaction and strictly separates
+        genuinely calculated/documented thermodynamic values from qualitative
+        illustrative descriptions. Never fabricates numeric fallback enthalpies.
         """
         r_formulas = [r.get("formula", "") for r in reactants]
         p_formulas = [p.get("formula", "") for p in products]
 
+        documented_delta_h, qualitative_exothermic = cls._extract_documented_enthalpy_and_direction(
+            reaction_data, category=category
+        )
+
         bonds_broken: list[dict[str, Any]] = []
         bonds_formed: list[dict[str, Any]] = []
+        complete_bde_coverage = False
 
-        # Hydrogen + Oxygen -> Water
-        if set(r_formulas) == {"H2", "O2"} and "H2O" in p_formulas:
+        # Case 1: Complete covalent bond dissociation table coverage
+        if set(r_formulas) == {"H2", "O2"} and set(p_formulas) == {"H2O"}:
+            complete_bde_coverage = True
             bonds_broken = [
                 {"bond": "H-H (تساهمية أحادية)", "count": 2, "energy_kj": 436, "total_kj": 872},
                 {"bond": "O=O (تساهمية ثنائية)", "count": 1, "energy_kj": 498, "total_kj": 498},
@@ -143,49 +197,136 @@ class ReactionVisualizer:
             bonds_formed = [
                 {"bond": "O-H (تساهمية قطبية في H2O)", "count": 4, "energy_kj": 463, "total_kj": 1852},
             ]
-        # Acid + Base neutralization (e.g. HCl + NaOH -> NaCl + H2O)
-        elif ("HCl" in r_formulas or "HNO3" in r_formulas or "CH3COOH" in r_formulas) and ("NaOH" in r_formulas or "KOH" in r_formulas):
+        elif set(r_formulas) == {"H2", "Cl2"} and set(p_formulas) == {"HCl"}:
+            complete_bde_coverage = True
             bonds_broken = [
-                {"bond": "H-Cl / H-A (تساهمية قطبية في الحمض)", "count": 1, "description": "تأين بروتون H+ في الوسط المائي"},
-                {"bond": "Na-OH (رابطة أيونية في القاعدة)", "count": 1, "description": "تحرر أيون الهيدروكسيد OH-"},
+                {"bond": "H-H (تساهمية أحادية)", "count": 1, "energy_kj": 436, "total_kj": 436},
+                {"bond": "Cl-Cl (تساهمية أحادية)", "count": 1, "energy_kj": 242, "total_kj": 242},
             ]
             bonds_formed = [
-                {"bond": "H-OH (رابطة تساهمية في H2O)", "count": 1, "energy_kj": 463, "description": "اتحاد H+ و OH- لتكوين جزيء الماء المستقر"},
-                {"bond": "Na+...Cl- (تجاذب أيوني ملحي)", "count": 1, "description": "أيونات ملحية مميأة في المحلول"},
+                {"bond": "H-Cl (تساهمية قطبية)", "count": 2, "energy_kj": 431, "total_kj": 862},
             ]
-        # Precipitation (e.g. AgNO3 + NaCl -> AgCl + NaNO3)
+        elif set(r_formulas) == {"H2", "Br2"} and set(p_formulas) == {"HBr"}:
+            complete_bde_coverage = True
+            bonds_broken = [
+                {"bond": "H-H (تساهمية أحادية)", "count": 1, "energy_kj": 436, "total_kj": 436},
+                {"bond": "Br-Br (تساهمية أحادية)", "count": 1, "energy_kj": 193, "total_kj": 193},
+            ]
+            bonds_formed = [
+                {"bond": "H-Br (تساهمية قطبية)", "count": 2, "energy_kj": 366, "total_kj": 732},
+            ]
+        elif set(r_formulas) == {"CH4", "O2"} and set(p_formulas) == {"CO2", "H2O"}:
+            complete_bde_coverage = True
+            bonds_broken = [
+                {"bond": "C-H (تساهمية في CH4)", "count": 4, "energy_kj": 413, "total_kj": 1652},
+                {"bond": "O=O (تساهمية ثنائية)", "count": 2, "energy_kj": 498, "total_kj": 996},
+            ]
+            bonds_formed = [
+                {"bond": "C=O (تساهمية ثنائية في CO2)", "count": 2, "energy_kj": 799, "total_kj": 1598},
+                {"bond": "O-H (تساهمية قطبية في H2O)", "count": 4, "energy_kj": 463, "total_kj": 1852},
+            ]
+        # Case 2: Qualitative ionic/aqueous/displacement mechanisms (no complete BDE balance)
+        elif ("HCl" in r_formulas or "HNO3" in r_formulas or "CH3COOH" in r_formulas) and ("NaOH" in r_formulas or "KOH" in r_formulas):
+            if qualitative_exothermic is None:
+                qualitative_exothermic = True
+            bonds_broken = [
+                {"bond": "رابطة المانح البروتوني H-A", "count": 1, "description": "تحرر أيون الهيدروجين المميأ في الوسط المائي"},
+                {"bond": "تآثر القاعدة مع OH-", "count": 1, "description": "توافر أيون الهيدروكسيد في المحلول المائي"},
+            ]
+            bonds_formed = [
+                {"bond": "O-H (تكوين H2O)", "count": 1, "description": "اتحاد H+ و OH- لتكوين جزيء الماء المستقر (مع طاقات تميؤ الأيونات)"},
+                {"bond": "أيونات الملح المميأة", "count": 1, "description": "بقاء الأيونات المتفرجة مميأة في المحلول المائي"},
+            ]
         elif "AgCl" in p_formulas or "BaSO4" in p_formulas:
             bonds_broken = [
-                {"bond": "روابط الإماهة المائية للأيونات", "count": 2, "description": "فقدان غلاف التميؤ المائي"},
+                {"bond": "تآثرات الإماهة المائية للأيونات", "count": 2, "description": "تحرر الأيونات من أغلفة التميؤ المائية"},
             ]
             bonds_formed = [
-                {"bond": "روابط أيونية بلورية في الراسب", "count": 1, "description": "تكون شبكة بلورية صلبة غير ذائبة عالية طاقة الشبيكة"},
+                {"bond": "شبكة أيونية بلورية في الراسب", "count": 1, "description": "تكوّن شبيكة بلورية صلبة شحيحة الذوبان"},
             ]
-        # Single displacement (e.g. Zn + 2HCl -> ZnCl2 + H2)
         elif "H2" in p_formulas and any(r in r_formulas for r in ["Zn", "Fe", "Mg"]):
+            if qualitative_exothermic is None:
+                qualitative_exothermic = True
             bonds_broken = [
-                {"bond": "H-Cl (تساهمية قطبية)", "count": 2, "energy_kj": 431, "total_kj": 862},
-                {"bond": "الرابطة الفلزية للفلز المتفاعل", "count": 1, "description": "أكسدة ذرات الفلز إلى كاتيونات"},
+                {"bond": "H-A (في الحمض) + الرابطة الفلزية للمعدن", "count": 2, "description": "أكسدة ذرات الفلز واختزال البروتونات"},
             ]
             bonds_formed = [
-                {"bond": "H-H (تساهمية أحادية في H2)", "count": 1, "energy_kj": 436, "total_kj": 436},
-                {"bond": "رابطة أيونية في الملح الناتج", "count": 1, "description": "تكون كلوريد الفلز المائي"},
+                {"bond": "H-H (تساهمية في H2) + كاتيون مميأ", "count": 2, "description": "تصاعد غاز الهيدروجين وتكوّن أيون الفلز المميأ في المحلول"},
             ]
-        # Generic decomposition / synthesis fallback
         else:
             bonds_broken = [
-                {"bond": "روابط المتفاعلات الأصلية", "count": len(reactants), "description": "انفصام الروابط التساهمية/الأيونية بين ذرات المواد المتفاعلة"},
+                {"bond": "الروابط الأولية في المتفاعلات", "count": len(reactants), "description": "تفكك أو إعادة ترتيب الروابط في المواد المتفاعلة"},
             ]
             bonds_formed = [
-                {"bond": "روابط النواتج المستقرة", "count": len(products), "description": "إعادة ترتيب الذرات وتكوين روابط جديدة أكثر استقراراً ثرموديناميكياً"},
+                {"bond": "الروابط المتكونة في النواتج", "count": len(products), "description": "تشكل روابط المواد الناتجة"},
             ]
 
-        # Calculate energy estimates if numbers exist
-        total_broken_energy = sum(b.get("total_kj", 0) for b in bonds_broken)
-        total_formed_energy = sum(b.get("total_kj", 0) for b in bonds_formed)
-        est_delta_h = (total_broken_energy - total_formed_energy) if (total_broken_energy and total_formed_energy) else -150.0
+        total_broken_energy: int | None = None
+        total_formed_energy: int | None = None
+        est_delta_h: float | None = None
+        is_exothermic: bool | None = qualitative_exothermic
+        is_illustrative = True
+        calculation_source = "illustrative_qualitative"
 
-        is_exothermic = est_delta_h < 0
+        if documented_delta_h is not None:
+            is_illustrative = False
+            calculation_source = "documented_reference"
+            est_delta_h = round(documented_delta_h, 2)
+            is_exothermic = est_delta_h < 0
+            if complete_bde_coverage:
+                total_broken_energy = sum(int(b.get("total_kj", 0)) for b in bonds_broken)
+                total_formed_energy = sum(int(b.get("total_kj", 0)) for b in bonds_formed)
+        elif complete_bde_coverage:
+            is_illustrative = False
+            calculation_source = "bond_dissociation_table"
+            total_broken_energy = sum(int(b.get("total_kj", 0)) for b in bonds_broken)
+            total_formed_energy = sum(int(b.get("total_kj", 0)) for b in bonds_formed)
+            est_delta_h = float(total_broken_energy - total_formed_energy)
+            is_exothermic = est_delta_h < 0
+
+        if not is_illustrative:
+            if calculation_source == "documented_reference":
+                data_classification_ar = "بيانات طاقة موثقة مرجعياً (Documented Reference Enthalpy — ΔH° من السجل المعتمد)"
+                summary_ar = (
+                    f"قيمة التغير في المحتوى الحراري الموثقة مرجعياً: ΔH° = {est_delta_h} kJ "
+                    f"({'تفاعل طارد للحرارة' if is_exothermic else 'تفاعل ماص للحرارة'}). "
+                    "تفصيل الروابط أدناه يوضح التحولات البنيوية الأساسية؛ أما طاقة التنشيط Ea فتحتاج قياساً حركياً مستقلاً."
+                )
+            else:
+                data_classification_ar = "بيانات طاقة محسوبة من جدول طاقات تفكك الروابط التساهمية القياسي (Calculated from Bond Dissociation Energies)"
+                summary_ar = (
+                    f"تقدير محسوب من متوسط طاقات الروابط القياسية: "
+                    f"طاقة الروابط المتكسرة ({total_broken_energy} kJ/mol) مقابل طاقة الروابط المتكونة ({total_formed_energy} kJ/mol)، "
+                    f"ما يعطي ΔH ≈ {est_delta_h:.1f} kJ/mol ({'طارد للحرارة' if is_exothermic else 'ماص للحرارة'} في الطور الغازي القياسي)."
+                )
+            thermodynamic_type_ar = (
+                "طارد للحرارة (Exothermic — محسوب/موثق)"
+                if is_exothermic
+                else "ماص للحرارة (Endothermic — محسوب/موثق)"
+            )
+        else:
+            data_classification_ar = (
+                "تمثيل توضيحي كيفي فقط (Illustrative Qualitative Only) — "
+                "لا تتوفر طاقات روابط مكتملة (مثل طاقات الشبيكة البلورية أو الإماهة) ولا ΔH° موثق لحساب الطاقة رقمياً"
+            )
+            if is_exothermic is True:
+                thermodynamic_type_ar = "طارد للحرارة كيفياً (Qualitative Exothermic — دون قيمة ΔH رقمية)"
+                summary_ar = (
+                    "وصف توضيحي كيفي للروابط فقط: التفاعل معروف كيفياً بأنه طارد للحرارة، "
+                    "لكن لا تتوفر بيانات كمية مكتملة (كطاقات الشبيكة الأيونية أو الإماهة) لحساب قيمة ΔH رقمياً هنا."
+                )
+            elif is_exothermic is False:
+                thermodynamic_type_ar = "ماص للحرارة كيفياً (Qualitative Endothermic — دون قيمة ΔH رقمية)"
+                summary_ar = (
+                    "وصف توضيحي كيفي للروابط فقط: التفاعل معروف كيفياً بأنه ماص للحرارة، "
+                    "لكن لا تتوفر بيانات كمية مكتملة لحساب قيمة ΔH رقمياً."
+                )
+            else:
+                thermodynamic_type_ar = "غير محدد حرارياً (Thermodynamic Direction Unknown)"
+                summary_ar = (
+                    "تمثيل توضيحي كيفي لتغير الروابط فقط: لا تتوفر في قاعدة البيانات الحالية قيم إنثالبي موثقة "
+                    "أو طاقات روابط مكتملة لهذا التفاعل لتحديد ΔH أو اتجاه التغير الحراري رقمياً."
+                )
 
         return {
             "bonds_broken": bonds_broken,
@@ -194,14 +335,11 @@ class ReactionVisualizer:
             "total_formed_energy_kj": total_formed_energy,
             "estimated_delta_h_kj": est_delta_h,
             "is_exothermic": is_exothermic,
-            "thermodynamic_type_ar": "طارد للحرارة (Exothermic)" if is_exothermic else "ماص للحرارة (Endothermic)",
-            "summary_ar": (
-                f"التفاعل {('طارد للحرارة' if is_exothermic else 'ماص للحرارة')}؛ "
-                f"طاقة الروابط المتكونة ({total_formed_energy} kJ/mol) {'تفوق' if is_exothermic else 'أقل من'} "
-                f"طاقة الروابط المتكسرة ({total_broken_energy} kJ/mol)."
-                if (total_broken_energy and total_formed_energy)
-                else "يتضمن التفاعل إعادة ترتيب شاملة للروابط التساهمية والأيونية للوصول إلى النواتج الأكثر استقراراً."
-            ),
+            "is_illustrative": is_illustrative,
+            "calculation_source": calculation_source,
+            "data_classification_ar": data_classification_ar,
+            "thermodynamic_type_ar": thermodynamic_type_ar,
+            "summary_ar": summary_ar,
         }
 
     @classmethod
@@ -209,39 +347,60 @@ class ReactionVisualizer:
         cls,
         reactants_str: str,
         products_str: str,
-        is_exothermic: bool = True,
+        is_exothermic: bool | None = True,
         delta_h_kj: float | None = None,
-        activation_energy_kj: float = 65.0,
+        activation_energy_kj: float | None = None,
+        is_illustrative: bool = False,
     ) -> go.Figure:
         """
-        Builds an interactive Plotly reaction coordinate energy profile
-        (Potential Energy vs Reaction Progress).
+        Builds an interactive Plotly reaction coordinate energy profile.
+        Strictly separates quantified ΔH/Ea values from illustrative schematic diagrams
+        and never fabricates numeric fallback enthalpies or activation barriers.
         """
-        e_reactants = 100.0
-        delta_h = delta_h_kj if delta_h_kj is not None else (-85.0 if is_exothermic else 45.0)
-        e_products = e_reactants + delta_h
-        e_transition = e_reactants + activation_energy_kj
+        has_quant_dh = (delta_h_kj is not None) and (not is_illustrative)
+        has_quant_ea = activation_energy_kj is not None
 
-        # Construct smooth reaction coordinate curve
-        # Points: 0 to 1 (Reactants), 1 to 2.5 (Rise to TS), 2.5 to 4 (Fall to Products), 4 to 5 (Products)
+        if has_quant_dh and delta_h_kj is not None:
+            eff_exothermic: bool | None = delta_h_kj < 0
+            e_reactants = 0.0
+            e_products = float(delta_h_kj)
+            if has_quant_ea and activation_energy_kj is not None:
+                e_transition = e_reactants + float(activation_energy_kj)
+            else:
+                # Visual barrier placement relative to max level without fabricating numeric Ea
+                e_transition = max(e_reactants, e_products) + max(40.0, abs(delta_h_kj) * 0.25)
+        else:
+            eff_exothermic = is_exothermic
+            e_reactants = 50.0
+            if eff_exothermic is True:
+                e_products = 20.0
+                e_transition = 85.0
+            elif eff_exothermic is False:
+                e_products = 75.0
+                e_transition = 95.0
+            else:
+                e_products = 50.0
+                e_transition = 85.0
+
+        span_r_to_ts = e_transition - e_reactants
+        span_ts_to_p = e_transition - e_products
         xs = [0.0, 0.8, 1.2, 1.8, 2.3, 2.5, 2.7, 3.2, 3.8, 4.2, 5.0]
         ys = [
             e_reactants,
             e_reactants,
-            e_reactants + 15.0,
-            e_reactants + (activation_energy_kj * 0.75),
-            e_transition - 2.0,
+            e_reactants + span_r_to_ts * 0.15,
+            e_reactants + span_r_to_ts * 0.72,
+            e_transition - span_r_to_ts * 0.05,
             e_transition,
-            e_transition - 2.0,
-            e_products + (abs(delta_h) * 0.4 if is_exothermic else 15.0),
-            e_products + 5.0,
+            e_transition - span_ts_to_p * 0.05,
+            e_products + span_ts_to_p * 0.45,
+            e_products + span_ts_to_p * 0.08,
             e_products,
             e_products,
         ]
 
         fig = go.Figure()
 
-        # Smooth curve
         fig.add_trace(
             go.Scatter(
                 x=xs,
@@ -253,7 +412,6 @@ class ReactionVisualizer:
             )
         )
 
-        # Reactants Plateau Marker
         fig.add_trace(
             go.Scatter(
                 x=[0.4],
@@ -266,20 +424,23 @@ class ReactionVisualizer:
             )
         )
 
-        # Transition State Marker
+        if has_quant_ea and activation_energy_kj is not None:
+            ts_text = f"الحالة الانتقالية / المعقد النشط [‡]<br>طاقة التنشيط Ea = {activation_energy_kj:.1f} kJ"
+        else:
+            ts_text = "الحالة الانتقالية / المعقد النشط [‡]<br>حاجز التنشيط Ea (تخطيطي توضيحي — غير مقيس)"
+
         fig.add_trace(
             go.Scatter(
                 x=[2.5],
                 y=[e_transition],
                 mode="markers+text",
                 marker=dict(size=14, color="#dc2626", symbol="diamond"),
-                text=[f"الحالة الانتقالية / المعقد النشط [‡]<br>طاقة التنشيط Ea = {activation_energy_kj:.1f} kJ"],
+                text=[ts_text],
                 textposition="top center",
                 name="المعقد النشط (Transition State)",
             )
         )
 
-        # Products Plateau Marker
         fig.add_trace(
             go.Scatter(
                 x=[4.6],
@@ -287,12 +448,11 @@ class ReactionVisualizer:
                 mode="markers+text",
                 marker=dict(size=12, color="#059669", symbol="square"),
                 text=[f"النواتج<br>{products_str}"],
-                textposition="bottom center" if is_exothermic else "top center",
+                textposition="bottom center" if eff_exothermic is True else "top center",
                 name="النواتج (Products)",
             )
         )
 
-        # Delta H representation line
         fig.add_shape(
             type="line",
             x0=3.8, y0=e_reactants,
@@ -300,7 +460,26 @@ class ReactionVisualizer:
             line=dict(color="#94a3b8", dash="dot", width=1.5),
         )
 
-        enthalpy_text = f"ΔH = {delta_h:.1f} kJ/mol ({'طارد' if is_exothermic else 'ماص'})"
+        if has_quant_dh and delta_h_kj is not None:
+            enthalpy_text = f"ΔH = {delta_h_kj:.1f} kJ ({'طارد' if eff_exothermic else 'ماص'} — محسوب/موثق)"
+            if has_quant_ea:
+                chart_title = "مخطط مسار التفاعل ومستويات الطاقة (قيم موثقة/محسوبة)"
+                yaxis_title = "طاقة الوضع النسبية (kJ)"
+            else:
+                chart_title = "مخطط مسار التفاعل (ΔH موثقة/محسوبة؛ حاجز التنشيط Ea توضيحي فقط)"
+                yaxis_title = "طاقة الوضع النسبية (ΔH محسوبة؛ قمة Ea تخطيطية)"
+            show_y_ticks = has_quant_ea
+        else:
+            if eff_exothermic is True:
+                enthalpy_text = "ΔH < 0 (طارد كيفياً — تمثيل تخطيطي توضيحي بدون رقم)"
+            elif eff_exothermic is False:
+                enthalpy_text = "ΔH > 0 (ماص كيفياً — تمثيل تخطيطي توضيحي بدون رقم)"
+            else:
+                enthalpy_text = "ΔH غير محددة رقمياً (تمثيل تخطيطي توضيحي فقط)"
+            chart_title = "مخطط توضيحي تخطيطي لمسار التفاعل (Illustrative Schematic — ليست قيماً رقمية)"
+            yaxis_title = "مستوى الطاقة النسبي (تخطيطي توضيحي — غير رقمي)"
+            show_y_ticks = False
+
         fig.add_annotation(
             x=4.2,
             y=(e_reactants + e_products) / 2.0,
@@ -313,8 +492,8 @@ class ReactionVisualizer:
 
         fig.update_layout(
             title=dict(
-                text="مخطط مسار التفاعل ومستويات الطاقة (Reaction Energy Coordinate)",
-                font=dict(family="Cairo, sans-serif", size=15, color="#0f4c5c"),
+                text=chart_title,
+                font=dict(family="Cairo, sans-serif", size=14, color="#0f4c5c"),
                 x=0.5,
             ),
             xaxis=dict(
@@ -324,7 +503,8 @@ class ReactionVisualizer:
                 gridcolor="#f1f5f9",
             ),
             yaxis=dict(
-                title="طاقة الوضع الكيميائية (kJ/mol)",
+                title=yaxis_title,
+                showticklabels=show_y_ticks,
                 zeroline=False,
                 gridcolor="#f1f5f9",
             ),
@@ -332,8 +512,8 @@ class ReactionVisualizer:
             paper_bgcolor="#ffffff",
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(l=40, r=40, t=60, b=40),
-            height=380,
+            margin=dict(l=40, r=40, t=65, b=40),
+            height=390,
         )
 
         return fig
