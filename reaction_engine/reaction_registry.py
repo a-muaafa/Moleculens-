@@ -891,13 +891,121 @@ def _species_index() -> dict[str, tuple[str, str]]:
     return index
 
 
+INSOLUBLE_SOLIDS_AND_METALS: set[str] = {
+    "AgCl", "BaSO4", "CaCO3", "Fe(OH)3", "Cu(OH)2", "Mg(OH)2",
+    "CuO", "CaO", "MgO", "Al2O3", "Fe2O3", "ZnO", "MnO2",
+    "Zn", "Fe", "Mg", "Al", "Cu", "Ag", "Na", "Ca", "C", "S",
+}
+
+BIOCHEMICAL_AQUEOUS_SOLUTES: set[str] = {
+    "C6H12O6", "C2H5OH", "C10H16N5O13P3", "C10H15N5O10P2",
+    "H3PO4", "CO(NH2)2", "C12H22O11", "NH3",
+}
+
+DOCUMENTED_THERMODYNAMICS_AR: dict[str, str] = {
+    "NIST-CRC-Neutralization-KOH-HCl": "طارد للحرارة (ΔH° = -57.3 kJ/mol، حرارة التعادل القياسية، CRC 104th Ed.)",
+    "NIST-CRC-Neutralization-NaOH-HNO3": "طارد للحرارة (ΔH° = -57.3 kJ/mol، حرارة التعادل القياسية، CRC 104th Ed.)",
+    "NIST-CRC-Neutralization-KOH-HNO3": "طارد للحرارة (ΔH° = -57.3 kJ/mol، حرارة التعادل القياسية، CRC 104th Ed.)",
+    "CRC-104ed-Sec5-Neutralization-NaOH-H2SO4": "طارد للحرارة (ΔH° = -114.6 kJ/mol، تعادل 2 مول OH⁻ مع H₂SO₄، CRC 104th Ed.)",
+    "CRC-104ed-Sec5-Neutralization-KOH-H2SO4": "طارد للحرارة (ΔH° = -114.6 kJ/mol، تعادل 2 مول OH⁻ مع H₂SO₄، CRC 104th Ed.)",
+    "Vogel-Qual-5ed-MgOH2-HCl": "طارد للحرارة (ΔH° = -111.0 kJ/mol، معادلة هيدروكسيد المغنيسيوم، NIST-JANAF)",
+    "Vogel-Qual-5ed-CaOH2-HCl": "طارد للحرارة (ΔH° = -114.4 kJ/mol، معادلة هيدروكسيد الكالسيوم، NIST-JANAF)",
+    "NIST-JANAF-NH4Cl-Formation": "طارد للحرارة (ΔH° = -176.0 kJ/mol، اتحاد غازي HCl وNH3 لتكوين NH4Cl(s)، NIST-JANAF)",
+    "CRC-104ed-Sec5-AceticAcid-NaOH": "طارد للحرارة (ΔH° = -55.8 kJ/mol، معادلة حمض ضعيف بقاعدة قوية، CRC 104th Ed.)",
+    "Vogel-Quant-5ed-Sec-10.35-Na2CO3-HCl": "طارد للحرارة (ΔH° = -29.4 kJ/mol، معايرة كربونات الصوديوم بحمض الهيدروكلوريك، NIST)",
+    "Vogel-Quant-5ed-Sec-10.36-NaHCO3-HCl": "ماص للحرارة طفيفاً (ΔH° = +11.8 kJ/mol، تفاعل بيكربونات الصوديوم مع HCl وتصاعد CO2، NIST)",
+    "Vogel-Qual-5ed-CaCO3-H2SO4": "طارد للحرارة (ΔH° = -15.2 kJ/mol، تفاعل كربونات الكالسيوم مع حمض الكبريتيك، NIST)",
+    "Vogel-Qual-5ed-CuO-HCl": "طارد للحرارة (ΔH° = -63.5 kJ/mol، إذابة أكسيد النحاس الثنائي في HCl، NIST)",
+    "Vogel-Qual-5ed-CuO-H2SO4": "طارد للحرارة (ΔH° = -75.4 kJ/mol، إذابة أكسيد النحاس الثنائي في H2SO4، NIST)",
+    "Ullmann-Lime-Slaking-CaO-H2O": "طارد للحرارة (ΔH° = -65.2 kJ/mol، إطفاء الجير الحي CaO بالماء، Ullmann 2012)",
+    "Ullmann-2012-SulfuricAcid-SO3-Hydration": "طارد للحرارة بشدة (ΔH° = -132.5 kJ/mol، إماهة ثالث أكسيد الكبريت، Ullmann 2012)",
+    "RHEA:16833-Carbonic-Acid-Hydration": "طارد للحرارة طفيفاً (ΔH° = -20.4 kJ/mol، إماهة ثاني أكسيد الكربون في الماء عند 25 °C)",
+    "NIST-WebBook-CAS-74-84-0-Ethane-Combustion": "طارد للحرارة بشدة (ΔH°c = -3120 kJ لمعادلة 2 مول إيثان، NIST WebBook)",
+    "NIST-WebBook-CAS-74-98-6-Propane-Combustion": "طارد للحرارة بشدة (ΔH°c = -2220 kJ/mol، احتراق البروبان القياسي، NIST WebBook)",
+    "NIST-WebBook-CAS-106-97-8-Butane-Combustion": "طارد للحرارة بشدة (ΔH°c = -5755 kJ لمعادلة 2 مول بيوتان، NIST WebBook)",
+    "NIST-WebBook-CAS-74-85-1-Ethylene-Combustion": "طارد للحرارة بشدة (ΔH°c = -1411 kJ/mol، احتراق الإيثيلين القياسي، NIST WebBook)",
+    "NIST-WebBook-CAS-74-86-2-Acetylene-Combustion": "طارد للحرارة بشدة (ΔH°c = -2600 kJ لمعادلة 2 مول أسيتيلين، NIST WebBook)",
+    "NIST-WebBook-CAS-64-17-5-Ethanol-Calorimetry": "طارد للحرارة بشدة (ΔH°c = -1367 kJ/mol، احتراق الإيثانول السائل القياسي، NIST WebBook)",
+    "NIST-WebBook-CAS-67-56-1-Methanol-Calorimetry": "طارد للحرارة بشدة (ΔH°c = -1452 kJ لمعادلة 2 مول ميثانول، NIST WebBook)",
+    "NIST-WebBook-CAS-71-43-2-Benzene-Combustion": "طارد للحرارة بشدة (ΔH°c = -6535 kJ لمعادلة 2 مول بنزين، NIST WebBook)",
+    "Ullmann-2012-Sulfur-Claus-Combustion-Step": "طارد للحرارة بشدة (ΔH° = -1036 kJ لمعادلة 2 مول H2S، عملية كلاوس، Ullmann 2012)",
+    "NIST-JANAF-CO2-Formation-CAS-124-38-9": "طارد للحرارة (ΔH°f = -393.5 kJ/mol، تكوين CO2 القياسي من الجرافيت والأكسجين، NIST-JANAF)",
+    "CRC-104ed-Sec8-Daniell-Displacement-Zn-Cu": "طارد للحرارة (ΔH° = -218.7 kJ/mol، إزاحة النحاس بواسطة الخارصين، CRC 104th Ed.)",
+    "Greenwood-Earnshaw-2ed-Ch28-Copper-Cementation": "طارد للحرارة (ΔH° = -153.8 kJ/mol، إزاحة النحاس بواسطة الحديد، Greenwood & Earnshaw)",
+    "Vogel-Qual-5ed-Sec-III.26-Zn-Acid-Dissolution": "طارد للحرارة (ΔH° = -153.9 kJ/mol، تفاعل الخارصين مع HCl المخفف، NIST-JANAF)",
+    "Vogel-Qual-5ed-Sec-III.35-Mg-HCl-Dissolution": "طارد للحرارة بشدة (ΔH° = -466.9 kJ/mol، تفاعل المغنيسيوم مع HCl المخفف، NIST-JANAF)",
+    "Vogel-Qual-5ed-Sec-III.20-Fe-HCl-FeCl2": "طارد للحرارة (ΔH° = -89.1 kJ/mol، تفاعل الحديد مع HCl المخفف، NIST-JANAF)",
+    "Vogel-Qual-5ed-Sec-III.22-Al-HCl-Dissolution": "طارد للحرارة بشدة (ΔH° = -1062.7 kJ لمعادلة 2 مول Al مع 6 مول HCl، NIST-JANAF)",
+    "Greenwood-Earnshaw-2ed-Ch3-Kipp-H2-Generation": "طارد للحرارة (ΔH° = -153.9 kJ/mol، تفاعل الخارصين مع حمض الكبريتيك المخفف، NIST)",
+    "Greenwood-Earnshaw-2ed-Ch4-Alkali-Metal-Water": "طارد للحرارة بشدة (ΔH° = -368.6 kJ لمعادلة 2 مول صوديوم مع الماء، Greenwood & Earnshaw)",
+    "CRC-104ed-Sec8-Redox-Cu-AgNO3": "طارد للحرارة (ΔH° = -147.4 kJ/mol، إزاحة الفضة بواسطة النحاس، CRC 104th Ed.)",
+    "NIST-JANAF-MgO-CAS-1309-48-4": "طارد للحرارة بشدة (ΔH° = -1203.2 kJ لمعادلة 2 مول Mg، ΔH°f = -601.6 kJ/mol، NIST-JANAF)",
+    "NIST-JANAF-NaCl-CAS-7647-14-5": "طارد للحرارة بشدة (ΔH° = -822.4 kJ لمعادلة 2 مول NaCl، ΔH°f = -411.2 kJ/mol، NIST-JANAF)",
+    "NIST-JANAF-CaO-CAS-1305-78-8": "طارد للحرارة بشدة (ΔH° = -1269.8 kJ لمعادلة 2 مول CaO، ΔH°f = -634.9 kJ/mol، NIST-JANAF)",
+    "NIST-JANAF-SO2-CAS-7446-09-5": "طارد للحرارة (ΔH°f = -296.8 kJ/mol، احتراق الكبريت إلى SO2، NIST-JANAF)",
+    "Ullmann-2012-SO2-V2O5-Catalytic-Oxidation": "طارد للحرارة (ΔH° = -197.8 kJ لمعادلة 2 مول SO2 إلى 2 مول SO3، Ullmann 2012)",
+    "NIST-JANAF-CO-Oxidation-CAS-630-08-0": "طارد للحرارة (ΔH° = -566.0 kJ لمعادلة 2 مول CO، NIST-JANAF)",
+    "NIST-JANAF-Al2O3-Corundum-CAS-1344-28-1": "طارد للحرارة بشدة (ΔH° = -3351.4 kJ لمعادلة 2 مول Al2O3، ΔH°f = -1675.7 kJ/mol، NIST-JANAF)",
+    "Greenwood-Earnshaw-2ed-Ch28-CuO-Synthesis": "طارد للحرارة (ΔH° = -314.6 kJ لمعادلة 2 مول CuO، NIST-JANAF)",
+    "Ullmann-2012-Iron-Blast-Furnace-Reduction": "طارد للحرارة طفيفاً (ΔH° = -24.8 kJ/mol، اختزال الهيماتيت بغاز CO في الفرن العالي، Ullmann 2012)",
+    "NIST-JANAF-HCl-Synthesis-CAS-7647-01-0": "طارد للحرارة (ΔH° = -184.6 kJ لمعادلة 2 مول HCl، ΔH°f = -92.3 kJ/mol، NIST-JANAF)",
+    "Greenwood-Earnshaw-2ed-Ch11-NO-Oxidation": "طارد للحرارة (ΔH° = -114.1 kJ لمعادلة 2 مول NO، NIST-JANAF)",
+    "NIST-JANAF-ZnO-CAS-1314-13-2": "طارد للحرارة (ΔH° = -701.0 kJ لمعادلة 2 مول ZnO، ΔH°f = -350.5 kJ/mol، NIST-JANAF)",
+    "NIST-JANAF-NO-Zeldovich-CAS-10102-43-9": "ماص للحرارة بشدة (ΔH° = +180.6 kJ لمعادلة 2 مول NO، ΔH°f = +90.29 kJ/mol، NIST-JANAF)",
+    "Ullmann-2012-Lime-Limestone-Calcination": "ماص للحرارة بشدة (ΔH° = +178.3 kJ/mol، الكلسنة الحرارية للحجر الجيري، Ullmann 2012)",
+    "Greenwood-Earnshaw-2ed-Ch14-KClO3-O2-Prep": "طارد للحرارة (ΔH° = -89.4 kJ لمعادلة 2 مول KClO3، تفكك كللورات البوتاسيوم المحفز بـ MnO2)",
+    "Greenwood-Earnshaw-2ed-Ch24-KMnO4-Thermolysis": "ماص للحرارة (ΔH° = +40.2 kJ لمعادلة 2 مول KMnO4، التفكك الحراري لبرمنغنات البوتاسيوم)",
+    "Ullmann-2012-Water-Electrolysis-H2": "ماص للحرارة بشدة (ΔH° = +571.6 kJ لمعادلة 2 مول H2O، التحليل الكهربائي للماء، Ullmann 2012)",
+    "Ullmann-2012-Soda-Ash-Calcination-NaHCO3": "ماص للحرارة (ΔH° = +135.6 kJ لمعادلة 2 مول NaHCO3، عملية سولفاي، Ullmann 2012)",
+    "RHEA:16833-Dehydration": "ماص للحرارة طفيفاً (ΔH° = +20.4 kJ/mol، تفكك حمض الكربونيك في المحلول المائي إلى CO2 وH2O)",
+    "Ullmann-2012-Ammonia-Catalytic-Cracking": "ماص للحرارة (ΔH° = +92.2 kJ لمعادلة 2 مول NH3، تكسير الأمونيا الحراري، Ullmann 2012)",
+    "Vogel-Qual-5ed-Sec-III.10-CuOH2-Dehydration": "ماص للحرارة (ΔH° = +45.5 kJ/mol، نزع الماء الحراري من هيدروكسيد النحاس الثنائي)",
+    "March-8ed-Rxn-16-24-Fischer-Ethyl-Acetate": "قريب من الحياد الحراري (ΔH° = -3.8 kJ/mol، تفاعل أسترة فيشر العكوس، March 8th Ed.)",
+    "March-8ed-Rxn-16-24-Fischer-Methyl-Acetate": "قريب من الحياد الحراري (ΔH° = -4.2 kJ/mol، تفاعل أسترة فيشر العكوس، March 8th Ed.)",
+    "March-8ed-Rxn-15-11-Alkene-Hydrogenation": "طارد للحرارة (ΔH° = -136.3 kJ/mol، هدرجة الإيثيلين الحفزية، NIST WebBook)",
+    "Ullmann-2012-Ethanol-Direct-Hydration": "طارد للحرارة (ΔH° = -45.8 kJ/mol، الإماهة الحفزية للإيثيلين، Ullmann 2012)",
+    "OrgSynth-1966-46-89-Lindlar-Alkyne-Semihydrogenation": "طارد للحرارة (ΔH° = -175.5 kJ/mol، الهدرجة الجزئية للأسيتيلين فوق حفاز لندلار)",
+    "March-8ed-Rxn-14-1-Radical-Chlorination-Methane": "طارد للحرارة (ΔH° = -105.0 kJ/mol، الكلورة الجذرية للميثان، March 8th Ed.)",
+    "Vogel-Org-5ed-Exp-6.11-Nitrobenzene-Nitration": "طارد للحرارة (ΔH° = -117.0 kJ/mol، نترتة البنزين بحمض النيتريك والكبريتيك، Vogel 5th Ed.)",
+    "March-8ed-Rxn-15-24-Alkene-Bromination": "طارد للحرارة (ΔH° = -121.0 kJ/mol، إضافة البروم الإلكتروفيلية إلى الإيثيلين، March 8th Ed.)",
+    "Vogel-Org-5ed-Sec-6.4-Phenol-Alkali-Salt": "طارد للحرارة (ΔH° = -35.4 kJ/mol، تعادل الفينول مع هيدروكسيد الصوديوم المائي)",
+    "Vogel-Org-5ed-Sec-6.22-Anilinium-Chloride": "طارد للحرارة (ΔH° = -31.2 kJ/mol، برتنة الأنيلين في حمض الهيدروكلوريك المائي)",
+    "Lehninger-8ed-Sec-14.3-Alcoholic-Fermentation-Net": "طارد للحرارة (ΔH° = -74.4 kJ/mol، التخمر الكحولي اللاهوائي للجلوكوز، Lehninger 8th Ed.)",
+    "Lehninger-8ed-Ch20-Oxygenic-Photosynthesis-Net": "ماص للطاقة بشدة (ΔH° = +2803 kJ/mol، البناء الضوئي الأكسجيني من CO2 والماء، Lehninger 8th Ed.)",
+    "RHEA:13065": "طارد للحرارة (ΔH° = -20.5 kJ/mol، ΔG°' = -30.5 kJ/mol، الحلمأة الإنزيمية لـ ATP، RHEA:13065)",
+    "RHEA:16113": "طارد للحرارة طفيفاً (ΔH° = -13.8 kJ/mol، تحلل اليوريا المائي بواسطة اليورياز، RHEA:16113)",
+    "RHEA:10068": "طارد للحرارة طفيفاً (ΔH° = -14.9 kJ/mol، حلمأة السكروز بواسطة السكراز، RHEA:10068)",
+}
+
+
 def _infer_species_state(formula: str, category: str, cond: str) -> str:
+    if category == "biochemical_reaction":
+        if formula == "H2O":
+            return "l"
+        if formula in {"CO2", "O2"}:
+            return "g"
+        if formula in BIOCHEMICAL_AQUEOUS_SOLUTES:
+            return "aq"
+    if formula == "SO3" and category == "redox_synthesis":
+        return "g"
+    if formula == "H2CO3":
+        return "aq"
+    if "طور غازي" in cond and formula in {"HCl", "NH3"}:
+        return "g"
     phase = get_standard_phase_code(formula)
+    is_aqueous_medium = (
+        any(k in cond for k in ("محلول", "مخفف", "الماء", "المحاليل"))
+        or (
+            category in {"neutralization", "precipitation", "single_displacement"}
+            and "طور غازي" not in cond
+            and "إطفاء الجير" not in cond
+        )
+    )
     if phase in {"g", "l"}:
-        if formula in {"HCl", "HNO3", "H2SO4", "CH3COOH"} and ("محلول" in cond or category in {"neutralization", "precipitation", "single_displacement"}):
+        if formula in {"HCl", "HNO3", "H2SO4", "CH3COOH"} and is_aqueous_medium:
             return "aq"
         return phase
-    if "محلول" in cond and formula not in {"AgCl", "BaSO4", "CaCO3", "Fe(OH)3", "Cu(OH)2", "Zn", "Fe", "Mg", "Al", "Cu", "Ag", "Na"}:
+    if is_aqueous_medium and formula not in INSOLUBLE_SOLIDS_AND_METALS:
         return "aq"
     return phase
 
@@ -915,17 +1023,19 @@ def _parse_side(side: str, index: dict[str, tuple[str, str]], category: str, con
     return items
 
 
-def _extract_conditions_dict(category: str, cond_str: str) -> dict[str, str]:
+def _extract_conditions_dict(category: str, cond_str: str, source_id: str = "") -> dict[str, str]:
     cond_dict: dict[str, str] = {
         "temperature": cond_str,
         "pressure": "1 atm ما لم يذكر خلاف ذلك",
     }
-    if "محلول مائي" in cond_str or "محلول حمضي" in cond_str or "حمض كبريتيك مخفف" in cond_str:
+    if any(k in cond_str for k in ("محلول مائي", "محلول حمضي", "حمض كبريتيك مخفف", "الماء", "المحاليل")) or category == "biochemical_reaction":
         cond_dict["solvent"] = "محلول مائي (Aqueous Solution)"
     elif "طور غازي" in cond_str or category == "combustion":
         cond_dict["solvent"] = "طور غازي أو تفاعل مباشر بدون مذيب"
     if "حفاز" in cond_str or "إنزيم" in cond_str:
         cond_dict["catalyst"] = cond_str
+    if source_id and source_id in DOCUMENTED_THERMODYNAMICS_AR:
+        cond_dict["thermodynamics_ar"] = DOCUMENTED_THERMODYNAMICS_AR[source_id]
     return cond_dict
 
 
@@ -955,7 +1065,7 @@ def _build_reference_conditions_spec(category: str, lhs: str, cond_str: str) -> 
             "catalyst_is_mandatory": False,
         }
     if category in {"neutralization", "precipitation", "single_displacement"}:
-        allowed_solv = ["aqueous", "neat_gas_solid"] if "طور غازي" in cond_str else ["aqueous"]
+        allowed_solv = ["aqueous", "neat_gas_solid"] if ("طور غازي" in cond_str or "إطفاء الجير" in cond_str) else ["aqueous"]
         return {
             "temp_c_min": 5.0,
             "temp_c_max": 80.0,
@@ -968,6 +1078,18 @@ def _build_reference_conditions_spec(category: str, lhs: str, cond_str: str) -> 
             "catalyst_is_mandatory": False,
         }
     if category == "organic_reaction":
+        if "نترتة" in cond_str:
+            return {
+                "temp_c_min": 40.0,
+                "temp_c_max": 65.0,
+                "temp_c_optimal": 55.0,
+                "pressure_atm_min": 0.8,
+                "pressure_atm_max": 5.0,
+                "pressure_atm_optimal": 1.0,
+                "allowed_solvents": ["neat_gas_solid", "aqueous"],
+                "required_catalysts": ["acid_h2so4"],
+                "catalyst_is_mandatory": True,
+            }
         if "H2SO4" in cond_str:
             return {
                 "temp_c_min": 45.0,
@@ -1065,6 +1187,42 @@ def _build_reference_conditions_spec(category: str, lhs: str, cond_str: str) -> 
         }
 
     # redox_synthesis
+    if lhs == "N2 + O2":
+        return {
+            "temp_c_min": 1000.0,
+            "temp_c_max": 3000.0,
+            "temp_c_optimal": 1800.0,
+            "pressure_atm_min": 0.5,
+            "pressure_atm_max": 20.0,
+            "pressure_atm_optimal": 1.0,
+            "allowed_solvents": ["neat_gas_solid"],
+            "required_catalysts": ["none"],
+            "catalyst_is_mandatory": False,
+        }
+    if lhs == "Fe2O3 + 3CO":
+        return {
+            "temp_c_min": 600.0,
+            "temp_c_max": 1200.0,
+            "temp_c_optimal": 900.0,
+            "pressure_atm_min": 0.8,
+            "pressure_atm_max": 10.0,
+            "pressure_atm_optimal": 2.0,
+            "allowed_solvents": ["neat_gas_solid"],
+            "required_catalysts": ["none"],
+            "catalyst_is_mandatory": False,
+        }
+    if lhs == "2SO2 + O2":
+        return {
+            "temp_c_min": 380.0,
+            "temp_c_max": 550.0,
+            "temp_c_optimal": 450.0,
+            "pressure_atm_min": 1.0,
+            "pressure_atm_max": 10.0,
+            "pressure_atm_optimal": 2.0,
+            "allowed_solvents": ["neat_gas_solid"],
+            "required_catalysts": ["v2o5", "pt_pd"],
+            "catalyst_is_mandatory": True,
+        }
     if any(k in cond_str for k in ["تسخين", "اشتعال", "الفرن العالي", "مرتفعة"]):
         return {
             "temp_c_min": 200.0,
@@ -1115,7 +1273,7 @@ def _build_generated_reactions() -> list[dict[str, Any]]:
                 "reaction_type_ar": label,
                 "reactants": reactants,
                 "products": products,
-                "conditions": _extract_conditions_dict(category, cond),
+                "conditions": _extract_conditions_dict(category, cond, source_id),
                 "reference_conditions_spec": _build_reference_conditions_spec(category, lhs, cond),
                 "explanation_ar": f"تتفاعل المواد ({r_ar}) بنسبة مولية ({ratio}) لتكوين ({p_ar}) وفق المعادلة الموزونة المسجلة في السجل المعتمد.",
                 "assumptions_and_limits_ar": (

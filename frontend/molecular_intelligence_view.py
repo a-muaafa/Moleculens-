@@ -274,15 +274,15 @@ def render_molecular_intelligence_section() -> None:
                 st.caption(det["confidence_interval_note_ar"])
 
                 st.divider()
-                st.markdown("### القسم الثاني: نموذج التنبؤ المدرَّب والمختبر فعلياً (Trained & Holdout-Tested Ridge QSAR)")
+                st.markdown("### القسم الثاني: نموذج التنبؤ المدرَّب والمختبر فعلياً (Trained & Holdout-Tested Ridge QSAR — 120 Compounds)")
                 if qsar.get("model_available"):
                     q1, q2, q3, q4 = st.columns(4)
                     q1.metric("تنبؤ نموذج QSAR", str(qsar["qsar_predicted_logp"]))
-                    q2.metric("R² على مجموعة الاختبار", str(qsar["test_r2"]))
-                    q3.metric("RMSE على مجموعة الاختبار", f"±{qsar['test_rmse']}")
+                    q2.metric("R² (اختبار محجوز / 5-Fold CV)", f"{qsar['test_r2']} / {qsar.get('cv_r2', qsar['test_r2'])}")
+                    q3.metric("RMSE (اختبار محجوز / 5-Fold CV)", f"±{qsar['test_rmse']} / ±{qsar.get('cv_rmse', qsar['test_rmse'])}")
                     q4.metric(
-                        "حجم التدريب / الاختبار",
-                        f"{qsar['n_train']} / {qsar['n_test']} مركب",
+                        "حجم التدريب / الاختبار (الإجمالي)",
+                        f"{qsar['n_train']} / {qsar['n_test']} ({qsar['n_total']})",
                     )
 
                     if qsar["in_applicability_domain"]:
@@ -293,11 +293,12 @@ def render_molecular_intelligence_section() -> None:
                     st.info(eval_res["pedagogical_note_ar"])
 
                     st.markdown(
-                        f"**نتائج مجموعة الاختبار المستقلة الفعلية ({qsar['n_test']} مركبات محتجزة — {qsar['split_method']}):**"
+                        f"**نتائج مجموعة الاختبار المستقلة الفعلية ({qsar['n_test']} مركباً محتجزاً — {qsar['split_method']}):**"
                     )
                     st.caption(
-                        f"مقارنة أداء مجموعة الاختبار المستقلة نفسها — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
-                        f"مقابل Wildman-Crippen cLogP: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
+                        f"مقارنة أداء مجموعة الاختبار المستقلة (30 مركباً) — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
+                        f"|| التحقق المتقاطع الخماسي (5-Fold CV على 120 مركباً): R² = {qsar.get('cv_r2')} | RMSE = {qsar.get('cv_rmse')} | MAE = {qsar.get('cv_mae')} "
+                        f"|| مقابل Wildman-Crippen cLogP على نفس عينة الاختبار: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
                     )
                     st.dataframe(pd.DataFrame(qsar["test_set_table"]), use_container_width=True, hide_index=True)
                 else:

@@ -63,46 +63,141 @@ from search.local_catalog import LOCAL_SCIENTIFIC_CATALOG
 class MolecularIntelligence:
     """Intelligent molecular similarity, virtual editing, and QSAR modeling engine."""
 
-    # Curated dataset of 32 catalog compounds with documented experimental octanol-water LogP values
-    # Sources: Sangster (1989) J. Phys. Chem. Ref. Data 18(3):1111-1227; Hansch, Leo & Hoekman (1995) ACS.
+    # Curated dataset of 120 organic, biochemical, and pharmaceutical compounds with documented experimental octanol-water LogP values
+    # Sources: Sangster (1989) J. Phys. Chem. Ref. Data 18(3):1111-1227; Hansch, Leo & Hoekman (1995) Exploring QSAR, ACS; Avdeef (2012) Absorption and Drug Development, 2nd Ed., Wiley.
     EXPERIMENTAL_LOGP_BENCHMARK_DATASET: list[dict[str, Any]] = [
+        # 1. Alcohols & Polyols (18)
         {"name_en": "Methanol", "name_ar": "الميثانول", "smiles": "CO", "experimental_logp": -0.77},
         {"name_en": "Ethanol", "name_ar": "الإيثانول", "smiles": "CCO", "experimental_logp": -0.31},
         {"name_en": "Isopropanol", "name_ar": "الأيزوبروبانول", "smiles": "CC(C)O", "experimental_logp": 0.05},
-        {"name_en": "1-Propanol", "name_ar": "البروبانول", "smiles": "CCCO", "experimental_logp": 0.25},
+        {"name_en": "1-Propanol", "name_ar": "1-بروبانول", "smiles": "CCCO", "experimental_logp": 0.25},
+        {"name_en": "1-Butanol", "name_ar": "1-بيوتانول", "smiles": "CCCCO", "experimental_logp": 0.88},
+        {"name_en": "Isobutanol", "name_ar": "أيزوبيوتانول", "smiles": "CC(C)CO", "experimental_logp": 0.76},
+        {"name_en": "tert-Butanol", "name_ar": "ثالثي بيوتانول", "smiles": "CC(C)(C)O", "experimental_logp": 0.35},
+        {"name_en": "1-Pentanol", "name_ar": "1-بنتانول", "smiles": "CCCCCO", "experimental_logp": 1.51},
+        {"name_en": "1-Hexanol", "name_ar": "1-هكسانول", "smiles": "CCCCCCO", "experimental_logp": 2.03},
+        {"name_en": "1-Heptanol", "name_ar": "1-هبتانول", "smiles": "CCCCCCCO", "experimental_logp": 2.62},
+        {"name_en": "1-Octanol", "name_ar": "1-أوكتانول", "smiles": "CCCCCCCCO", "experimental_logp": 3.00},
+        {"name_en": "Cyclohexanol", "name_ar": "سيكلوهكسانول", "smiles": "OC1CCCCC1", "experimental_logp": 1.23},
+        {"name_en": "Benzyl Alcohol", "name_ar": "الكحول البنزيلي", "smiles": "OCc1ccccc1", "experimental_logp": 1.10},
+        {"name_en": "2-Phenylethanol", "name_ar": "2-فينيل إيثانول", "smiles": "OCCc1ccccc1", "experimental_logp": 1.36},
+        {"name_en": "Ethylene Glycol", "name_ar": "إيثيلين جليكول", "smiles": "OCCO", "experimental_logp": -1.36},
+        {"name_en": "Propylene Glycol", "name_ar": "بروبيلين جليكول", "smiles": "CC(O)CO", "experimental_logp": -0.92},
         {"name_en": "Glycerol", "name_ar": "الجليسرول", "smiles": "OCC(O)CO", "experimental_logp": -1.76},
+        {"name_en": "D-Glucose", "name_ar": "الجلوكوز", "smiles": "OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O", "experimental_logp": -3.24},
+        # 2. Carboxylic & Hydroxy Acids (18)
         {"name_en": "Formic Acid", "name_ar": "حمض الفورميك", "smiles": "O=CO", "experimental_logp": -0.54},
         {"name_en": "Acetic Acid", "name_ar": "حمض الأسيتيك", "smiles": "CC(=O)O", "experimental_logp": -0.17},
+        {"name_en": "Propionic Acid", "name_ar": "حمض البروبيونيك", "smiles": "CCC(=O)O", "experimental_logp": 0.33},
+        {"name_en": "Butyric Acid", "name_ar": "حمض البيوتيريك", "smiles": "CCCC(=O)O", "experimental_logp": 0.79},
+        {"name_en": "Valeric Acid", "name_ar": "حمض الفاليريك", "smiles": "CCCCC(=O)O", "experimental_logp": 1.39},
+        {"name_en": "Hexanoic Acid", "name_ar": "حمض الهكسانويك", "smiles": "CCCCCC(=O)O", "experimental_logp": 1.92},
+        {"name_en": "Octanoic Acid", "name_ar": "حمض الأوكتانويك", "smiles": "CCCCCCCC(=O)O", "experimental_logp": 3.05},
         {"name_en": "Lactic Acid", "name_ar": "حمض اللاكتيك", "smiles": "CC(O)C(=O)O", "experimental_logp": -0.72},
+        {"name_en": "Glycolic Acid", "name_ar": "حمض الجليكوليك", "smiles": "OCC(=O)O", "experimental_logp": -1.11},
+        {"name_en": "Succinic Acid", "name_ar": "حمض السكسينيك", "smiles": "O=C(O)CCC(=O)O", "experimental_logp": -0.59},
+        {"name_en": "Malic Acid", "name_ar": "حمض الماليك", "smiles": "O=C(O)CC(O)C(=O)O", "experimental_logp": -1.26},
+        {"name_en": "Tartaric Acid", "name_ar": "حمض الطرطريك", "smiles": "O=C(O)C(O)C(O)C(=O)O", "experimental_logp": -1.91},
         {"name_en": "Citric Acid", "name_ar": "حمض الستريك", "smiles": "O=C(O)CC(O)(CC(=O)O)C(=O)O", "experimental_logp": -1.64},
-        {"name_en": "Formaldehyde", "name_ar": "الفورمالديهايد", "smiles": "C=O", "experimental_logp": 0.35},
-        {"name_en": "Acetaldehyde", "name_ar": "الأسيتالديهايد", "smiles": "CC=O", "experimental_logp": -0.34},
-        {"name_en": "Acetone", "name_ar": "الأسيتون", "smiles": "CC(C)=O", "experimental_logp": -0.24},
-        {"name_en": "Butanone", "name_ar": "البيوتانون", "smiles": "CCC(C)=O", "experimental_logp": 0.29},
-        {"name_en": "Methyl Formate", "name_ar": "فورمات الميثيل", "smiles": "COC=O", "experimental_logp": 0.03},
-        {"name_en": "Ethyl Acetate", "name_ar": "أسيتات الإيثيل", "smiles": "CCOC(C)=O", "experimental_logp": 0.73},
-        {"name_en": "Methyl Acetate", "name_ar": "أسيتات الميثيل", "smiles": "COC(C)=O", "experimental_logp": 0.18},
-        {"name_en": "Dimethyl Ether", "name_ar": "ثنائي ميثيل إيثر", "smiles": "COC", "experimental_logp": 0.10},
-        {"name_en": "Urea", "name_ar": "اليوريا", "smiles": "NC(N)=O", "experimental_logp": -2.11},
-        {"name_en": "D-Glucose", "name_ar": "الجلوكوز", "smiles": "OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O", "experimental_logp": -3.24},
-        {"name_en": "Benzene", "name_ar": "البنزين العطري", "smiles": "c1ccccc1", "experimental_logp": 2.13},
-        {"name_en": "Toluene", "name_ar": "التولوين", "smiles": "Cc1ccccc1", "experimental_logp": 2.73},
-        {"name_en": "Phenol", "name_ar": "الفينول", "smiles": "Oc1ccccc1", "experimental_logp": 1.46},
-        {"name_en": "Aniline", "name_ar": "الأنيلين", "smiles": "Nc1ccccc1", "experimental_logp": 0.90},
-        {"name_en": "Nitrobenzene", "name_ar": "النيتروبنزين", "smiles": "O=[N+]([O-])c1ccccc1", "experimental_logp": 1.85},
         {"name_en": "Benzoic Acid", "name_ar": "حمض البنزويك", "smiles": "O=C(O)c1ccccc1", "experimental_logp": 1.87},
         {"name_en": "Salicylic Acid", "name_ar": "حمض الساليسيليك", "smiles": "O=C(O)c1ccccc1O", "experimental_logp": 2.26},
+        {"name_en": "4-Hydroxybenzoic Acid", "name_ar": "4-هيدروكسي حمض البنزويك", "smiles": "O=C(O)c1ccc(O)cc1", "experimental_logp": 1.58},
+        {"name_en": "Phenylacetic Acid", "name_ar": "حمض فينيل أسيتيك", "smiles": "O=C(O)Cc1ccccc1", "experimental_logp": 1.41},
+        {"name_en": "trans-Cinnamic Acid", "name_ar": "حمض السيناميك", "smiles": "O=C(O)/C=C/c1ccccc1", "experimental_logp": 2.13},
+        # 3. Aldehydes, Ketones, Esters & Ethers (22)
+        {"name_en": "Formaldehyde", "name_ar": "الفورمالديهايد", "smiles": "C=O", "experimental_logp": 0.35},
+        {"name_en": "Acetaldehyde", "name_ar": "الأسيتالديهايد", "smiles": "CC=O", "experimental_logp": -0.34},
+        {"name_en": "Propionaldehyde", "name_ar": "البروبيونالديهايد", "smiles": "CCC=O", "experimental_logp": 0.59},
+        {"name_en": "Butyraldehyde", "name_ar": "البيوتيرالديهايد", "smiles": "CCCC=O", "experimental_logp": 0.88},
         {"name_en": "Benzaldehyde", "name_ar": "البنزالديهايد", "smiles": "O=Cc1ccccc1", "experimental_logp": 1.48},
+        {"name_en": "Vanillin", "name_ar": "الفانيلين", "smiles": "COc1cc(C=O)ccc1O", "experimental_logp": 1.21},
+        {"name_en": "Acetone", "name_ar": "الأسيتون", "smiles": "CC(C)=O", "experimental_logp": -0.24},
+        {"name_en": "Butanone", "name_ar": "البيوتانون", "smiles": "CCC(C)=O", "experimental_logp": 0.29},
+        {"name_en": "2-Pentanone", "name_ar": "2-بنتانون", "smiles": "CCCC(C)=O", "experimental_logp": 0.91},
+        {"name_en": "Cyclohexanone", "name_ar": "سيكلوهكسانون", "smiles": "O=C1CCCCC1", "experimental_logp": 0.81},
+        {"name_en": "Acetophenone", "name_ar": "الأسيتوفينون", "smiles": "CC(=O)c1ccccc1", "experimental_logp": 1.58},
+        {"name_en": "Benzophenone", "name_ar": "البنزوفينون", "smiles": "O=C(c1ccccc1)c2ccccc2", "experimental_logp": 3.18},
+        {"name_en": "Methyl Formate", "name_ar": "فورمات الميثيل", "smiles": "COC=O", "experimental_logp": 0.03},
+        {"name_en": "Ethyl Formate", "name_ar": "فورمات الإيثيل", "smiles": "CCOC=O", "experimental_logp": 0.23},
+        {"name_en": "Methyl Acetate", "name_ar": "أسيتات الميثيل", "smiles": "COC(C)=O", "experimental_logp": 0.18},
+        {"name_en": "Ethyl Acetate", "name_ar": "أسيتات الإيثيل", "smiles": "CCOC(C)=O", "experimental_logp": 0.73},
+        {"name_en": "Propyl Acetate", "name_ar": "أسيتات البروبيل", "smiles": "CCCOC(C)=O", "experimental_logp": 1.24},
+        {"name_en": "Butyl Acetate", "name_ar": "أسيتات البيوتيل", "smiles": "CCCCOC(C)=O", "experimental_logp": 1.78},
+        {"name_en": "Methyl Benzoate", "name_ar": "بنزوات الميثيل", "smiles": "COC(=O)c1ccccc1", "experimental_logp": 2.12},
+        {"name_en": "Ethyl Benzoate", "name_ar": "بنزوات الإيثيل", "smiles": "CCOC(=O)c1ccccc1", "experimental_logp": 2.64},
+        {"name_en": "Dimethyl Ether", "name_ar": "ثنائي ميثيل إيثر", "smiles": "COC", "experimental_logp": 0.10},
+        {"name_en": "Diethyl Ether", "name_ar": "ثنائي إيثيل إيثر", "smiles": "CCOCC", "experimental_logp": 0.89},
+        # 4. Ethers, Heterocycles, Amines, Amides & Ureas (20)
+        {"name_en": "Tetrahydrofuran", "name_ar": "رباعي هيدرو الفوران", "smiles": "C1CCOC1", "experimental_logp": 0.46},
+        {"name_en": "1,4-Dioxane", "name_ar": "4،1-ديوكسان", "smiles": "C1COCCO1", "experimental_logp": -0.27},
+        {"name_en": "Anisole", "name_ar": "الأنيسول", "smiles": "COc1ccccc1", "experimental_logp": 2.11},
+        {"name_en": "Methylamine", "name_ar": "ميثيل أمين", "smiles": "CN", "experimental_logp": -0.57},
+        {"name_en": "Ethylamine", "name_ar": "إيثيل أمين", "smiles": "CCN", "experimental_logp": -0.13},
+        {"name_en": "Propylamine", "name_ar": "بروبيل أمين", "smiles": "CCCN", "experimental_logp": 0.48},
+        {"name_en": "Butylamine", "name_ar": "بيوتيل أمين", "smiles": "CCCCN", "experimental_logp": 0.97},
+        {"name_en": "Diethylamine", "name_ar": "ثنائي إيثيل أمين", "smiles": "CCNCC", "experimental_logp": 0.58},
+        {"name_en": "Triethylamine", "name_ar": "ثلاثي إيثيل أمين", "smiles": "CCN(CC)CC", "experimental_logp": 1.45},
+        {"name_en": "Aniline", "name_ar": "الأنيلين", "smiles": "Nc1ccccc1", "experimental_logp": 0.90},
+        {"name_en": "Benzylamine", "name_ar": "بنزيل أمين", "smiles": "NCc1ccccc1", "experimental_logp": 1.09},
+        {"name_en": "Pyridine", "name_ar": "البيريدين", "smiles": "c1ccncc1", "experimental_logp": 0.65},
+        {"name_en": "Quinoline", "name_ar": "الكينولين", "smiles": "c1ccc2ncccc2c1", "experimental_logp": 2.03},
+        {"name_en": "Indole", "name_ar": "الإندول", "smiles": "c1ccc2[nH]ccc2c1", "experimental_logp": 2.14},
+        {"name_en": "Imidazole", "name_ar": "الإيميدازول", "smiles": "c1c[nH]cn1", "experimental_logp": -0.08},
+        {"name_en": "Formamide", "name_ar": "الفورماميد", "smiles": "NC=O", "experimental_logp": -1.51},
+        {"name_en": "Acetamide", "name_ar": "الأسيتاميد", "smiles": "CC(N)=O", "experimental_logp": -1.26},
+        {"name_en": "N,N-Dimethylformamide", "name_ar": "ثنائي ميثيل فورماميد", "smiles": "CN(C)C=O", "experimental_logp": -1.01},
+        {"name_en": "Urea", "name_ar": "اليوريا", "smiles": "NC(N)=O", "experimental_logp": -2.11},
+        {"name_en": "Acetanilide", "name_ar": "الأسيتانيليد", "smiles": "CC(=O)Nc1ccccc1", "experimental_logp": 1.16},
+        # 5. Aromatics, Phenols, Halocarbons & Nitriles (20)
+        {"name_en": "Benzene", "name_ar": "البنزين العطري", "smiles": "c1ccccc1", "experimental_logp": 2.13},
+        {"name_en": "Toluene", "name_ar": "التولوين", "smiles": "Cc1ccccc1", "experimental_logp": 2.73},
+        {"name_en": "Ethylbenzene", "name_ar": "إيثيل بنزين", "smiles": "CCc1ccccc1", "experimental_logp": 3.15},
+        {"name_en": "p-Xylene", "name_ar": "بارا-زيلين", "smiles": "Cc1ccc(C)cc1", "experimental_logp": 3.15},
         {"name_en": "Naphthalene", "name_ar": "النفثالين", "smiles": "c1ccc2ccccc2c1", "experimental_logp": 3.30},
+        {"name_en": "Biphenyl", "name_ar": "ثنائي الفينيل", "smiles": "c1ccc(-c2ccccc2)cc1", "experimental_logp": 4.01},
+        {"name_en": "Anthracene", "name_ar": "الأنثراسين", "smiles": "c1ccc2cc3ccccc3cc2c1", "experimental_logp": 4.45},
+        {"name_en": "Phenol", "name_ar": "الفينول", "smiles": "Oc1ccccc1", "experimental_logp": 1.46},
+        {"name_en": "p-Cresol", "name_ar": "بارا-كريسول", "smiles": "Cc1ccc(O)cc1", "experimental_logp": 1.94},
+        {"name_en": "Catechol", "name_ar": "الكاتيكول", "smiles": "Oc1ccccc1O", "experimental_logp": 0.88},
+        {"name_en": "Resorcinol", "name_ar": "الريسورسينول", "smiles": "Oc1cccc(O)c1", "experimental_logp": 0.80},
+        {"name_en": "Hydroquinone", "name_ar": "الهيدروكينون", "smiles": "Oc1ccc(O)cc1", "experimental_logp": 0.59},
+        {"name_en": "Fluorobenzene", "name_ar": "فلوروبنزين", "smiles": "Fc1ccccc1", "experimental_logp": 2.27},
+        {"name_en": "Chlorobenzene", "name_ar": "كلوروبنزين", "smiles": "Clc1ccccc1", "experimental_logp": 2.84},
+        {"name_en": "Bromobenzene", "name_ar": "بروموبنزين", "smiles": "Brc1ccccc1", "experimental_logp": 2.99},
+        {"name_en": "1,4-Dichlorobenzene", "name_ar": "4،1-ثنائي كلورو بنزين", "smiles": "Clc1ccc(Cl)cc1", "experimental_logp": 3.44},
+        {"name_en": "Nitrobenzene", "name_ar": "النيتروبنزين", "smiles": "O=[N+]([O-])c1ccccc1", "experimental_logp": 1.85},
+        {"name_en": "4-Nitrophenol", "name_ar": "4-نيتروفينول", "smiles": "O=[N+]([O-])c1ccc(O)cc1", "experimental_logp": 1.91},
+        {"name_en": "Benzonitrile", "name_ar": "بنزونيتريل", "smiles": "N#Cc1ccccc1", "experimental_logp": 1.56},
+        {"name_en": "Chloroform", "name_ar": "الكلوروفورم", "smiles": "ClC(Cl)Cl", "experimental_logp": 1.97},
+        # 6. Approved Pharmaceutical Drugs & Bioactive Molecules (22)
         {"name_en": "Aspirin", "name_ar": "الأسبرين", "smiles": "CC(=O)Oc1ccccc1C(=O)O", "experimental_logp": 1.19},
         {"name_en": "Paracetamol", "name_ar": "الباراسيتامول", "smiles": "CC(=O)Nc1ccc(O)cc1", "experimental_logp": 0.46},
+        {"name_en": "Phenacetin", "name_ar": "الفيناسيتين", "smiles": "CCOc1ccc(NC(C)=O)cc1", "experimental_logp": 1.58},
+        {"name_en": "Salicylamide", "name_ar": "الساليسيلاميد", "smiles": "NC(=O)c1ccccc1O", "experimental_logp": 1.28},
         {"name_en": "Ibuprofen", "name_ar": "الإيبوبروفين", "smiles": "CC(C)Cc1ccc(C(C)C(=O)O)cc1", "experimental_logp": 3.97},
+        {"name_en": "Naproxen", "name_ar": "النابروكسين", "smiles": "COc1ccc2cc(C(C)C(=O)O)ccc2c1", "experimental_logp": 3.18},
+        {"name_en": "Ketoprofen", "name_ar": "الكيتوبروفين", "smiles": "CC(C(=O)O)c1cccc(C(=O)c2ccccc2)c1", "experimental_logp": 3.12},
+        {"name_en": "Flurbiprofen", "name_ar": "الفلوربيبروفين", "smiles": "CC(C(=O)O)c1ccc(-c2ccccc2)c(F)c1", "experimental_logp": 4.16},
+        {"name_en": "Diclofenac", "name_ar": "الديكلوفيناك", "smiles": "O=C(O)Cc1ccccc1Nc2c(Cl)cccc2Cl", "experimental_logp": 4.51},
+        {"name_en": "Indomethacin", "name_ar": "الإندوميثاسين", "smiles": "COc1ccc2c(c1)c(CC(=O)O)c(C)n2C(=O)c3ccc(Cl)cc3", "experimental_logp": 4.27},
         {"name_en": "Caffeine", "name_ar": "الكافيين", "smiles": "Cn1c(=O)c2c(ncn2C)n(C)c1=O", "experimental_logp": -0.07},
+        {"name_en": "Theophylline", "name_ar": "الثيوفيلين", "smiles": "Cn1c(=O)c2[nH]cnc2n(C)c1=O", "experimental_logp": -0.02},
+        {"name_en": "Theobromine", "name_ar": "الثيوبرومين", "smiles": "Cn1cnc2c1c(=O)[nH]c(=O)n2C", "experimental_logp": -0.78},
+        {"name_en": "Diazepam", "name_ar": "الديازيبام", "smiles": "CN1C(=O)CN=C(c2ccccc2)c3cc(Cl)ccc13", "experimental_logp": 2.82},
+        {"name_en": "Phenytoin", "name_ar": "الفينيتوين", "smiles": "O=C1NC(=O)C(c2ccccc2)(c3ccccc3)N1", "experimental_logp": 2.47},
+        {"name_en": "Carbamazepine", "name_ar": "الكاربامازيبين", "smiles": "NC(=O)N1c2ccccc2C=Cc3ccccc13", "experimental_logp": 2.45},
+        {"name_en": "Lidocaine", "name_ar": "الليدوكائين", "smiles": "CCN(CC)CC(=O)Nc1c(C)cccc1C", "experimental_logp": 2.44},
+        {"name_en": "Propranolol", "name_ar": "البروبرانولول", "smiles": "CC(C)NCC(O)COc1cccc2ccccc12", "experimental_logp": 3.48},
+        {"name_en": "Metoprolol", "name_ar": "الميتوبرولول", "smiles": "COCCc1ccc(OCC(O)CNC(C)C)cc1", "experimental_logp": 1.88},
+        {"name_en": "Warfarin", "name_ar": "الوارفارين", "smiles": "CC(=O)CC(c1ccccc1)c2c(O)c3ccccc3oc2=O", "experimental_logp": 2.70},
+        {"name_en": "Metronidazole", "name_ar": "الميترونيدازول", "smiles": "Cc1ncc([N+](=O)[O-])n1CCO", "experimental_logp": -0.02},
+        {"name_en": "Prednisolone", "name_ar": "البريدنيزولون", "smiles": "C[C@]12C=CC(=O)C=C1CC[C@@H]3[C@@H]2[C@@H](O)C[C@]4(C)[C@H]3CC[C@]4(O)C(=O)CO", "experimental_logp": 1.62},
     ]
 
     DATASET_CITATION = (
         "Sangster, J. (1989) J. Phys. Chem. Ref. Data, 18(3), 1111-1227; "
-        "Hansch, C., Leo, A., and Hoekman, D. (1995) Exploring QSAR, ACS."
+        "Hansch, C., Leo, A., and Hoekman, D. (1995) Exploring QSAR, ACS; "
+        "Avdeef, A. (2012) Absorption and Drug Development, 2nd Ed., Wiley."
     )
     CRIPPEN_CITATION = (
         "Wildman, S.A. and Crippen, G.M. (1999) J. Chem. Inf. Comput. Sci., 39(5), 868-873."
@@ -120,6 +215,10 @@ class MolecularIntelligence:
         "FractionCSP3",
         "NumHeteroatoms",
         "LabuteASA",
+        "NumCarbons",
+        "NumNitrogens",
+        "NumOxygens",
+        "NumHalogens",
     ]
     _CACHED_QSAR_BUNDLE: dict[str, Any] | None = None
 
@@ -266,6 +365,11 @@ class MolecularIntelligence:
     @classmethod
     def _extract_qsar_features(cls, mol) -> list[float]:
         """Extracts RDKit physicochemical and topological features (excluding Crippen LogP)."""
+        atoms = list(mol.GetAtoms())
+        carbons = sum(1 for a in atoms if a.GetAtomicNum() == 6)
+        nitrogens = sum(1 for a in atoms if a.GetAtomicNum() == 7)
+        oxygens = sum(1 for a in atoms if a.GetAtomicNum() == 8)
+        halogens = sum(1 for a in atoms if a.GetAtomicNum() in (9, 17, 35, 53))
         return [
             float(Descriptors.MolWt(mol)),
             float(Descriptors.TPSA(mol)),
@@ -278,6 +382,10 @@ class MolecularIntelligence:
             float(rdMolDescriptors.CalcFractionCSP3(mol)),
             float(rdMolDescriptors.CalcNumHeteroatoms(mol)),
             float(rdMolDescriptors.CalcLabuteASA(mol)),
+            float(carbons),
+            float(nitrogens),
+            float(oxygens),
+            float(halogens),
         ]
 
     @classmethod
@@ -580,8 +688,33 @@ class MolecularIntelligence:
         y_arr = np.asarray(y_vals, dtype=float)
         crippen_arr = np.asarray(crippen_vals, dtype=float)
 
+        def _fit_predict_numpy(X_train: np.ndarray, y_train: np.ndarray) -> _RidgeNumpyPredictor:
+            mu_v = np.mean(X_train, axis=0)
+            std_v = np.std(X_train, axis=0, ddof=0)
+            std_v[std_v == 0] = 1.0
+            X_tr_s = (X_train - mu_v) / std_v
+            y_mean_v = float(np.mean(y_train))
+            y_c_v = y_train - y_mean_v
+            alpha_v = 1.0
+            beta_v = np.linalg.solve(
+                X_tr_s.T @ X_tr_s + alpha_v * np.eye(X_tr_s.shape[1]),
+                X_tr_s.T @ y_c_v,
+            )
+            return _RidgeNumpyPredictor(mu_v, std_v, beta_v, y_mean_v)
+
+        def _r2_np(y_t: np.ndarray, y_p: np.ndarray) -> float:
+            ss_res = float(np.sum((y_t - y_p) ** 2))
+            ss_tot = float(np.sum((y_t - np.mean(y_t)) ** 2))
+            return 1.0 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
+
+        n_samples = len(valid_records)
+        perm = np.random.RandomState(42).permutation(n_samples)
+        n_test_count = int(round(n_samples * 0.25))
+        test_idx = perm[:n_test_count]
+        train_idx = perm[n_test_count:]
+
         if SKLEARN_AVAILABLE:
-            indices = np.arange(len(valid_records))
+            indices = np.arange(n_samples)
             train_idx, test_idx = train_test_split(indices, test_size=0.25, random_state=42)
 
             pipeline = Pipeline([
@@ -603,39 +736,33 @@ class MolecularIntelligence:
             crippen_test_mae = round(float(mean_absolute_error(y_true_test, crippen_test)), 3)
             model_predictor = pipeline
         else:
-            test_idx = np.array([29, 15, 24, 17, 8, 9, 30, 25])
-            train_idx = np.array([i for i in range(len(valid_records)) if i not in set(test_idx)])
-
-            X_tr = X_arr[train_idx]
-            y_tr = y_arr[train_idx]
-            mu = np.mean(X_tr, axis=0)
-            std = np.std(X_tr, axis=0, ddof=0)
-            std[std == 0] = 1.0
-            X_tr_s = (X_tr - mu) / std
-            y_mean = float(np.mean(y_tr))
-            y_c = y_tr - y_mean
-
-            alpha = 1.0
-            beta = np.linalg.solve(X_tr_s.T @ X_tr_s + alpha * np.eye(X_tr_s.shape[1]), X_tr_s.T @ y_c)
-            model_predictor = _RidgeNumpyPredictor(mu, std, beta, y_mean)
-
-            X_te_s = (X_arr[test_idx] - mu) / std
-            y_pred_test = X_te_s @ beta + y_mean
+            model_predictor = _fit_predict_numpy(X_arr[train_idx], y_arr[train_idx])
+            y_pred_test = model_predictor.predict(X_arr[test_idx])
             y_true_test = y_arr[test_idx]
             crippen_test = crippen_arr[test_idx]
 
-            def _r2(y_t: np.ndarray, y_p: np.ndarray) -> float:
-                ss_res = float(np.sum((y_t - y_p) ** 2))
-                ss_tot = float(np.sum((y_t - np.mean(y_t)) ** 2))
-                return 1.0 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
-
-            test_r2 = round(_r2(y_true_test, y_pred_test), 3)
+            test_r2 = round(_r2_np(y_true_test, y_pred_test), 3)
             test_rmse = round(float(np.sqrt(np.mean((y_true_test - y_pred_test) ** 2))), 3)
             test_mae = round(float(np.mean(np.abs(y_true_test - y_pred_test))), 3)
 
-            crippen_test_r2 = round(_r2(y_true_test, crippen_test), 3)
+            crippen_test_r2 = round(_r2_np(y_true_test, crippen_test), 3)
             crippen_test_rmse = round(float(np.sqrt(np.mean((y_true_test - crippen_test) ** 2))), 3)
             crippen_test_mae = round(float(np.mean(np.abs(y_true_test - crippen_test))), 3)
+
+        # 5-Fold Cross-Validation across all 120 compounds
+        cv_folds = 5
+        fold_slices = np.array_split(perm, cv_folds)
+        cv_preds = np.zeros_like(y_arr)
+        all_idx_set = set(range(n_samples))
+        for val_idx_arr in fold_slices:
+            val_set = set(int(x) for x in val_idx_arr)
+            tr_idx_arr = np.array([i for i in range(n_samples) if i not in val_set], dtype=int)
+            fold_model = _fit_predict_numpy(X_arr[tr_idx_arr], y_arr[tr_idx_arr])
+            cv_preds[val_idx_arr] = fold_model.predict(X_arr[val_idx_arr])
+
+        cv_r2 = round(_r2_np(y_arr, cv_preds), 3)
+        cv_rmse = round(float(np.sqrt(np.mean((y_arr - cv_preds) ** 2))), 3)
+        cv_mae = round(float(np.mean(np.abs(y_arr - cv_preds))), 3)
 
         test_set_table = []
         for idx_i, pred_val in zip(test_idx, y_pred_test):
@@ -657,15 +784,19 @@ class MolecularIntelligence:
         bundle = {
             "available": True,
             "pipeline": model_predictor,
-            "model_name": "Ridge Regression QSAR Model (StandardScaler + Ridge alpha=1.0)",
+            "model_name": "Ridge Regression QSAR Model (StandardScaler + Ridge alpha=1.0, 15 Descriptors)",
             "descriptor_names": list(cls._QSAR_FEATURE_NAMES),
             "n_total": int(len(valid_records)),
             "n_train": int(len(train_idx)),
             "n_test": int(len(test_idx)),
-            "split_method": "75% Train / 25% Holdout Test Split (random_state=42)",
+            "split_method": "75% Train (90) / 25% Holdout Test (30) + 5-Fold Cross-Validation (random_state=42)",
             "test_r2": test_r2,
             "test_rmse": test_rmse,
             "test_mae": test_mae,
+            "cv_folds": cv_folds,
+            "cv_r2": cv_r2,
+            "cv_rmse": cv_rmse,
+            "cv_mae": cv_mae,
             "crippen_test_r2": crippen_test_r2,
             "crippen_test_rmse": crippen_test_rmse,
             "crippen_test_mae": crippen_test_mae,
@@ -708,9 +839,9 @@ class MolecularIntelligence:
             in_ad = (ad["mw_min"] <= mw <= ad["mw_max"]) and (ad["heavy_min"] <= heavy <= ad["heavy_max"])
 
             ad_note = (
-                f"المركب ضمن نطاق الكتلة والذرات لمجموعة التدريب (MW بين {ad['mw_min']} و {ad['mw_max']} g/mol)."
+                f"المركب ضمن مجال انطباق مجموعة التدريب ({qsar_bundle['n_train']} مركباً، الكتلة المولية MW بين {ad['mw_min']} و {ad['mw_max']} g/mol، وعدد الذرات الثقيلة بين {ad['heavy_min']} و {ad['heavy_max']})."
                 if in_ad
-                else f"تنبيه مجال الانطباق: المركب خارج نطاق تدريب النموذج الصغير (MW = {mw:.1f} مقارنة بنطاق التدريب [{ad['mw_min']}-{ad['mw_max']}])، لذا قد تنخفض موثوقية التنبؤ بالاستقراء."
+                else f"تنبيه مجال الانطباق: المركب خارج نطاق تدريب النموذج (MW = {mw:.1f} g/mol، الذرات الثقيلة = {heavy} مقارنة بنطاق التدريب [{ad['mw_min']}-{ad['mw_max']}] g/mol)، لذا قد تنخفض موثوقية التنبؤ بالاستقراء."
             )
 
             qsar_eval = {
@@ -727,6 +858,10 @@ class MolecularIntelligence:
                 "test_r2": qsar_bundle["test_r2"],
                 "test_rmse": qsar_bundle["test_rmse"],
                 "test_mae": qsar_bundle["test_mae"],
+                "cv_folds": qsar_bundle["cv_folds"],
+                "cv_r2": qsar_bundle["cv_r2"],
+                "cv_rmse": qsar_bundle["cv_rmse"],
+                "cv_mae": qsar_bundle["cv_mae"],
                 "crippen_test_r2": qsar_bundle["crippen_test_r2"],
                 "crippen_test_rmse": qsar_bundle["crippen_test_rmse"],
                 "crippen_test_mae": qsar_bundle["crippen_test_mae"],
@@ -739,15 +874,16 @@ class MolecularIntelligence:
         exp_sentence = (
             f" القيمة التجريبية المرجعية المسجلة لهذا المركب هي {exp_val} (بفارق مطلق {det['abs_error_vs_experimental']} عن cLogP)."
             if exp_val is not None
-            else " لا تتوفر قيمة تجريبية مسجلة لهذا المركب في مجموعة الاختبار المحلية البالغ حجمها 32 مركباً."
+            else " لا تتوفر قيمة تجريبية مسجلة لهذا المركب في مجموعة البيانات المرجعية المحلية البالغ حجمها 120 مركباً."
         )
 
         if qsar_eval.get("model_available"):
             pedagogical_note = (
                 f"1) الحساب الحتمي (RDKit Wildman-Crippen cLogP): القيمة = {clogp_val} وهي ناتجة عن جمع مساهمات الذرات بدون تدريب إحصائي أو فاصل ثقة لكل مركب. "
-                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
-                f"جرى تدريبه على {qsar_eval['n_train']} مركباً واختباره على {qsar_eval['n_test']} مركبات مستقلة "
-                f"فحقق على مجموعة الاختبار R² = {qsar_eval['test_r2']} و RMSE = {qsar_eval['test_rmse']}.{exp_sentence}"
+                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR على 120 مركباً): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
+                f"جرى تدريبه على {qsar_eval['n_train']} مركباً واختباره على {qsar_eval['n_test']} مركباً مستقلاً "
+                f"فحقق على مجموعة الاختبار المستقلة R² = {qsar_eval['test_r2']} و RMSE = {qsar_eval['test_rmse']} "
+                f"(وفي التحقق المتقاطع الخماسي 5-Fold CV على كامل الـ 120 مركباً: R² = {qsar_eval['cv_r2']} و RMSE = {qsar_eval['cv_rmse']}).{exp_sentence}"
             )
         else:
             pedagogical_note = (
@@ -763,11 +899,11 @@ class MolecularIntelligence:
             "qsar_model_evaluation": qsar_eval,
             "methodology_ar": (
                 "فصل منهجي بين: (أ) حساب cLogP الحتمي بطريقة التجزئة الذرية Wildman-Crippen، "
-                "و (ب) نموذج Ridge QSAR المدرَّب والمقيَّم فعلياً على مجموعة اختبار مستقلة."
+                "و (ب) نموذج Ridge QSAR (15 واصفاً جزيئياً غير كريبيني) المدرَّب والمقيَّم فعلياً على 120 مركباً مرجعياً (90 للتدريب / 30 للاختبار المستقل + تحقق متقاطع خماسي 5-Fold CV)."
             ),
             "limitations_ar": (
                 "حساب Wildman-Crippen cLogP قد يختلف عن القياس التجريبي عند وجود روابط هيدروجينية داخلية أو تأين يعتمد على pH (مثل الأحماض والقواعد والأيونات الثنائية). "
-                "أما نموذج QSAR المحلي فمدرَّب على 24 مركباً ومختبر على 8 مركبات مرجعية فقط لتوضيح منهجية التقييم الحقيقي، ولا يُعمَّم كأداة حسم دوائي على مركبات خارج مجال انطباقه."
+                "أما نموذج QSAR المحلي فمدرَّب على 90 مركباً ومختبر على 30 مركباً مرجعياً (مع تحقق متقاطع 5-Fold CV على 120 مركباً تشمل الكحولات والأحماض والأمينات والعطريات والأدوية المعتمدة)، ويجب دائماً مراعاة مجال الانطباق (Applicability Domain) قبل تعميم التنبؤ على جزيئات ضخمة أو معقدة."
             ),
             "pedagogical_note_ar": pedagogical_note,
         }

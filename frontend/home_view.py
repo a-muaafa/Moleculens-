@@ -115,8 +115,8 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
   <h3>4. Molecular Intelligence</h3>
   <p><strong>{('الذكاء الجزيئي والتعديل البنيوي ومقارنة التشابه' if is_ar else 'Molecular Intelligence & Structure Modification')}</strong></p>
   <p>
-    {('حساب بصمات مورغان (Morgan Fingerprints) ومعامل تانيموتو، التعديل البنيوي للمجموعات الوظيفية مع دراسة الفروق الدوائية، وتقييم تنبؤات LogP بفواصل ثقة 95%.' if is_ar
-      else 'Morgan Fingerprints and Tanimoto similarity, functional group structure editing with delta ADMET metrics, and LogP benchmark evaluation with 95% CI.')}
+    {('حساب بصمات مورغان (Morgan Fingerprints) ومعامل تانيموتو، التعديل البنيوي للمجموعات الوظيفية مع دراسة الفروق الدوائية، وتقييم نموذج QSAR لتنبؤ LogP على 120 مركباً مرجعياً (90 تدريب / 30 اختبار + تحقق متقاطع 5-Fold CV).' if is_ar
+      else 'Morgan Fingerprints and Tanimoto similarity, functional group structure editing with delta ADMET metrics, and QSAR LogP evaluation on 120 experimental reference compounds (90 train / 30 test + 5-Fold CV).')}
   </p>
 </div>
 """,

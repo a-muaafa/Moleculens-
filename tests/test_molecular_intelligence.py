@@ -106,7 +106,7 @@ def test_structure_modification_invalid_smiles():
 
 
 def test_evaluate_logp_prediction_known_molecule():
-    # Ibuprofen (held-out molecule with experimental LogP=3.97, MW above small training range max 194.19)
+    # Ibuprofen (experimental LogP=3.97, MW=206.3 inside expanded 90-molecule training range [31.06, 360.45])
     ibuprofen_smiles = "CC(C)Cc1ccc(cc1)C(C)C(=O)O"
     eval_result = MolecularIntelligence.evaluate_logp_prediction(ibuprofen_smiles)
     assert eval_result["available"] is True
@@ -120,20 +120,23 @@ def test_evaluate_logp_prediction_known_molecule():
 
     qsar = eval_result["qsar_model_evaluation"]
     assert qsar["model_available"] is True
-    assert qsar["n_total"] == 32
-    assert qsar["n_train"] == 24
-    assert qsar["n_test"] == 8
-    assert qsar["test_r2"] > 0.7
+    assert qsar["n_total"] == 120
+    assert qsar["n_train"] == 90
+    assert qsar["n_test"] == 30
+    assert qsar["test_r2"] > 0.8
     assert qsar["test_rmse"] > 0.0
-    assert len(qsar["test_set_table"]) == 8
-    assert qsar["in_applicability_domain"] is False
+    assert qsar["cv_folds"] == 5
+    assert qsar["cv_r2"] > 0.8
+    assert qsar["cv_rmse"] > 0.0
+    assert len(qsar["test_set_table"]) == 30
+    assert qsar["in_applicability_domain"] is True
     assert eval_result["methodology_ar"] != ""
     assert "pedagogical_note_ar" in eval_result
 
-    # Aspirin falls inside training MW range -> applicability domain True
-    aspirin_eval = MolecularIntelligence.evaluate_logp_prediction("CC(=O)Oc1ccccc1C(=O)O")
-    assert aspirin_eval["available"] is True
-    assert aspirin_eval["qsar_model_evaluation"]["in_applicability_domain"] is True
+    # Amoxicillin (MW = 365.4 > 360.45 training max) is flagged as outside applicability domain
+    amox_eval = MolecularIntelligence.evaluate_logp_prediction("CC1(C)SC2C(NC(=O)C(N)c3ccc(O)cc3)C(=O)N2C1C(=O)O")
+    assert amox_eval["available"] is True
+    assert amox_eval["qsar_model_evaluation"]["in_applicability_domain"] is False
 
 
 def test_evaluate_logp_prediction_invalid_molecule():
@@ -151,6 +154,10 @@ def test_evaluate_logp_prediction_numpy_fallback_when_sklearn_missing(monkeypatc
     assert eval_result["available"] is True
     qsar = eval_result["qsar_model_evaluation"]
     assert qsar["model_available"] is True
-    assert qsar["test_r2"] > 0.7
+    assert qsar["n_total"] == 120
+    assert qsar["n_train"] == 90
+    assert qsar["n_test"] == 30
+    assert qsar["test_r2"] > 0.8
+    assert qsar["cv_r2"] > 0.8
     assert qsar["test_rmse"] > 0.0
-    assert len(qsar["test_set_table"]) == 8
+    assert len(qsar["test_set_table"]) == 30
