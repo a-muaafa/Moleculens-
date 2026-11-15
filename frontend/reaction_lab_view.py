@@ -481,14 +481,16 @@ def _render_scientific_audit_panel() -> None:
         audit = audit_registry_and_rules()
         a1, a2, a3, a4 = st.columns(4)
         a1.metric("التفاعلات المدققة في السجل", f"{audit['passed_reactions']} / {audit['total_reactions']}")
-        a2.metric("المراجع العلمية المستقلة (Unique Citations)", f"{audit['unique_bibliographic_sources']}")
+        a2.metric("مراجع تم التحقق منها يدوياً", f"{audit.get('manually_verified_references', 0)} / {audit['total_reactions']}")
         a3.metric("تفاعلات بإنثالبي ΔH° موثق رقمياً", f"{audit['quantitative_enthalpy_reactions']}")
         a4.metric("قواعد الاستنتاج العام المدققة", f"{audit['passed_rules']} / {audit['total_rules']}")
         if audit["overall_passed"]:
             st.success(
-                "اجتازت جميع التفاعلات الموثقة (87 تفاعلاً) وقواعد الاستنتاج الكيميائي العام (13 قاعدة) "
-                "فحوص موازنة الذرات والكتلة، اتساق الأطوار الفيزيائية، توافق إشارة الإنثالبي الحرارية، وتفرد المراجع العلمية بنجاح 100%."
+                f"اجتازت جميع التفاعلات ({audit['total_reactions']}) وقواعد الاستنتاج ({audit['total_rules']}) "
+                "فحوص موازنة الذرات والكتلة، اتساق الأطوار الفيزيائية، توافق إشارة الإنثالبي، "
+                "وسلامة نطاقات الظروف المرجعية."
             )
+        st.warning(audit["reference_check_scope_ar"])
         rule_rows = [
             {
                 "معرّف القاعدة (Rule ID)": r["rule_id"],
@@ -496,7 +498,7 @@ def _render_scientific_audit_panel() -> None:
                 "تفاعل الاختبار المرجعي": " + ".join(r["probe_reactants"]),
                 "المعادلة الموزونة الناتجة": r["balanced_equation"],
                 "معرّف المرجع": r["source_id"],
-                "حالة التدقيق": "ناجح 100%" if r["passed"] else "فشل",
+                "حالة التدقيق": "ناجح" if r["passed"] else "فشل",
             }
             for r in audit["rule_reports"]
         ]

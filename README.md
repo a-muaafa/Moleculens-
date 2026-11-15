@@ -3,6 +3,14 @@
 **الشعار (Slogan):** See Molecules. Understand Science.  
 **الفريق التطويري (Development Team):** BioCode
 
+> **English summary (for judges):** MolecuLens is a bilingual (Arabic/English) learning platform for pharmacy and science students. It searches substances, shows 2D/3D structures, explains safety data, and computes reactions **only when they are documented or follow a verified general rule**. It never invents a reaction. Its LogP module separates the deterministic Wildman-Crippen calculation from a trained Ridge QSAR model that is validated with a holdout split, 5-fold CV, and a leave-one-chemical-class-out test, and always compared against Crippen. Reproduce the numbers with `python scripts/evaluate_logp.py`.
+
+## ما لا يدّعيه المشروع (Scope & Honest Limits)
+- التعديل البنيوي افتراضي (`in silico`): لا يمثل تفاعلاً مخبرياً مثبتاً ولا يقول شيئاً عن الظروف أو المردود أو الانتقائية الموقعية، ولا يُثبت تحسن النفاذية أو الفعالية.
+- نموذج QSAR مبني على مجموعة صغيرة نسبياً (120 مركباً) من سلاسل متجانسة؛ التقسيم العشوائي متفائل، والتحقق بحجب الفئة الكيميائية هو المقياس الأصدق، وقد لا يتفوق النموذج على Crippen.
+- تدقيق المراجع في السجل فحص شكلي (وجود المعرّف والنص والرابط)، ولا يثبت أن الصفحة المذكورة تدعم التفاعل؛ عدد المراجع المُتحقَّق منها يدوياً يظهر في تقرير التدقيق (`REFERENCE_VERIFIED_IDS`).
+- المشروع تعليمي ولا يُستخدم لقرارات علاجية أو سلامة مخبرية.
+
 ---
 
 ## 1. الفكرة العامة للمنصة (Platform Overview)
@@ -101,7 +109,7 @@
 ### 9. الذكاء الجزيئي والتعديل البنيوي ومقارنة التشابه (`chemistry_engine/molecular_intelligence.py`)
 - **بصمات مورغان ومعامل تانيموتو:** حساب بصمات `Morgan Fingerprints (radius=2, 2048 bits)` ومعامل `Tanimoto Similarity` للبحث التلقائي عن المركبات الأكثر تشابهاً بنيوياً في السجل العلمي.
 - **محرر التعديل البنيوي الافتراضي (`in silico`):** نمذجة استبدال المجموعات الوظيفية (مثل `-OH -> -Cl`، `-CH3 -> -COOH`، الأسترة، الأسيلة، الفلورة) عبر `SMARTS` مع فحوصات تحقق متعددة (تكافؤ `RDKit`، الشظية المفردة، انعدام الجذور، تنبيهات الاستقرار، ومطابقة السجل المحلي) وحساب الفروق الفيزيوكيميائية (`Delta MW, cLogP, TPSA, HBD, HBA`) مع تحذيرات علمية صريحة تمنع استنتاج الفعالية الدوائية أو النفاذية الحيوية.
-- **فصل حساب `cLogP` الحتمي عن تقييم `QSAR` التجريبي الموسّع (120 مركباً):** فصل حاسبة `Wildman-Crippen cLogP` الحتمية (بلا فواصل ثقة اصطناعية) عن نموذج `Ridge Regression QSAR` المُدرَّب والمُختبَر فعلياً على **120 مركباً كيميائياً ودوائياً موثقاً** (`90` للتدريب و`30` للاختبار المستقل بمؤشرات مقيسة فعلياً: $R^2_{\text{test}} = 0.875$, $RMSE_{\text{test}} = 0.539$, $MAE_{\text{test}} = 0.440$، وتحقق متقاطع خماسي $5\text{-Fold CV}$ على كامل الـ 120 مركباً: $R^2_{\text{CV}} = 0.860$, $RMSE_{\text{CV}} = 0.575$, $MAE_{\text{CV}} = 0.437$) مع فحص نطاق الانطباق (`Applicability Domain`).
+- **فصل حساب `cLogP` الحتمي عن تقييم `QSAR` التجريبي:** فصل حاسبة `Wildman-Crippen cLogP` الحتمية (بلا فواصل ثقة اصطناعية) عن نموذج `Ridge Regression QSAR` المُدرَّب والمُختبَر فعلياً على مجموعة مرجعية من 120 مركباً ببيانات `LogP` تجريبية، بتقسيم تدريب/اختبار واحد ثابت (`seed=42`) وتحقق متقاطع خماسي وتحقق بحجب الفئة الكيميائية كاملة (`Leave-One-Class-Out`) مع مقارنة صريحة بـ Crippen. **لا تُثبَّت مؤشرات الأداء في التوثيق**؛ تُحسب وقت التشغيل وتُحفظ بسجل كامل (التاريخ وإصدارات المكتبات) في `results/logp_eval.json` عبر `python scripts/evaluate_logp.py`.
 
 ---
 
@@ -150,11 +158,11 @@ flowchart TD
 
 ## 5. تشغيل الاختبارات الآلية والتحقق (Automated QA Test Suite)
 
-![Tests](https://img.shields.io/badge/tests-197%20passed-16a34a) ![Coverage](https://img.shields.io/badge/coverage-80%25-16a34a) ![Python](https://img.shields.io/badge/python-3.11-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-203%20passed-16a34a) ![Coverage](https://img.shields.io/badge/coverage-80%25-16a34a) ![Python](https://img.shields.io/badge/python-3.11-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-> الأرقام أعلاه (197 اختباراً ناجحاً بنسبة 100%) نتائج فعلية مقيسة محلياً بالأمر `pytest -q`.
+> الأرقام أعلاه (203 اختباراً ناجحاً بنسبة 100%) نتائج فعلية مقيسة محلياً بالأمر `pytest -q`.
 
-يحتوي المشروع على **197 اختباراً آلياً** في مجلد `tests/` عبر 18 ملف اختبار تغطي جميع الوحدات العلمية والحسابية والحالات الحدية وغياب المكتبات وفشل الشبكة وفحص الواجهة الرسومية بنسبة نجاح 100%. لتشغيلها محلياً:
+يحتوي المشروع على **203 اختباراً آلياً** في مجلد `tests/` عبر 18 ملف اختبار تغطي جميع الوحدات العلمية والحسابية والحالات الحدية وغياب المكتبات وفشل الشبكة وفحص الواجهة الرسومية بنسبة نجاح 100%. لتشغيلها محلياً:
 
 ```bash
 pytest -v                      # تشغيل الاختبارات

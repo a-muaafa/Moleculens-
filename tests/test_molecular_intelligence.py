@@ -161,3 +161,58 @@ def test_evaluate_logp_prediction_numpy_fallback_when_sklearn_missing(monkeypatc
     assert qsar["cv_r2"] > 0.8
     assert qsar["test_rmse"] > 0.0
     assert len(qsar["test_set_table"]) == 30
+
+
+def test_methyl_to_carboxyl_rejects_methyl_not_bonded_to_carbon():
+    # Methyl formate: the only CH3 is bonded to oxygen, so no carbon-bound methyl exists
+    result = MolecularIntelligence.modify_structure("COC=O", "methyl_to_carboxyl")
+    assert result["success"] is False
+
+
+def test_structure_modification_site_info_and_alternatives():
+    # Symmetric molecule: two matching sites but a single distinct product
+    sym = MolecularIntelligence.modify_structure("Cc1ccc(C)cc1", "methyl_to_carboxyl")
+    assert sym["success"] is True
+    assert sym["site_info"]["match_count"] == 2
+    assert sym["site_info"]["distinct_products_count"] == 1
+
+    # Asymmetric molecule: two different hydroxyls give two distinct products
+    asym = MolecularIntelligence.modify_structure("OCc1ccc(O)cc1", "hydroxyl_to_chloro")
+    assert asym["success"] is True
+    assert asym["site_info"]["match_count"] == 2
+    assert asym["site_info"]["distinct_products_count"] == 2
+    assert len(asym["site_info"]["alternative_products_smiles"]) == 1
+    assert asym["after"]["smiles"] not in asym["site_info"]["alternative_products_smiles"]
+
+
+def test_limitations_text_matches_actual_split_sizes():
+    res = MolecularIntelligence.evaluate_logp_prediction("CCO")
+    q = res["qsar_model_evaluation"]
+    assert q["model_available"] is True
+    assert str(q["n_train"]) in res["limitations_ar"]
+    assert str(q["n_test"]) in res["limitations_ar"]
+    assert str(q["n_total"]) in res["methodology_ar"]
+
+
+def test_qsar_split_is_consistent_and_group_validation_reported():
+    q = MolecularIntelligence.evaluate_logp_prediction("CCO")["qsar_model_evaluation"]
+    assert q["n_train"] + q["n_test"] == q["n_total"]
+    assert q["n_test"] == int(round(q["n_total"] * 0.25))
+    for key in ("group_cv_r2", "group_cv_rmse", "group_cv_mae", "crippen_all_r2", "crippen_all_rmse"):
+        assert key in q
+    assert sum(row["n"] for row in q["group_cv_by_class"]) == q["n_total"]
+    assert q["group_cv_rmse"] > 0 and q["cv_rmse"] > 0
+
+
+def test_chemical_class_assignment():
+    from rdkit import Chem
+
+    cases = {
+        "CCO": "alcohol_or_phenol",
+        "CC(=O)O": "carboxylic_acid",
+        "COC=O": "ester",
+        "c1ccccc1": "aromatic_hydrocarbon",
+        "ClC(Cl)Cl": "halogenated",
+    }
+    for smi, expected in cases.items():
+        assert MolecularIntelligence._chemical_class(Chem.MolFromSmiles(smi)) == expected

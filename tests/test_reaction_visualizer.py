@@ -197,3 +197,12 @@ def test_preset8_ch3cooh_k2co3_and_resolve_token():
     assert prod_formulas == {"KCH3COO", "H2O", "CO2"}
     assert pred["atom_conservation"]["is_balanced"] is True
 
+
+
+def test_audit_reports_reference_check_scope_and_manual_verification_count():
+    from reaction_engine.scientific_audit import REFERENCE_VERIFIED_IDS, audit_registry_and_rules
+
+    report = audit_registry_and_rules()
+    assert report["reference_check_scope_ar"]
+    assert report["manually_verified_references"] == len(REFERENCE_VERIFIED_IDS)
+    assert all("reference_manually_verified" in r for r in report["reaction_reports"])

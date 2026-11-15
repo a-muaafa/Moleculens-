@@ -6,7 +6,9 @@ Provides a deterministic, transparent, multi-criterion scientific audit across:
 2. Physical State Consistency (s, l, g, aq) vs. Solubility & Reaction Medium.
 3. Thermodynamic Sign & Enthalpy Consistency (Exothermic vs. Endothermic vs. Delta H).
 4. Reference Operating Window Validity (Temperature & Pressure bounds vs.Optimal).
-5. Bibliographic Reference Integrity (Unique Source ID, Author/Handbook Citation, URL).
+5. Bibliographic Reference Completeness (FORMAT check only: source id, citation text and https URL
+   are present). This does NOT verify that a cited page/chapter actually supports the reaction;
+   that requires manual verification, tracked in REFERENCE_VERIFIED_IDS.
 6. General Chemistry Inference Rules Audit (13 rules with test reaction verification).
 """
 
@@ -23,6 +25,15 @@ from reaction_engine.reaction_registry import (
 )
 
 VALID_STATES: set[str] = {"s", "l", "g", "aq"}
+
+# Reaction ids whose citation was manually opened and checked against the actual source by a human.
+# Keep this empty until a reference has really been verified; the UI reports the true count.
+REFERENCE_VERIFIED_IDS: set[str] = set()
+
+REFERENCE_CHECK_SCOPE_AR = (
+    "فحص المراجع هنا شكلي فقط (وجود المعرّف ونص المرجع ورابط https). "
+    "لا يثبت أن الصفحة أو الفصل المذكور يدعم التفاعل فعلياً؛ ذلك يتطلب تحققاً يدوياً."
+)
 
 RULE_REPRESENTATIVE_PROBES: list[tuple[str, list[str], list[str]]] = [
     ("combustion", ["C5H12", "O2"], ["CO2", "H2O"]),
@@ -62,7 +73,7 @@ def _side_molar_mass_sum(species_list: list[dict[str, Any]]) -> float:
 
 def audit_single_reaction(rxn: dict[str, Any]) -> dict[str, Any]:
     """
-    Runs an independent 5-point scientific audit on a single reaction record.
+    Runs an independent 5-point scientific audit (reference check is format-only) on a single reaction record.
     """
     rxn_id = rxn.get("reaction_id", "unknown")
     reactants = rxn.get("reactants", [])
@@ -172,6 +183,7 @@ def audit_single_reaction(rxn: dict[str, Any]) -> dict[str, Any]:
         "has_quantitative_enthalpy": has_quantitative_enthalpy,
         "delta_h_kj": delta_h_value,
         "documentation_type": doc_type,
+        "reference_manually_verified": rxn_id in REFERENCE_VERIFIED_IDS,
         "source_id": source_id,
         "source": source_text,
         "reference_url": ref_url,
@@ -256,6 +268,10 @@ def audit_registry_and_rules() -> dict[str, Any]:
         "overall_passed": len(all_errors) == 0,
         "total_reactions": len(reaction_reports),
         "passed_reactions": passed_reactions,
+        "manually_verified_references": sum(
+            1 for r in reaction_reports if r["reference_manually_verified"]
+        ),
+        "reference_check_scope_ar": REFERENCE_CHECK_SCOPE_AR,
         "unique_source_ids": len(source_ids),
         "unique_bibliographic_sources": len(sources),
         "quantitative_enthalpy_reactions": quantitative_enthalpy_count,

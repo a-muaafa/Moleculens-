@@ -34,7 +34,6 @@ except ImportError:
 try:
     from sklearn.linear_model import Ridge
     from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-    from sklearn.model_selection import train_test_split
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
 
@@ -242,7 +241,7 @@ class MolecularIntelligence:
         "methyl_to_carboxyl": {
             "name_ar": "استبدال الميثيل بكربوكسيل (-CH3 -> -COOH) [تعديل افتراضي]",
             "description_ar": "تحويل بنيوي افتراضي يحوّل مجموعة الميثيل الطرفية إلى مجموعة كربوكسيل لرفع القطبية الحسابية.",
-            "smarts_pattern": "[CH3]",
+            "smarts_pattern": "[CH3;$([CH3][#6])]",
             "replacement_smarts": "C(=O)O",
             "example": "محاكاة أكسدة الميثيل البنيوية",
         },
@@ -499,6 +498,7 @@ class MolecularIntelligence:
                     "error_ar": f"المركب المختار لا يحتوي على المجموعة الوظيفية المستهدفة: {mod_meta['name_ar']}",
                 }
 
+            match_count = len(mol.GetSubstructMatches(pattern))
             rxn_smarts = mod_meta.get(
                 "rxn_smarts",
                 f"[*:1]{mod_meta['smarts_pattern']}>>[*:1]{mod_meta['replacement_smarts']}",
@@ -521,6 +521,23 @@ class MolecularIntelligence:
 
             Chem.SanitizeMol(product_mol)
             after_smiles = Chem.MolToSmiles(product_mol, canonical=True)
+
+            # Enumerate the distinct products obtained from the other matching sites
+            alternative_smiles: list[str] = []
+            try:
+                seen_smiles = {after_smiles}
+                for prod_tuple in products:
+                    alt_mol = prod_tuple[0]
+                    try:
+                        Chem.SanitizeMol(alt_mol)
+                        alt_smi = Chem.MolToSmiles(alt_mol, canonical=True)
+                    except Exception:
+                        continue
+                    if alt_smi not in seen_smiles and len(alternative_smiles) < 8:
+                        seen_smiles.add(alt_smi)
+                        alternative_smiles.append(alt_smi)
+            except Exception:
+                alternative_smiles = []
 
             after_desc = cls.get_molecular_descriptors(after_smiles)
             if not after_desc:
@@ -587,6 +604,17 @@ class MolecularIntelligence:
                     "hba": delta_hba,
                 },
                 "chemical_validity": chemical_validity,
+                "site_info": {
+                    "match_count": match_count,
+                    "distinct_products_count": 1 + len(alternative_smiles),
+                    "alternative_products_smiles": alternative_smiles,
+                    "note_ar": (
+                        f"عدد المواقع المطابقة للمجموعة المستهدفة: {match_count}. "
+                        f"عدد النواتج المختلفة الممكنة: {1 + len(alternative_smiles)}. "
+                        "المعروض أعلاه هو ناتج أول موقع مطابق فقط، دون تفضيل كيميائي لموقع على آخر "
+                        "(لا يُراعى هنا انتقائية الموقع Regioselectivity)."
+                    ),
+                },
                 "impact_summary_ar": " ".join(explanation_parts),
                 "scientific_caveats_ar": scientific_caveats_ar,
             }
@@ -654,11 +682,33 @@ class MolecularIntelligence:
         except Exception:
             return {"available": False, "message_ar": "تعذر حساب cLogP لهذا المركب."}
 
+    _CHEMICAL_CLASS_SMARTS: tuple[tuple[str, str], ...] = (
+        ("carboxylic_acid", "[CX3](=O)[OX2H1]"),
+        ("ester", "[CX3](=O)[OX2][#6]"),
+        ("amide_or_urea", "[CX3](=O)[#7]"),
+        ("aldehyde_or_ketone", "[CX3]=[OX1]"),
+        ("nitro", "[N+](=O)[O-]"),
+        ("nitrogen_compound", "[#7]"),
+        ("halogenated", "[F,Cl,Br,I]"),
+        ("alcohol_or_phenol", "[OX2H]"),
+        ("ether", "[OD2]([#6])[#6]"),
+        ("aromatic_hydrocarbon", "a"),
+    )
+
+    @classmethod
+    def _chemical_class(cls, mol: Any) -> str:
+        """Assigns one coarse functional-class label (first match wins) used for grouped validation."""
+        for label, smarts in cls._CHEMICAL_CLASS_SMARTS:
+            patt = Chem.MolFromSmarts(smarts)
+            if patt is not None and mol.HasSubstructMatch(patt):
+                return label
+        return "other"
+
     @classmethod
     def train_and_evaluate_qsar_logp_model(cls) -> dict[str, Any]:
         """
         Trains and evaluates a Ridge QSAR LogP regression model on an explicit train/test
-        split of the 32-compound experimental LogP dataset, returning genuine measured
+        split of the experimental LogP reference dataset, returning genuine measured
         holdout test metrics (R2, RMSE, MAE) alongside Crippen performance on the same test set.
         """
         if cls._CACHED_QSAR_BUNDLE is not None:
@@ -714,9 +764,6 @@ class MolecularIntelligence:
         train_idx = perm[n_test_count:]
 
         if SKLEARN_AVAILABLE:
-            indices = np.arange(n_samples)
-            train_idx, test_idx = train_test_split(indices, test_size=0.25, random_state=42)
-
             pipeline = Pipeline([
                 ("scaler", StandardScaler()),
                 ("ridge", Ridge(alpha=1.0)),
@@ -764,6 +811,36 @@ class MolecularIntelligence:
         cv_rmse = round(float(np.sqrt(np.mean((y_arr - cv_preds) ** 2))), 3)
         cv_mae = round(float(np.mean(np.abs(y_arr - cv_preds))), 3)
 
+        # Leave-One-Chemical-Class-Out validation: the model never sees the class it predicts.
+        # This removes near-duplicate leakage between homologous series (e.g. 1-butanol vs 1-pentanol).
+        class_labels = np.array(
+            [cls._chemical_class(Chem.MolFromSmiles(rec["smiles"])) for rec in valid_records]
+        )
+        loco_preds = np.zeros_like(y_arr)
+        group_cv_by_class: list[dict[str, Any]] = []
+        for grp in sorted(set(class_labels.tolist())):
+            val_mask = class_labels == grp
+            tr_ids = np.where(~val_mask)[0]
+            va_ids = np.where(val_mask)[0]
+            if len(tr_ids) < 10:
+                loco_preds[va_ids] = float(np.mean(y_arr))
+            else:
+                grp_model = _fit_predict_numpy(X_arr[tr_ids], y_arr[tr_ids])
+                loco_preds[va_ids] = grp_model.predict(X_arr[va_ids])
+            group_cv_by_class.append({
+                "class": grp,
+                "n": int(len(va_ids)),
+                "qsar_rmse": round(float(np.sqrt(np.mean((y_arr[va_ids] - loco_preds[va_ids]) ** 2))), 3),
+                "crippen_rmse": round(float(np.sqrt(np.mean((y_arr[va_ids] - crippen_arr[va_ids]) ** 2))), 3),
+            })
+
+        group_cv_r2 = round(_r2_np(y_arr, loco_preds), 3)
+        group_cv_rmse = round(float(np.sqrt(np.mean((y_arr - loco_preds) ** 2))), 3)
+        group_cv_mae = round(float(np.mean(np.abs(y_arr - loco_preds))), 3)
+        crippen_all_r2 = round(_r2_np(y_arr, crippen_arr), 3)
+        crippen_all_rmse = round(float(np.sqrt(np.mean((y_arr - crippen_arr) ** 2))), 3)
+        crippen_all_mae = round(float(np.mean(np.abs(y_arr - crippen_arr))), 3)
+
         test_set_table = []
         for idx_i, pred_val in zip(test_idx, y_pred_test):
             rec = valid_records[int(idx_i)]
@@ -789,7 +866,10 @@ class MolecularIntelligence:
             "n_total": int(len(valid_records)),
             "n_train": int(len(train_idx)),
             "n_test": int(len(test_idx)),
-            "split_method": "75% Train (90) / 25% Holdout Test (30) + 5-Fold Cross-Validation (random_state=42)",
+            "split_method": (
+                f"{len(train_idx)} Train / {len(test_idx)} Holdout Test (random permutation, seed=42) "
+                "+ 5-Fold CV + Leave-One-Chemical-Class-Out"
+            ),
             "test_r2": test_r2,
             "test_rmse": test_rmse,
             "test_mae": test_mae,
@@ -797,6 +877,14 @@ class MolecularIntelligence:
             "cv_r2": cv_r2,
             "cv_rmse": cv_rmse,
             "cv_mae": cv_mae,
+            "group_cv_r2": group_cv_r2,
+            "group_cv_rmse": group_cv_rmse,
+            "group_cv_mae": group_cv_mae,
+            "group_cv_by_class": group_cv_by_class,
+            "class_counts": {k: int(v) for k, v in zip(*np.unique(class_labels, return_counts=True))},
+            "crippen_all_r2": crippen_all_r2,
+            "crippen_all_rmse": crippen_all_rmse,
+            "crippen_all_mae": crippen_all_mae,
             "crippen_test_r2": crippen_test_r2,
             "crippen_test_rmse": crippen_test_rmse,
             "crippen_test_mae": crippen_test_mae,
@@ -862,6 +950,13 @@ class MolecularIntelligence:
                 "cv_r2": qsar_bundle["cv_r2"],
                 "cv_rmse": qsar_bundle["cv_rmse"],
                 "cv_mae": qsar_bundle["cv_mae"],
+                "group_cv_r2": qsar_bundle["group_cv_r2"],
+                "group_cv_rmse": qsar_bundle["group_cv_rmse"],
+                "group_cv_mae": qsar_bundle["group_cv_mae"],
+                "group_cv_by_class": qsar_bundle["group_cv_by_class"],
+                "crippen_all_r2": qsar_bundle["crippen_all_r2"],
+                "crippen_all_rmse": qsar_bundle["crippen_all_rmse"],
+                "crippen_all_mae": qsar_bundle["crippen_all_mae"],
                 "crippen_test_r2": qsar_bundle["crippen_test_r2"],
                 "crippen_test_rmse": qsar_bundle["crippen_test_rmse"],
                 "crippen_test_mae": qsar_bundle["crippen_test_mae"],
@@ -874,16 +969,19 @@ class MolecularIntelligence:
         exp_sentence = (
             f" القيمة التجريبية المرجعية المسجلة لهذا المركب هي {exp_val} (بفارق مطلق {det['abs_error_vs_experimental']} عن cLogP)."
             if exp_val is not None
-            else " لا تتوفر قيمة تجريبية مسجلة لهذا المركب في مجموعة البيانات المرجعية المحلية البالغ حجمها 120 مركباً."
+            else " لا تتوفر قيمة تجريبية مسجلة لهذا المركب في مجموعة البيانات المرجعية المحلية البالغ حجمها " + str(len(cls.EXPERIMENTAL_LOGP_BENCHMARK_DATASET)) + " مركباً."
         )
 
         if qsar_eval.get("model_available"):
             pedagogical_note = (
                 f"1) الحساب الحتمي (RDKit Wildman-Crippen cLogP): القيمة = {clogp_val} وهي ناتجة عن جمع مساهمات الذرات بدون تدريب إحصائي أو فاصل ثقة لكل مركب. "
-                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR على 120 مركباً): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
+                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR على {qsar_eval['n_total']} مركباً): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
                 f"جرى تدريبه على {qsar_eval['n_train']} مركباً واختباره على {qsar_eval['n_test']} مركباً مستقلاً "
                 f"فحقق على مجموعة الاختبار المستقلة R² = {qsar_eval['test_r2']} و RMSE = {qsar_eval['test_rmse']} "
-                f"(وفي التحقق المتقاطع الخماسي 5-Fold CV على كامل الـ 120 مركباً: R² = {qsar_eval['cv_r2']} و RMSE = {qsar_eval['cv_rmse']}).{exp_sentence}"
+                f"(وفي التحقق المتقاطع الخماسي العشوائي: R² = {qsar_eval['cv_r2']} و RMSE = {qsar_eval['cv_rmse']}). "
+                f"أما عند حجب فئة كيميائية كاملة عن التدريب (Leave-One-Class-Out، وهو الاختبار الأصعب والأقرب للواقع) فينخفض الأداء إلى "
+                f"R² = {qsar_eval['group_cv_r2']} و RMSE = {qsar_eval['group_cv_rmse']}، "
+                f"مقابل Wildman-Crippen على كل المركبات: R² = {qsar_eval['crippen_all_r2']} و RMSE = {qsar_eval['crippen_all_rmse']}.{exp_sentence}"
             )
         else:
             pedagogical_note = (
@@ -899,11 +997,24 @@ class MolecularIntelligence:
             "qsar_model_evaluation": qsar_eval,
             "methodology_ar": (
                 "فصل منهجي بين: (أ) حساب cLogP الحتمي بطريقة التجزئة الذرية Wildman-Crippen، "
-                "و (ب) نموذج Ridge QSAR (15 واصفاً جزيئياً غير كريبيني) المدرَّب والمقيَّم فعلياً على 120 مركباً مرجعياً (90 للتدريب / 30 للاختبار المستقل + تحقق متقاطع خماسي 5-Fold CV)."
+                "و (ب) نموذج Ridge QSAR المدرَّب والمقيَّم فعلياً "
+                + (
+                    f"على {qsar_eval['n_total']} مركباً مرجعياً ({qsar_eval['n_train']} للتدريب / {qsar_eval['n_test']} للاختبار المحجوز) "
+                    "مع تحقق متقاطع خماسي وتحقق مُجمَّع حسب الفئة الكيميائية (Leave-One-Class-Out)."
+                    if qsar_eval.get("model_available")
+                    else "(غير متاح في هذه البيئة)."
+                )
             ),
             "limitations_ar": (
                 "حساب Wildman-Crippen cLogP قد يختلف عن القياس التجريبي عند وجود روابط هيدروجينية داخلية أو تأين يعتمد على pH (مثل الأحماض والقواعد والأيونات الثنائية). "
-                "أما نموذج QSAR المحلي فمدرَّب على 90 مركباً ومختبر على 30 مركباً مرجعياً (مع تحقق متقاطع 5-Fold CV على 120 مركباً تشمل الكحولات والأحماض والأمينات والعطريات والأدوية المعتمدة)، ويجب دائماً مراعاة مجال الانطباق (Applicability Domain) قبل تعميم التنبؤ على جزيئات ضخمة أو معقدة."
+                + (
+                    f"أما نموذج QSAR المحلي فمدرَّب على {qsar_eval['n_train']} مركباً ومختبر على {qsar_eval['n_test']} مركباً، "
+                    "ومجموعة البيانات تضم سلاسل متجانسة قريبة بنيوياً، لذا فالتقسيم العشوائي متفائل؛ "
+                    "والمقياس الأصدق هو التحقق بحجب الفئة الكيميائية. وقد لا يتفوق النموذج على Crippen، "
+                    "ويجب مراعاة مجال الانطباق (Applicability Domain) قبل أي تعميم."
+                    if qsar_eval.get("model_available")
+                    else "نموذج QSAR المحلي غير متاح في هذه البيئة."
+                )
             ),
             "pedagogical_note_ar": pedagogical_note,
         }

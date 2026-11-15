@@ -224,6 +224,14 @@ def render_molecular_intelligence_section() -> None:
                     unsafe_allow_html=True,
                 )
 
+                site_info = mod_result.get("site_info")
+                if site_info:
+                    st.info(site_info["note_ar"])
+                    if site_info["alternative_products_smiles"]:
+                        with st.expander("نواتج المواقع الأخرى المحتملة (SMILES)", expanded=False):
+                            for alt in site_info["alternative_products_smiles"]:
+                                st.code(alt)
+
                 caveats = mod_result.get("scientific_caveats_ar", [])
                 if caveats:
                     with st.expander("القيود العلمية وعدم الجزم بالنتائج الدوائية (Scientific Caveats)", expanded=False):
@@ -274,12 +282,12 @@ def render_molecular_intelligence_section() -> None:
                 st.caption(det["confidence_interval_note_ar"])
 
                 st.divider()
-                st.markdown("### القسم الثاني: نموذج التنبؤ المدرَّب والمختبر فعلياً (Trained & Holdout-Tested Ridge QSAR — 120 Compounds)")
+                st.markdown("### القسم الثاني: نموذج التنبؤ المدرَّب والمختبر فعلياً (Trained & Holdout-Tested Ridge QSAR)")
                 if qsar.get("model_available"):
                     q1, q2, q3, q4 = st.columns(4)
                     q1.metric("تنبؤ نموذج QSAR", str(qsar["qsar_predicted_logp"]))
-                    q2.metric("R² (اختبار محجوز / 5-Fold CV)", f"{qsar['test_r2']} / {qsar.get('cv_r2', qsar['test_r2'])}")
-                    q3.metric("RMSE (اختبار محجوز / 5-Fold CV)", f"±{qsar['test_rmse']} / ±{qsar.get('cv_rmse', qsar['test_rmse'])}")
+                    q2.metric("R² (اختبار محجوز / حجب الفئة الكيميائية)", f"{qsar['test_r2']} / {qsar['group_cv_r2']}")
+                    q3.metric("RMSE (اختبار محجوز / حجب الفئة الكيميائية)", f"±{qsar['test_rmse']} / ±{qsar['group_cv_rmse']}")
                     q4.metric(
                         "حجم التدريب / الاختبار (الإجمالي)",
                         f"{qsar['n_train']} / {qsar['n_test']} ({qsar['n_total']})",
@@ -296,10 +304,20 @@ def render_molecular_intelligence_section() -> None:
                         f"**نتائج مجموعة الاختبار المستقلة الفعلية ({qsar['n_test']} مركباً محتجزاً — {qsar['split_method']}):**"
                     )
                     st.caption(
-                        f"مقارنة أداء مجموعة الاختبار المستقلة (30 مركباً) — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
-                        f"|| التحقق المتقاطع الخماسي (5-Fold CV على 120 مركباً): R² = {qsar.get('cv_r2')} | RMSE = {qsar.get('cv_rmse')} | MAE = {qsar.get('cv_mae')} "
-                        f"|| مقابل Wildman-Crippen cLogP على نفس عينة الاختبار: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
+                        f"اختبار محجوز ({qsar['n_test']} مركباً) — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
+                        f"|| Wildman-Crippen على نفس العينة: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
                     )
+                    st.caption(
+                        f"تحقق متقاطع خماسي عشوائي: R² = {qsar['cv_r2']} | RMSE = {qsar['cv_rmse']} "
+                        f"|| تحقق بحجب فئة كيميائية كاملة: R² = {qsar['group_cv_r2']} | RMSE = {qsar['group_cv_rmse']} | MAE = {qsar['group_cv_mae']} "
+                        f"|| Crippen على كل المركبات: R² = {qsar['crippen_all_r2']} | RMSE = {qsar['crippen_all_rmse']}"
+                    )
+                    st.caption(
+                        "التقسيم العشوائي متفائل لأن المجموعة تضم سلاسل متجانسة قريبة بنيوياً؛ "
+                        "التحقق بحجب الفئة أصدق لأنه يختبر النموذج على فئة لم يرها."
+                    )
+                    with st.expander("الأداء حسب الفئة الكيميائية (Leave-One-Class-Out)", expanded=False):
+                        st.dataframe(pd.DataFrame(qsar["group_cv_by_class"]), use_container_width=True, hide_index=True)
                     st.dataframe(pd.DataFrame(qsar["test_set_table"]), use_container_width=True, hide_index=True)
                 else:
                     st.warning("نموذج QSAR الإحصائي غير متاح في البيئة الحالية.")
