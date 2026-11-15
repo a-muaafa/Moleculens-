@@ -164,10 +164,19 @@ def _render_bonds_and_energy(prediction: dict[str, Any]) -> None:
         return
 
     with st.expander("تحليل الروابط ومسار الطاقة (Bond Transformations & Energy Profile)", expanded=False):
-        c1, c2 = st.columns([1, 1])
         bonds_data = ReactionVisualizer.analyze_bond_transformations(
-            reactants, products, category=prediction.get("category", "")
+            reactants,
+            products,
+            category=prediction.get("category", ""),
+            reaction_data=prediction,
         )
+
+        if bonds_data["is_illustrative"]:
+            st.warning(bonds_data["data_classification_ar"])
+        else:
+            st.success(bonds_data["data_classification_ar"])
+
+        c1, c2 = st.columns([1, 1])
 
         with c1:
             st.markdown(f"**الروابط المتكسرة والمتكونة ({bonds_data['thermodynamic_type_ar']}):**")
@@ -176,12 +185,14 @@ def _render_bonds_and_energy(prediction: dict[str, Any]) -> None:
             st.markdown("**1. الروابط المتكسرة في المتفاعلات (Bonds Broken):**")
             for b in bonds_data["bonds_broken"]:
                 e_txt = f" ({b['total_kj']} kJ/mol)" if b.get("total_kj") else ""
-                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}")
+                desc_txt = f" — {b['description']}" if b.get("description") else ""
+                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}{desc_txt}")
 
             st.markdown("**2. الروابط المتكونة في النواتج (Bonds Formed):**")
             for b in bonds_data["bonds_formed"]:
                 e_txt = f" ({b['total_kj']} kJ/mol)" if b.get("total_kj") else ""
-                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}")
+                desc_txt = f" — {b['description']}" if b.get("description") else ""
+                st.markdown(f"- **{b['bond']}**: {b.get('count', 1)} رابطة{e_txt}{desc_txt}")
 
             st.markdown("**التحقق من حفظ الذرات (Atom Conservation Matrix):**")
             audit_rows = ReactionVisualizer.audit_atom_conservation(reactants, products)
@@ -191,9 +202,12 @@ def _render_bonds_and_energy(prediction: dict[str, Any]) -> None:
             r_str = " + ".join(r.get("formula", "") for r in reactants)
             p_str = " + ".join(p.get("formula", "") for p in products)
             fig = ReactionVisualizer.create_reaction_energy_diagram(
-                r_str, p_str,
+                r_str,
+                p_str,
                 is_exothermic=bonds_data["is_exothermic"],
                 delta_h_kj=bonds_data["estimated_delta_h_kj"],
+                activation_energy_kj=None,
+                is_illustrative=bonds_data["is_illustrative"],
             )
             st.plotly_chart(fig, use_container_width=True)
 

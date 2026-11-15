@@ -1,13 +1,14 @@
 """
 Molecular Intelligence frontend view for MolecuLens.
-Features Morgan Fingerprint similarity, structure modification with valence validation,
-and transparent LogP prediction evaluation with benchmark metrics.
+Features Morgan Fingerprint similarity, virtual SMARTS structure modification with
+chemical verification and explicit caveats, and strict separation between deterministic
+Wildman-Crippen cLogP calculation and an actually trained/tested QSAR LogP model.
 """
 
 from __future__ import annotations
 
-from typing import Any
 import html
+from typing import Any
 import pandas as pd
 import streamlit as st
 
@@ -29,20 +30,21 @@ def render_molecular_intelligence_section() -> None:
 <div class="ml-card">
   <h3>الذكاء الجزيئي — Molecular Intelligence &amp; Structure Studio</h3>
   <p>
-    وحدة حاسوبية متقدمة مبنية على خوارزميات الكيمياء المعلوماتية (Cheminformatics):
+    وحدة حاسوبية مبنية على الكيمياء المعلوماتية (Cheminformatics):
     <strong>مقارنة التشابه الجزيئي (Molecular Similarity)</strong> عبر بصمات مورغان وبُعد تانيموتو،
-    <strong>تعديل البنية الكيميائية (Structure Modification)</strong> مع التحقق الصارم من التكافؤ،
-    و<strong>تقييم شفافية تنبؤ LogP</strong> مع فواصل الثقة ومقاييس أداء النموذج.
+    <strong>محرر التعديل البنيوي الافتراضي (In-Silico Virtual Editing)</strong> مع الفحص الكيميائي للنواتج،
+    و<strong>حساب cLogP وتقييم نموذج QSAR المختبر فعلياً</strong> بفصل صارم بين الحساب الحتمي والتنبؤ الإحصائي.
   </p>
 </div>
 """,
         unsafe_allow_html=True,
     )
 
-    # Filter catalog entities that have canonical_smiles
     compounds = [
-        c for c in LOCAL_SCIENTIFIC_CATALOG
-        if c.get("canonical_smiles") and len(c.get("canonical_smiles", "")) > 1
+        c
+        for c in LOCAL_SCIENTIFIC_CATALOG
+        if c.get("canonical_smiles")
+        and len(c.get("canonical_smiles", "")) > 1
         and c.get("entity_type") != "element"
     ]
 
@@ -50,13 +52,16 @@ def render_molecular_intelligence_section() -> None:
         st.warning("لا توجد مركبات مسجلة بصيغ بنيوية في الكتالوج.")
         return
 
-    comp_options = {c["key"]: f"{c['name_ar']} | {c['name_en']} ({format_chemical_formula_display(c['symbol_or_formula'])})" for c in compounds}
+    comp_options = {
+        c["key"]: f"{c['name_ar']} | {c['name_en']} ({format_chemical_formula_display(c['symbol_or_formula'])})"
+        for c in compounds
+    }
     comp_keys = list(comp_options.keys())
 
     tab_sim, tab_mod, tab_logp = st.tabs([
         "1. التشابه الجزيئي (Molecular Similarity)",
-        "2. تعديل البنية الجزيئية (Structure Modification)",
-        "3. تقييم نموذج تنبؤ LogP (LogP Evaluation)",
+        "2. التعديل البنيوي الافتراضي (Virtual Editing)",
+        "3. حساب cLogP وتقييم نموذج التنبؤ (LogP Evaluation)",
     ])
 
     # Tab 1: Similarity
@@ -113,15 +118,15 @@ def render_molecular_intelligence_section() -> None:
             else:
                 st.info("لم يتم العثور على مركبات تشترك في بصمات قريبة كافية مع هذا المركب في الكتالوج.")
 
-    # Tab 2: Structure Modification
+    # Tab 2: Virtual Structure Modification
     with tab_mod:
         st.markdown(
             """
 <div class="ml-card">
-  <h4>محرر تعديل البنية الجزيئية واستبدال المجموعات الوظيفية</h4>
+  <h4>محرر التعديل البنيوي الافتراضي (In-Silico Virtual Structure Modification)</h4>
   <p>
-    اختر مركباً أساسياً ونوع التحويل الكيميائي المستهدف (مثل استبدال الهيدروكسيل بهالوجين أو أسترة الكربوكسيل)،
-    ليقوم المحرك بتطبيق التعديل والتحقق من صحة التكافؤ واستقرار البنية، مع مقارنة الخصائص الفيزيوكيميائية قبل وبعد التعديل.
+    يحاكي هذا المحرر استبدال المجموعات الوظيفية على الرسم الجزيئي عبر قواعد SMARTS، ثم يفحص التكافؤ والروابط وتنبيهات الثبات البنيوي ومطابقة السجل المرجعي.
+    التعديلات هنا <strong>افتراضية حاسوبياً</strong> ولا تمثل بالضرورة تفاعلاً تخليقياً واقعياً بخطوة واحدة أو ضماناً لأي تحسن دوائي.
   </p>
 </div>
 """,
@@ -140,7 +145,7 @@ def render_molecular_intelligence_section() -> None:
             mod_keys = list(MolecularIntelligence.MODIFICATIONS.keys())
             mod_labels = {k: MolecularIntelligence.MODIFICATIONS[k]["name_ar"] for k in mod_keys}
             chosen_mod_key = st.selectbox(
-                "نوع التعديل البنيوي المستهدف:",
+                "نوع التعديل الافتراضي المستهدف:",
                 options=mod_keys,
                 format_func=lambda k: mod_labels.get(k, k),
                 key="mod_select_type",
@@ -150,7 +155,23 @@ def render_molecular_intelligence_section() -> None:
         if base_entity:
             mod_result = MolecularIntelligence.modify_structure(base_entity["canonical_smiles"], chosen_mod_key)
             if mod_result["success"]:
-                st.success(mod_result["chemical_validity"]["status_ar"])
+                validity = mod_result["chemical_validity"]
+                cat_match = validity.get("catalog_match", {})
+                alerts = validity.get("stability_alerts", [])
+
+                st.info(f"{mod_result['modification_nature_ar']}: {validity['status_ar']}")
+
+                if alerts:
+                    for al in alerts:
+                        st.warning(f"تنبيه ثبات كيميائي على الناتج الافتراضي: {al}")
+
+                if cat_match.get("is_documented_compound"):
+                    st.success(
+                        f"مطابقة مرجعية: البنية الناتجة تطابق مركباً موثقاً في السجل المحلي: "
+                        f"{cat_match.get('name_ar')} ({cat_match.get('name_en')})."
+                    )
+                else:
+                    st.caption("التحقق المرجعي: البنية الناتجة هي مركب افتراضي غير مدرج في السجل المحلي المعتمد (241 مادة).")
 
                 b = mod_result["before"]
                 a = mod_result["after"]
@@ -165,7 +186,7 @@ def render_molecular_intelligence_section() -> None:
   <p><strong>الاسم:</strong> {_esc(base_entity['name_ar'])} ({_esc(base_entity['name_en'])})</p>
   <p><strong>الصيغة الجزيئية:</strong> {format_chemical_formula_display(b['formula'])}</p>
   <p><strong>الكتلة الجزيئية (MW):</strong> {b['molecular_weight']} g/mol</p>
-  <p><strong>معامل LogP:</strong> {b['logp']}</p>
+  <p><strong>معامل cLogP (حسابي):</strong> {b['logp']}</p>
   <p><strong>مساحة السطح القطبي (TPSA):</strong> {b['tpsa']} Å²</p>
   <p><strong>مانحات / مستقبلات H:</strong> {b['hbd']} HBD / {b['hba']} HBA</p>
   <p><strong>روابط الدوران:</strong> {b['rotatable_bonds']}</p>
@@ -179,11 +200,11 @@ def render_molecular_intelligence_section() -> None:
                     st.markdown(
                         f"""
 <div class="ml-card" style="border-right:4px solid #0f766e;">
-  <h4>المركب بعد التعديل (Modified Molecule)</h4>
-  <p><strong>التحويل:</strong> {_esc(mod_result['modification_name_ar'])}</p>
+  <h4>البنية الافتراضية بعد التعديل (Virtual Modified Molecule)</h4>
+  <p><strong>التعديل الافتراضي:</strong> {_esc(mod_result['modification_name_ar'])}</p>
   <p><strong>الصيغة الجزيئية:</strong> {format_chemical_formula_display(a['formula'])}</p>
   <p><strong>الكتلة الجزيئية (MW):</strong> {a['molecular_weight']} g/mol <span style="color:#0f766e;">({'+' if d['mw'] > 0 else ''}{d['mw']})</span></p>
-  <p><strong>معامل LogP:</strong> {a['logp']} <span style="color:#0f766e;">({'+' if d['logp'] > 0 else ''}{d['logp']})</span></p>
+  <p><strong>معامل cLogP (حسابي):</strong> {a['logp']} <span style="color:#0f766e;">({'+' if d['logp'] > 0 else ''}{d['logp']})</span></p>
   <p><strong>مساحة السطح القطبي (TPSA):</strong> {a['tpsa']} Å² <span style="color:#0f766e;">({'+' if d['tpsa'] > 0 else ''}{d['tpsa']})</span></p>
   <p><strong>مانحات / مستقبلات H:</strong> {a['hbd']} HBD / {a['hba']} HBA</p>
   <p><strong>روابط الدوران:</strong> {a['rotatable_bonds']}</p>
@@ -196,24 +217,31 @@ def render_molecular_intelligence_section() -> None:
                 st.markdown(
                     f"""
 <div class="ml-card" style="border-left:4px solid #3b82f6;">
-  <strong style="color:#1d4ed8;">التحليل البيداغوجي للأثر الدوائي والفيزيوكيميائي:</strong>
+  <strong style="color:#1d4ed8;">تحليل الفروق الحسابية للواصفات الجزيئية (Descriptor Deltas Analysis):</strong>
   <p style="margin-top:0.35rem;margin-bottom:0;">{_esc(mod_result['impact_summary_ar'])}</p>
 </div>
 """,
                     unsafe_allow_html=True,
                 )
-            else:
-                st.warning(mod_result.get("error_ar", "تعذر تنفيذ التعديل."))
 
-    # Tab 3: LogP Prediction Evaluation
+                caveats = mod_result.get("scientific_caveats_ar", [])
+                if caveats:
+                    with st.expander("القيود العلمية وعدم الجزم بالنتائج الدوائية (Scientific Caveats)", expanded=False):
+                        for cv in caveats:
+                            st.markdown(f"- {cv}")
+            else:
+                st.warning(mod_result.get("error_ar", "تعذر تنفيذ التعديل الافتراضي."))
+
+    # Tab 3: Deterministic cLogP vs Trained QSAR Model Evaluation
     with tab_logp:
         st.markdown(
             """
 <div class="ml-card">
-  <h4>تقييم نموذج التنبؤ بمعامل التوزع (LogP Prediction Evaluation &amp; Transparency)</h4>
+  <h4>حساب cLogP الحاسوبي مقابل تقييم نموذج التنبؤ المختبر فعلياً</h4>
   <p>
-    تعرض هذه اللوحة تقييماً علمياً لنموذج التجزئة الذرية المعتمد (Wildman-Crippen SlogP)،
-    مع إيضاح أن القيمة المحسوبة هي قيمة تقديرية حاسوبية مصحوبة بفاصل ثقة ومقاييس أداء إحصائية معلنة.
+    تفصل هذه اللوحة بوضوح تام بين مسارين مختلفين علمياً:
+    <strong>(1) الحساب الوصفي الحتمي (Wildman-Crippen cLogP)</strong> الذي يجمع مساهمات الذرات وفق معادلة ثابتة دون فاصل ثقة إحصائي،
+    و<strong>(2) نموذج الانحدار الإحصائي (Ridge QSAR)</strong> الذي جرى تدريبه واختباره فعلياً على مجموعة بيانات تجريبية موثقة لقياس الأداء الحقيقي (R², RMSE, MAE).
   </p>
 </div>
 """,
@@ -221,7 +249,7 @@ def render_molecular_intelligence_section() -> None:
         )
 
         logp_comp_key = st.selectbox(
-            "اختر المركب المراد تقييم تنبؤ LogP له:",
+            "اختر المركب المراد تحليل LogP له:",
             options=comp_keys,
             format_func=lambda k: comp_options.get(k, k),
             key="logp_select_comp",
@@ -231,20 +259,57 @@ def render_molecular_intelligence_section() -> None:
         if target_comp:
             eval_res = MolecularIntelligence.evaluate_logp_prediction(target_comp["canonical_smiles"])
             if eval_res["available"]:
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("القيمة التقديرية (LogP)", str(eval_res["predicted_logp"]))
-                m2.metric("فاصل الثقة 95%", eval_res["confidence_interval_95"]["range_text"])
-                m3.metric("معامل التحديد R²", str(eval_res["r2_score"]))
-                m4.metric("جذر متوسط مربع الخطأ RMSE", f"±{eval_res['rmse']}")
+                det = eval_res["deterministic_clogp"]
+                qsar = eval_res["qsar_model_evaluation"]
 
-                st.info(eval_res["pedagogical_note_ar"])
+                st.markdown("### القسم الأول: الحساب الحاسوبي الحتمي (Deterministic Wildman-Crippen cLogP)")
+                d1, d2, d3, d4 = st.columns(4)
+                d1.metric("cLogP المحسوب حتمياً", str(det["calculated_clogp"]))
+                d2.metric("مجموع المساهمات الدهنية (+)", f"+{det['positive_contrib_sum']}")
+                d3.metric("مجموع المساهمات القطبية (-)", str(det["negative_contrib_sum"]))
+                d4.metric(
+                    "LogP التجريبي الموثق" if det["experimental_logp"] is not None else "المرجع التجريبي",
+                    str(det["experimental_logp"]) if det["experimental_logp"] is not None else "غير مسجل محلياً",
+                )
+                st.caption(det["confidence_interval_note_ar"])
+
+                st.divider()
+                st.markdown("### القسم الثاني: نموذج التنبؤ المدرَّب والمختبر فعلياً (Trained & Holdout-Tested Ridge QSAR)")
+                if qsar.get("model_available"):
+                    q1, q2, q3, q4 = st.columns(4)
+                    q1.metric("تنبؤ نموذج QSAR", str(qsar["qsar_predicted_logp"]))
+                    q2.metric("R² على مجموعة الاختبار", str(qsar["test_r2"]))
+                    q3.metric("RMSE على مجموعة الاختبار", f"±{qsar['test_rmse']}")
+                    q4.metric(
+                        "حجم التدريب / الاختبار",
+                        f"{qsar['n_train']} / {qsar['n_test']} مركب",
+                    )
+
+                    if qsar["in_applicability_domain"]:
+                        st.success(qsar["applicability_note_ar"])
+                    else:
+                        st.warning(qsar["applicability_note_ar"])
+
+                    st.info(eval_res["pedagogical_note_ar"])
+
+                    st.markdown(
+                        f"**نتائج مجموعة الاختبار المستقلة الفعلية ({qsar['n_test']} مركبات محتجزة — {qsar['split_method']}):**"
+                    )
+                    st.caption(
+                        f"مقارنة أداء مجموعة الاختبار المستقلة نفسها — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
+                        f"مقابل Wildman-Crippen cLogP: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
+                    )
+                    st.dataframe(pd.DataFrame(qsar["test_set_table"]), use_container_width=True, hide_index=True)
+                else:
+                    st.warning("نموذج QSAR الإحصائي غير متاح في البيئة الحالية.")
 
                 st.markdown(
                     f"""
 <div class="ml-card">
-  <h5>معلومات النموذج والحدود العلمية (Model Methodology &amp; Limitations)</h5>
-  <p><strong>اسم النموذج والمنهجية:</strong> {_esc(eval_res['methodology_ar'])}</p>
-  <p><strong>المرجع الأكاديمي القياسي:</strong> <code>{_esc(eval_res['citation'])}</code></p>
+  <h5>المنهجية والمراجع والحدود العلمية (Methodology, Citations &amp; Limitations)</h5>
+  <p><strong>المنهجية:</strong> {_esc(eval_res['methodology_ar'])}</p>
+  <p><strong>مرجع Wildman-Crippen:</strong> <code>{_esc(det['citation'])}</code></p>
+  <p><strong>مصادر البيانات التجريبية للاختبار:</strong> <code>{_esc(MolecularIntelligence.DATASET_CITATION)}</code></p>
   <p><strong>حدود الاستخدام العلمية:</strong> {_esc(eval_res['limitations_ar'])}</p>
 </div>
 """,

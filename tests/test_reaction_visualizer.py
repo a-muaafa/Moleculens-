@@ -58,22 +58,71 @@ def test_analyze_bond_transformations_hydrogen_combustion():
     assert "bonds_formed" in analysis
     assert len(analysis["bonds_broken"]) > 0
     assert len(analysis["bonds_formed"]) > 0
+    assert analysis["is_illustrative"] is False
+    assert analysis["calculation_source"] == "bond_dissociation_table"
     assert analysis["is_exothermic"] is True
     assert analysis["estimated_delta_h_kj"] < 0
     assert "طارد للحرارة" in analysis["thermodynamic_type_ar"]
 
 
+def test_analyze_bond_transformations_illustrative_when_incomplete():
+    reactants = [{"formula": "AgNO3"}, {"formula": "NaCl"}]
+    products = [{"formula": "AgCl"}, {"formula": "NaNO3"}]
+    analysis = ReactionVisualizer.analyze_bond_transformations(reactants, products)
+
+    assert analysis["is_illustrative"] is True
+    assert analysis["calculation_source"] == "illustrative_qualitative"
+    assert analysis["estimated_delta_h_kj"] is None
+    assert analysis["total_broken_energy_kj"] is None
+    assert analysis["total_formed_energy_kj"] is None
+
+
 def test_create_reaction_energy_diagram():
-    fig = ReactionVisualizer.create_reaction_energy_diagram(
+    fig_no_ea = ReactionVisualizer.create_reaction_energy_diagram(
         reactants_str="2H2 + O2",
         products_str="2H2O",
         is_exothermic=True,
         delta_h_kj=-483.6,
-        activation_energy_kj=65.0,
+        activation_energy_kj=None,
+        is_illustrative=False,
     )
-    assert isinstance(fig, go.Figure)
-    assert len(fig.data) > 0
-    # Check annotations exist for Delta H
-    layout_dict = fig.to_dict()["layout"]
+    assert isinstance(fig_no_ea, go.Figure)
+    assert len(fig_no_ea.data) > 0
+    layout_dict = fig_no_ea.to_dict()["layout"]
     assert "annotations" in layout_dict
     assert len(layout_dict["annotations"]) >= 1
+    assert layout_dict["yaxis"]["showticklabels"] is False
+    all_text = " ".join(
+        str(ann.get("text", "")) for ann in layout_dict["annotations"]
+    ) + " " + " ".join(str(getattr(tr, "text", "")) for tr in fig_no_ea.data)
+    assert "65.0" not in all_text
+    assert "-483.6" in all_text
+
+    # When both Delta H and Ea are provided, Y axis displays quantitative kJ ticks
+    fig_full = ReactionVisualizer.create_reaction_energy_diagram(
+        reactants_str="2H2 + O2",
+        products_str="2H2O",
+        is_exothermic=True,
+        delta_h_kj=-483.6,
+        activation_energy_kj=85.0,
+        is_illustrative=False,
+    )
+    assert fig_full.to_dict()["layout"]["yaxis"]["showticklabels"] is True
+
+
+def test_create_illustrative_energy_diagram_hides_fake_numbers():
+    fig = ReactionVisualizer.create_reaction_energy_diagram(
+        reactants_str="A + B",
+        products_str="C + D",
+        is_exothermic=None,
+        delta_h_kj=None,
+        activation_energy_kj=None,
+        is_illustrative=True,
+    )
+    assert isinstance(fig, go.Figure)
+    layout_dict = fig.to_dict()["layout"]
+    assert layout_dict["yaxis"]["showticklabels"] is False
+    annotations_text = " ".join(str(ann.get("text", "")) for ann in layout_dict.get("annotations", []))
+    assert "kJ" not in annotations_text
+    assert "-150" not in annotations_text
+
