@@ -149,11 +149,11 @@ flowchart TD
 
 ## 5. تشغيل الاختبارات الآلية والتحقق (Automated QA Test Suite)
 
-![Tests](https://img.shields.io/badge/tests-191%20passed-16a34a) ![Coverage](https://img.shields.io/badge/coverage-80%25-16a34a) ![Python](https://img.shields.io/badge/python-3.11-blue) ![License](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-192%20passed-16a34a) ![Coverage](https://img.shields.io/badge/coverage-80%25-16a34a) ![Python](https://img.shields.io/badge/python-3.11-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-> الأرقام أعلاه (191 اختباراً ناجحاً بنسبة 100%) نتائج فعلية مقيسة محلياً بالأمر `pytest -q`.
+> الأرقام أعلاه (192 اختباراً ناجحاً بنسبة 100%) نتائج فعلية مقيسة محلياً بالأمر `pytest -q`.
 
-يحتوي المشروع على **191 اختباراً آلياً** في مجلد `tests/` عبر 18 ملف اختبار تغطي جميع الوحدات العلمية والحسابية والحالات الحدية وغياب المكتبات وفشل الشبكة وفحص الواجهة الرسومية بنسبة نجاح 100%. لتشغيلها محلياً:
+يحتوي المشروع على **192 اختباراً آلياً** في مجلد `tests/` عبر 18 ملف اختبار تغطي جميع الوحدات العلمية والحسابية والحالات الحدية وغياب المكتبات وفشل الشبكة وفحص الواجهة الرسومية بنسبة نجاح 100%. لتشغيلها محلياً:
 
 ```bash
 pytest -v                      # تشغيل الاختبارات

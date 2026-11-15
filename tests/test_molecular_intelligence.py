@@ -140,3 +140,17 @@ def test_evaluate_logp_prediction_invalid_molecule():
     eval_result = MolecularIntelligence.evaluate_logp_prediction("INVALID_XYZ")
     assert eval_result["available"] is False
     assert "message_ar" in eval_result
+
+
+def test_evaluate_logp_prediction_numpy_fallback_when_sklearn_missing(monkeypatch):
+    import chemistry_engine.molecular_intelligence as mi
+    monkeypatch.setattr(mi.MolecularIntelligence, "_CACHED_QSAR_BUNDLE", None)
+    monkeypatch.setattr(mi, "SKLEARN_AVAILABLE", False)
+
+    eval_result = mi.MolecularIntelligence.evaluate_logp_prediction("CC(=O)Oc1ccccc1C(=O)O")
+    assert eval_result["available"] is True
+    qsar = eval_result["qsar_model_evaluation"]
+    assert qsar["model_available"] is True
+    assert qsar["test_r2"] > 0.7
+    assert qsar["test_rmse"] > 0.0
+    assert len(qsar["test_set_table"]) == 8
