@@ -170,11 +170,6 @@ MANUALLY_VERIFIED_REACTION_SOURCES: dict[str, dict[str, str]] = {
         "verified_source_section": "Ullmann's Encyclopedia (2012), Iron Blast Furnace Process, 800-1000 °C",
         "verified_conditions": "Blast furnace 600-1200 °C (optimal 900 °C)",
     },
-    "rxn_057_redox_synthesis": {
-        "verified_equation": "N2(g) + O2(g) -> 2NO(g)",
-        "verified_source_section": "NIST-JANAF 4th Ed. (1998), p. 1666, ΔH°f(NO) = +90.29 kJ/mol (+180.6 kJ per 2 mol)",
-        "verified_conditions": "High temperature / electric arc (1000-3000 °C)",
-    },
     "rxn_058_decomposition": {
         "verified_equation": "CaCO3(s) -> CaO(s) + CO2(g)",
         "verified_source_section": "Ullmann's Encyclopedia (2012), Lime and Limestone, Calcination at 850-900 °C, ΔH° = +178.3 kJ/mol",
@@ -216,7 +211,7 @@ _REGISTRY_IDS: set[str] = {r["reaction_id"] for r in VERIFIED_REACTIONS_REGISTRY
 REFERENCE_VERIFIED_IDS: set[str] = set(MANUALLY_VERIFIED_REACTION_SOURCES.keys()) & _REGISTRY_IDS
 
 REFERENCE_CHECK_SCOPE_AR = (
-    f"تم التحقق يدوياً من المصدر العلمي الأساسي والمعادلة والظروف لـ ({len(REFERENCE_VERIFIED_IDS)} / 87) تفاعلاً محورياً؛ "
+    f"تم التحقق يدوياً من المصدر العلمي الأساسي والمعادلة والظروف لـ ({len(REFERENCE_VERIFIED_IDS)} / {len(_REGISTRY_IDS)}) تفاعلاً محورياً؛ "
     "أما بقية التفاعلات فمدققة آلياً بالكامل (حفظ الذرات، حفظ الشحنة، الكتلة المولية، اتساق الأطوار، وإشارة ΔH) "
     "مع تسجيل المرجع الببليوغرافي، ولا يُعرض أي تفاعل على أنه مراجَع الصفحة يدوياً لمجرد وجود رابط مرجعي."
 )
@@ -443,7 +438,7 @@ def audit_single_reaction(rxn: dict[str, Any]) -> dict[str, Any]:
 
 def audit_registry_and_rules() -> dict[str, Any]:
     """
-    Performs a complete independent scientific audit across all 87 registry reactions
+    Performs a complete independent scientific audit across all registry reactions
     and all 13 general chemistry inference rules.
     """
     reaction_reports: list[dict[str, Any]] = []

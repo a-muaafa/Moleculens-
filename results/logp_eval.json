@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-16T17:19:23+00:00",
+  "generated_at_utc": "2026-11-16T21:39:12+00:00",
   "versions": {
     "python": "3.11.0",
     "rdkit": "2026.09.1",
@@ -42,6 +42,7 @@
     "cv_mae": 0.437,
     "min_loco_class_size": 5,
     "loco_zero_leakage_verified": true,
+    "loco_leak_violations": 0,
     "group_cv_r2": 0.846,
     "group_cv_rmse": 0.607,
     "group_cv_mae": 0.467,

@@ -5,9 +5,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    name: Pytest & Scientific Audit (Python 3.11)
+    name: Pytest, security gates & QSAR evaluation (Python 3.11)
     runs-on: ubuntu-latest
 
     steps:
@@ -20,29 +27,43 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install dependencies with pinned version bounds
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run reproducible QSAR LogP evaluation on clean environment
+      - name: Byte-compile all sources (syntax gate)
+        run: python -m compileall -q .
+
+      - name: Reproducible QSAR LogP evaluation on a clean environment
         run: |
+          mkdir -p results
           python scripts/evaluate_logp.py
 
-      - name: Verify clean SQLite seed and run full Pytest suite
+      - name: Run full test suite once (with coverage and JUnit report)
         run: |
           rm -f data/moleculens_local.db
-          pytest -v --tb=short --junitxml=results/junit.xml
+          mkdir -p results
+          set -o pipefail
+          pytest -v --tb=short \
+            --junitxml=results/junit.xml \
+            --cov=. --cov-report=xml:coverage.xml --cov-report=term \
+            | tee results/pytest_summary.txt
 
-      - name: Measure test coverage and write CI job summary
+      - name: Write job summary from the real test output
+        if: always()
         run: |
-          pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing -q | tee results/pytest_summary.txt
-          echo "## MolecuLens Automated QA Summary" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          tail -n 25 results/pytest_summary.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "## MolecuLens Automated QA Summary" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f results/pytest_summary.txt ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 30 results/pytest_summary.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Test run did not produce output (a previous step failed)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Upload coverage and QSAR evaluation artifacts
+      - name: Upload test, coverage and QSAR artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: moleculens-qa-artifacts
@@ -50,4 +71,5 @@ jobs:
             coverage.xml
             results/logp_eval.json
             results/junit.xml
+            results/pytest_summary.txt
           if-no-files-found: warn

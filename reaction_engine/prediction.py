@@ -1876,7 +1876,9 @@ def resolve_reactant_token(token: str) -> tuple[dict[str, Any] | None, str]:
         entity = res_net["candidates"][0]
         return entity, f"المادة «{clean_tok}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
 
-    return None, f"تعذّر التعرف على المادة «{clean_tok}» (استخدم الاسم أو الصيغة الكيميائية أو SMILES)."
+    from core.security import sanitize_external_text
+
+    return None, f"تعذّر التعرف على المادة «{sanitize_external_text(clean_tok, max_len=80)}» (استخدم الاسم أو الصيغة الكيميائية أو SMILES)."
 
 
 def parse_and_resolve_reactant_text(raw: str) -> tuple[list[dict[str, Any]], list[str]]:

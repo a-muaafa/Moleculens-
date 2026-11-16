@@ -165,9 +165,9 @@ flowchart TD
 
 [![MolecuLens Automated Tests](https://github.com/a-muaafa/Moleculens-/actions/workflows/tests.yml/badge.svg)](https://github.com/a-muaafa/Moleculens-/actions/workflows/tests.yml) ![Python](https://img.shields.io/badge/python-3.11-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
-يعمل خط الفحص الآلي المستمر (`.github/workflows/tests.yml`) تلقائياً عند كل `Push` و`Pull Request` على بيئة نظيفة تماماً (حذف أي قاعدة بيانات محلية سابقة وإعادة بنائها من الصفر، وتشغيل `python scripts/evaluate_logp.py`، ثم تشغيل كامل حزمة اختبارات `pytest` ورفع تقارير `coverage.xml` و`results/logp_eval.json` و`results/junit.xml`).
+يعمل خط الفحص الآلي (`.github/workflows/tests.yml`) عند كل `Push` و`Pull Request` على بيئة نظيفة: يُعاد بناء قاعدة البيانات المحلية، ويُشغَّل `python scripts/evaluate_logp.py`، ثم تُشغَّل كامل حزمة `pytest` مرة واحدة مع قياس التغطية، وتُرفع التقارير كمرفقات.
 
-يحتوي المشروع على **214 اختباراً آلياً** في مجلد `tests/` عبر 19 ملف اختبار تغطي جميع الوحدات العلمية والحسابية والحالات الحدية وغياب المكتبات وفشل الشبكة والأمان وعقد الـ API وفحص الواجهة الرسومية بنسبة نجاح 100%. لتشغيلها محلياً:
+تُشغَّل الاختبارات تلقائياً عند كل `Push` و`Pull Request`، ويظهر **عددها ونتيجتها الفعلية** في تبويب `Actions` وفي ملخص الـ Job (`junit.xml` و`coverage.xml` مرفقان بالنتائج)، ولا نثبّت هنا أي رقم نجاح قبل ظهور نتيجة التشغيل. لتشغيلها محلياً:
 
 ```bash
 pytest -v                      # تشغيل الاختبارات
@@ -189,7 +189,8 @@ pytest --cov=. --cov-report=term-missing   # قياس التغطية
 - `tests/test_prediction_view.py`: اختبارات واجهة `Streamlit` لمختبر التوقع عبر `AppTest` — العرض الحر للإدخال، ومسار النتيجة الموثقة، ومسار «لا تتوفر بيانات كافية».
 - `tests/test_cache_store.py`: اختبارات التخزين المؤقت — الإخراج بخوارزمية LRU، وانتهاء الصلاحية، وعدّادات معدل الإصابة، والأمان الخيطي، والاستمرارية على القرص.
 - `tests/test_search_debounce.py`: اختبارات كبح الطلبات الشبكية — عدم تأثّر نتائج السجل المحلي، وتأجيل الاستعلام الثاني، و تجاوز الكبح عند الطلب الصريح.
-- `tests/test_platform_upgrade.py`: اختبارات البحث الذكي والمصاوغات، وتوثيق المراجع الفردية الـ87 وتصنيفها الثلاثي، واختبار عرض جميع صفحات واجهة `Streamlit` برمجياً عبر `AppTest`.
+- `tests/test_platform_upgrade.py`: اختبارات البحث الذكي والمصاوغات، وتوثيق المراجع الفردية وتصنيفها الثلاثي، واختبار عرض جميع صفحات واجهة `Streamlit` برمجياً عبر `AppTest`.
+- `tests/test_quality_gates.py`: بوابات الجودة والأمان — فحص المستودع من المفاتيح والأسرار، وحمولات XSS، وفلتر الروابط ضد SSRF (العناوين الداخلية وmetadata)، واختبار كل واجهات `MolecuLensAPI` بمدخلات صحيحة وخاطئة، وفشل الاتصال بالمصادر الخارجية، وحفظ الكتلة والشحنة (مع اختبارات سلبية)، والمعايرة والتركيز والتداخلات الدوائية.
 - `tests/test_entity_profiles.py` و `tests/test_mvp_scenarios.py` و `tests/test_smart_search.py`: اختبارات الملفات العلمية وسيناريوهات المنصة.
 
 ---

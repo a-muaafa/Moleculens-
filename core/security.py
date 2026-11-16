@@ -11,8 +11,10 @@ Guarantees:
 from __future__ import annotations
 
 import html
+import ipaddress
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _SCRIPT_TAG_RE = re.compile(r"<\s*/?\s*(script|iframe|object|embed|style|link|meta)\b[^>]*>", re.IGNORECASE)
@@ -94,12 +96,39 @@ def validate_safe_chemical_input(
 
 
 def is_safe_https_url(url: str) -> bool:
-    """Ensures an external URL uses https:// and does not point to local/private loopback."""
+    """
+    Ensures an external URL is https:// and does not target local/private/internal hosts
+    (loopback, RFC1918 ranges, link-local such as the 169.254.169.254 cloud metadata endpoint,
+    .local/.internal names) or embed credentials (user@host).
+    """
     if not url or not isinstance(url, str):
         return False
-    u = url.strip().lower()
-    if not u.startswith("https://"):
+    candidate = url.strip()
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
         return False
-    if any(host in u for host in ("localhost", "127.0.0.1", "0.0.0.0", "[::1]")):
+    if parsed.scheme.lower() != "https":
         return False
-    return True
+    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+        return False
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return False
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal", ".lan")):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return True  # ordinary DNS name
+    mapped = getattr(ip, "ipv4_mapped", None)
+    if mapped is not None:
+        ip = mapped
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )

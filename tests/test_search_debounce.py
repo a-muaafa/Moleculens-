@@ -12,6 +12,8 @@ from search.search_engine import (
 
 def _reset_debounce() -> None:
     set_network_debounce_seconds(NETWORK_DEBOUNCE_SECONDS)
+    import search.search_engine as se
+    se._NETWORK_STATE["last_request"] = 0.0
 
 
 def test_local_results_are_not_affected_by_debouncing():

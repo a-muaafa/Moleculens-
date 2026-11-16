@@ -847,11 +847,16 @@ class MolecularIntelligence:
         loco_included_mask = np.zeros(n_samples, dtype=bool)
         group_cv_by_class: list[dict[str, Any]] = []
         excluded_small_classes: list[dict[str, Any]] = []
+        loco_leak_violations = 0
 
         for grp in sorted(set(class_labels.tolist())):
             val_mask = class_labels == grp
             tr_ids = np.where(~val_mask)[0]
             va_ids = np.where(val_mask)[0]
+            # Computed (not asserted) leakage check: training rows must be disjoint from the
+            # held-out class and must contain no member of that class.
+            if set(tr_ids.tolist()) & set(va_ids.tolist()) or bool(np.any(class_labels[tr_ids] == grp)):
+                loco_leak_violations += 1
             loco_preds[va_ids] = _predict_loco_fold_train_only(
                 X_arr[tr_ids], y_arr[tr_ids], X_arr[va_ids]
             )
@@ -980,7 +985,8 @@ class MolecularIntelligence:
             "cv_rmse": cv_rmse,
             "cv_mae": cv_mae,
             "min_loco_class_size": MIN_LOCO_CLASS_SIZE,
-            "loco_zero_leakage_verified": True,
+            "loco_zero_leakage_verified": loco_leak_violations == 0,
+            "loco_leak_violations": int(loco_leak_violations),
             "group_cv_r2": group_cv_r2,
             "group_cv_rmse": group_cv_rmse,
             "group_cv_mae": group_cv_mae,
