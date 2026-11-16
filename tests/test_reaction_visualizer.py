@@ -169,10 +169,10 @@ def test_independent_scientific_audit_registry_and_rules():
 
     report = audit_registry_and_rules()
     assert report["overall_passed"] is True, f"Audit errors: {report['errors']}"
-    assert report["total_reactions"] == 87
-    assert report["passed_reactions"] == 87
-    assert report["unique_source_ids"] == 87
-    assert report["unique_bibliographic_sources"] == 87
+    assert report["total_reactions"] == 120
+    assert report["passed_reactions"] == 120
+    assert report["unique_source_ids"] == 120
+    assert report["unique_bibliographic_sources"] == 120
     assert report["total_rules"] == 13
     assert report["passed_rules"] == 13
     assert report["quantitative_enthalpy_reactions"] >= 60

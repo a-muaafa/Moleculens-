@@ -503,10 +503,6 @@ def render_prediction_section() -> None:
     with st.expander("المساعد العلمي — شرح النتيجة خطوة بخطوة (AI Scientific Assistant)", expanded=True):
         st.markdown(AIScientificAssistant.explain_reaction_prediction(prediction), unsafe_allow_html=False)
 
-    from frontend.reaction_lab_view import _render_scientific_audit_panel
-
-    _render_scientific_audit_panel()
-
 
 def _render_end_to_end_experiment_walkthrough(prediction: dict[str, Any]) -> None:
     """Renders the 4-stage visual chemical experiment walkthrough in the Chemical Playground."""

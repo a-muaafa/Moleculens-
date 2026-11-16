@@ -66,3 +66,35 @@ def test_invalid_parameters():
     with pytest.raises(ValueError):
         TitrationEngine.simulate_titration("HCl", "NaOH", -0.1, 25.0, 0.1)
 
+
+def test_expanded_acids_bases_indicators_and_polyprotic_simulation():
+    required_acids = {
+        "HCl", "H2SO4", "HNO3", "H3PO4", "CH3COOH", "HCOOH",
+        "C6H8O7", "H2C2O4", "C3H6O3", "C7H6O2", "H2CO3", "H3BO3",
+    }
+    required_bases = {
+        "NaOH", "KOH", "Ca(OH)2", "Ba(OH)2", "NH3",
+        "Mg(OH)2", "CH3NH2", "C2H5NH2", "NaHCO3", "Na2CO3",
+    }
+    required_indicators = {
+        "phenolphthalein", "methyl_orange", "methyl_red", "bromothymol_blue",
+        "bromocresol_green", "bromocresol_purple", "thymol_blue", "litmus",
+    }
+
+    assert required_acids <= set(TitrationEngine.ACID_DATABASE.keys())
+    assert required_bases <= set(TitrationEngine.BASE_DATABASE.keys())
+    assert required_indicators <= set(TitrationEngine.INDICATORS.keys())
+
+    # Polyprotic acid H3PO4 (3 protons) titrated with NaOH: 25 mL of 0.1 M H3PO4 requires 75 mL of 0.1 M NaOH for total equivalence
+    sim_poly = TitrationEngine.simulate_titration("H3PO4", "NaOH", 0.1, 25.0, 0.1)
+    assert sim_poly["success"] is True
+    assert sim_poly["is_polyprotic"] is True
+    assert sim_poly["v_eq_ml"] == pytest.approx(75.0, abs=0.1)
+    assert sim_poly["step_equivalence_volumes_ml"] == [25.0, 50.0, 75.0]
+    assert "endpoint_volume_ml" in sim_poly
+
+    # Flask color SVG simulation (at pH=10.5 above phenolphthalein range 8.2-10.0, basic pink #EC4899 is shown)
+    svg = TitrationEngine.create_flask_svg(current_ph=10.5, indicator_key="phenolphthalein", current_vol_ml=26.0, v_eq_ml=25.0)
+    assert "<svg" in svg
+    assert "#EC4899" in svg
+

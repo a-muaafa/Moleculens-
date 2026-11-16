@@ -418,3 +418,90 @@ class MolecuLensAPI:
             message_en="Independent scientific audit of reactions and rules completed.",
             data=report,
         )
+
+    @staticmethod
+    def simulate_titration(
+        acid_key: str,
+        base_key: str,
+        acid_conc_m: float = 0.1,
+        acid_volume_ml: float = 25.0,
+        base_conc_m: float = 0.1,
+        titration_mode: str = "acid_with_base",
+    ) -> dict[str, Any]:
+        endpoint = "/api/v1/titration/simulate"
+        from titration.titration_engine import TitrationEngine
+
+        try:
+            sim = TitrationEngine.simulate_titration(
+                acid_key=acid_key,
+                base_key=base_key,
+                acid_conc_m=acid_conc_m,
+                acid_volume_ml=acid_volume_ml,
+                base_conc_m=base_conc_m,
+                titration_mode=titration_mode,
+            )
+            return make_api_response(
+                ok=True,
+                status_code=200,
+                ui_state="ready",
+                endpoint=endpoint,
+                message_ar="تمت محاكاة المعايرة وحساب نقطة التكافؤ ونقطة النهاية بنجاح.",
+                message_en="Titration simulation completed successfully.",
+                data=sim,
+            )
+        except ValueError as exc:
+            return make_api_response(
+                ok=False,
+                status_code=400,
+                ui_state="error",
+                endpoint=endpoint,
+                message_ar=str(exc),
+                message_en=str(exc),
+                error_code="INVALID_TITRATION_PARAMETERS",
+                error_details_ar=str(exc),
+            )
+
+    @staticmethod
+    def check_drug_interactions(drugs: list[str]) -> dict[str, Any]:
+        endpoint = "/api/v1/ddi/screen"
+        from pharmacy.ddi_engine import DDIEngine
+
+        if not drugs or not isinstance(drugs, list) or len(drugs) < 2:
+            return make_api_response(
+                ok=False,
+                status_code=400,
+                ui_state="error",
+                endpoint=endpoint,
+                message_ar="يلزم إدخال دواءين على الأقل لفحص التداخلات الدوائية.",
+                message_en="At least two drugs are required for DDI screening.",
+                error_code="INSUFFICIENT_DRUGS",
+            )
+        res = DDIEngine.screen_polypharmacy(drugs)
+        return make_api_response(
+            ok=True,
+            status_code=200,
+            ui_state="ready",
+            endpoint=endpoint,
+            message_ar="تم فحص التداخلات الدوائية لجميع أزواج الأدوية المدخلة.",
+            message_en="Pairwise drug-drug interaction screening completed.",
+            data=res,
+        )
+
+    @staticmethod
+    def pharmacology_overview() -> dict[str, Any]:
+        endpoint = "/api/v1/pharmacology/overview"
+        from frontend.pharmacology_view import PHARMACOLOGY_PILLARS
+
+        return make_api_response(
+            ok=True,
+            status_code=200,
+            ui_state="ready",
+            endpoint=endpoint,
+            message_ar="قسم علم الأدوية (Pharmacology) في حالة Coming Soon – قيد التطوير.",
+            message_en="Pharmacology module is in Coming Soon status.",
+            data={
+                "status": "coming_soon",
+                "status_label_ar": "Coming Soon – قيد التطوير",
+                "pillars": PHARMACOLOGY_PILLARS,
+            },
+        )

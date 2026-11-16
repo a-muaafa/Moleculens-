@@ -116,16 +116,25 @@ def render_reaction_lab_section() -> None:
     st.markdown(
         """
 <div class="ml-card">
-  <h3>Reaction Lab — مختبر تحليل التفاعلات والحسابات الكيميائية</h3>
+  <h3>Reaction Lab – مختبر التفاعلات الكيميائية (المختبر الموحد للتفاعلات والتوقع والتمثيل البصري)</h3>
   <p>
-    جميع خيارات الإعداد في هذه الصفحة قوائم مغلقة (Closed Dropdowns) لضمان الدقة العلمية؛ اختر المواد المتفاعلة (Reactants)
-    والوحدات وظروف التفاعل، وأدخل الكمية الرقمية فقط. يتحقق المحرك العلمي من توافق المجال والظروف، ويوازن المعادلة جبرياً،
-    ويحسب المتفاعل المحدد (Limiting Reagent) والناتج النظري (Theoretical Yield) دون اختلاق تفاعلات غير موثقة.
+    يجمع هذا المختبر الموحد بين: <strong>(1) التوقع الكيميائي الذكي لأي مادتين أو أكثر</strong> (عنصر + عنصر، عنصر + مركب، مركب + مركب، أو عدة مواد معاً)
+    بمستويات الدليل الثلاثة مع تحليل ماذا لو (What-If) والتمثيل البصري للجزيئات قبل التفاعل وبعده،
+    و<strong>(2) مختبر الحسابات المولية والستوكيومترية الموثقة</strong> وتصفح قاعدة بيانات التفاعلات الموسعة (120 تفاعلاً موثقاً)
+    مع حساب المتفاعل المحدد والفائض والمردود النظري دون اختلاق أي تفاعلات أو نواتج غير موثقة.
   </p>
 </div>
 """,
         unsafe_allow_html=True,
     )
+
+    from frontend.prediction_view import render_prediction_section
+
+    with st.expander("القسم الأول: التوقع التفاعلي الحر، التمثيل البصري للجزيئات، وتحليل ماذا لو (What-If)", expanded=True):
+        render_prediction_section()
+
+    st.markdown("---")
+    st.markdown("<h3>القسم الثاني: الحسابات الستوكيومترية الموجهة وموسوعة التفاعلات المصنفة (120 تفاعلاً)</h3>", unsafe_allow_html=True)
 
     c_dom, c_type, c_cat = st.columns(3)
     with c_dom:
@@ -172,6 +181,12 @@ def render_reaction_lab_section() -> None:
         r3_entity = _substance_select("اختر المادة الثالثة:", options, "rxn_r3_key", allow_none=True)
         r3_amt, r3_unit = _amount_inputs("rxn_r3", "للمادة الثالثة", units, 1.0)
 
+    r4_entity = None
+    r4_amt, r4_unit = 1.0, units[0][0]
+    if st.checkbox("إضافة مادة متفاعلة رابعة (Add Fourth Reactant)", key="rxn_has_r4"):
+        r4_entity = _substance_select("اختر المادة الرابعة:", options, "rxn_r4_key", allow_none=True)
+        r4_amt, r4_unit = _amount_inputs("rxn_r4", "للمادة الرابعة", units, 1.0)
+
     with st.expander("ظروف التفاعل والتحقق من التوافق (Reaction Conditions & Compatibility)", expanded=False):
         cc1, cc2 = st.columns(2)
         with cc1:
@@ -183,7 +198,12 @@ def render_reaction_lab_section() -> None:
     st.markdown("</div>", unsafe_allow_html=True)
 
     reactant_inputs: list[dict[str, Any]] = []
-    for ent, amt, unit in ((r1_entity, r1_amt, r1_unit), (r2_entity, r2_amt, r2_unit), (r3_entity, r3_amt, r3_unit)):
+    for ent, amt, unit in (
+        (r1_entity, r1_amt, r1_unit),
+        (r2_entity, r2_amt, r2_unit),
+        (r3_entity, r3_amt, r3_unit),
+        (r4_entity, r4_amt, r4_unit),
+    ):
         if ent is not None:
             reactant_inputs.append({"substance": ent, "formula": ent["symbol_or_formula"], "amount": amt, "unit": unit})
 

@@ -1,23 +1,28 @@
 """
 Titration Lab frontend view for MolecuLens.
-Interactive acid-base titration simulator with Plotly curves, buffer modeling,
-equivalence point detection, and indicator transition bands.
+Interactive acid-base titration simulator with 13 acids, 10 bases, 9 indicators,
+automatic optimal indicator selection, dynamic Erlenmeyer flask color SVG,
+polyprotic stepwise equivalence points, and endpoint vs. equivalence point detection.
 """
 
-import streamlit as st
+from __future__ import annotations
+
 import html
+import pandas as pd
+import streamlit as st
 from titration.titration_engine import TitrationEngine
 
 
-def render_titration_view(lang: str = "ar"):
+def render_titration_view(lang: str = "ar") -> None:
     """Renders the Titration Virtual Laboratory interface."""
     is_ar = lang == "ar"
 
-    header_title = "مختبر المعايرة الافتراضي (Titration Lab)" if is_ar else "Virtual Titration Laboratory"
+    header_title = "مختبر المعايرة الافتراضي الموسّع (Virtual Titration Lab)" if is_ar else "Virtual Titration Laboratory"
     header_desc = (
-        "محاكاة حركية وديناميكية لتفاعلات المعايرة حمض-قاعدة مع الحسابات الترموديناميكية لنقاط التكافؤ ومنحنيات pH."
+        "محاكاة ديناميكية لتفاعلات المعايرة للأحماض والقواعد القوية والضعيفة ومتعددة البروتونات، "
+        "مع اختيار الكاشف اللوني تلقائياً ومحاكاة تغير اللون داخل الدورق المخروطي ورسم نقطة التكافؤ ونقطة النهاية."
         if is_ar
-        else "Thermodynamic simulation of acid-base titration reactions with pH curves, buffer capacity, and equivalence calculations."
+        else "Dynamic simulation of strong, weak, and polyprotic acid-base titrations with automatic indicator selection, flask color simulation, and equivalence/endpoint tracking."
     )
 
     st.markdown(
@@ -37,10 +42,10 @@ def render_titration_view(lang: str = "ar"):
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.subheader("1. " + ("تحديد الحمض والقاعدة" if is_ar else "Select Acid & Base"))
+        st.subheader("1. " + ("تحديد الحمض والقاعدة وبياناتهما الكيميائية" if is_ar else "Select Acid & Base"))
         acid_options = list(acids.keys())
         acid_labels = {
-            k: f"{acids[k]['name_ar' if is_ar else 'name_en']} ({k}) - {'قوي' if acids[k]['type'] == 'strong' else 'ضعيف'}"
+            k: f"{acids[k]['name_ar' if is_ar else 'name_en']} ({k}) — {'قوي' if acids[k]['type'] == 'strong' else 'ضعيف'} (التكافؤ={acids[k]['protons']})"
             for k in acid_options
         }
         selected_acid_key = st.selectbox(
@@ -49,10 +54,17 @@ def render_titration_view(lang: str = "ar"):
             format_func=lambda k: acid_labels[k],
             index=0,
         )
+        a_spec = acids[selected_acid_key]
+        st.caption(
+            f"**{a_spec['name_ar']} ({selected_acid_key}):** {a_spec.get('strength_ar', '')} | "
+            f"الكتلة المولية: `{a_spec.get('molar_mass', 0)} g/mol` | "
+            f"ثوابت التأين pKa: `{', '.join(str(x) for x in a_spec.get('pKa_list', [a_spec['pKa']]))}` | "
+            f"الذوبانية: {a_spec.get('solubility_ar', '')}"
+        )
 
         base_options = list(bases.keys())
         base_labels = {
-            k: f"{bases[k]['name_ar' if is_ar else 'name_en']} ({k}) - {'قوي' if bases[k]['type'] == 'strong' else 'ضعيف'}"
+            k: f"{bases[k]['name_ar' if is_ar else 'name_en']} ({k}) — {'قوية' if bases[k]['type'] == 'strong' else 'ضعيفة'} (التكافؤ={bases[k]['hydroxides']})"
             for k in base_options
         }
         selected_base_key = st.selectbox(
@@ -61,10 +73,17 @@ def render_titration_view(lang: str = "ar"):
             format_func=lambda k: base_labels[k],
             index=0,
         )
+        b_spec = bases[selected_base_key]
+        st.caption(
+            f"**{b_spec['name_ar']} ({selected_base_key}):** {b_spec.get('strength_ar', '')} | "
+            f"الكتلة المولية: `{b_spec.get('molar_mass', 0)} g/mol` | "
+            f"ثوابت التأين pKb: `{', '.join(str(x) for x in b_spec.get('pKb_list', [b_spec['pKb']]))}` | "
+            f"الذوبانية: {b_spec.get('solubility_ar', '')}"
+        )
 
         mode_options = [
-            ("acid_with_base", "معايرة حمض بواسطة قاعدة (Analyte: Acid, Titrant: Base)" if is_ar else "Titrate Acid with Base"),
-            ("base_with_acid", "معايرة قاعدة بواسطة حمض (Analyte: Base, Titrant: Acid)" if is_ar else "Titrate Base with Acid"),
+            ("acid_with_base", "معايرة حمض في الدورق بواسطة قاعدة في السحاحة (Analyte: Acid, Titrant: Base)" if is_ar else "Titrate Acid with Base"),
+            ("base_with_acid", "معايرة قاعدة في الدورق بواسطة حمض في السحاحة (Analyte: Base, Titrant: Acid)" if is_ar else "Titrate Base with Acid"),
         ]
         titration_mode = st.selectbox(
             "مسار المعايرة" if is_ar else "Titration Mode",
@@ -74,9 +93,9 @@ def render_titration_view(lang: str = "ar"):
         )
 
     with col2:
-        st.subheader("2. " + ("الحجوم والتراكيز" if is_ar else "Volumes & Concentrations"))
-        analyte_label = "الحمض المجهول/المعاير" if titration_mode == "acid_with_base" else "القاعدة المجهولة/المعايرة"
-        analyte_v_label = f"حجم {analyte_label} (مل)" if is_ar else "Analyte Volume (mL)"
+        st.subheader("2. " + ("الحجوم والتراكيز واختيار الكاشف اللوني" if is_ar else "Volumes, Concentrations & Indicator"))
+        analyte_label = "الحمض في الدورق" if titration_mode == "acid_with_base" else "القاعدة في الدورق"
+        analyte_v_label = f"حجم {analyte_label} (مل mL)" if is_ar else "Analyte Volume (mL)"
         analyte_volume_ml = st.number_input(
             analyte_v_label, min_value=5.0, max_value=200.0, value=25.0, step=5.0
         )
@@ -92,12 +111,11 @@ def render_titration_view(lang: str = "ar"):
             titrant_c_label, min_value=0.001, max_value=5.0, value=0.100, step=0.01
         )
 
-        ind_keys = list(indicators.keys())
-        selected_indicator = st.selectbox(
-            "الكاشف اللوني (Chemical Indicator)" if is_ar else "Chemical Indicator",
-            options=ind_keys,
-            format_func=lambda k: f"{indicators[k]['name_ar' if is_ar else 'name_en']} (pH {indicators[k]['transition_range'][0]}-{indicators[k]['transition_range'][1]})",
-            index=0,
+        auto_select_ind = st.checkbox(
+            "اختيار الكاشف اللوني الأنسب تلقائياً حسب نقطة التكافؤ (Auto-Select Optimal Indicator)"
+            if is_ar
+            else "Auto-Select Optimal Indicator by Equivalence Point",
+            value=True,
         )
 
     # Perform Titration Simulation
@@ -108,77 +126,121 @@ def render_titration_view(lang: str = "ar"):
             acid_conc_m=analyte_conc_m,
             acid_volume_ml=analyte_volume_ml,
             base_conc_m=titrant_conc_m,
+            titration_mode="acid_with_base",
         )
     else:
         sim_data = TitrationEngine.simulate_titration(
             acid_key=selected_acid_key,
             base_key=selected_base_key,
             acid_conc_m=titrant_conc_m,
-            acid_volume_ml=25.0,
+            acid_volume_ml=analyte_volume_ml,
             base_conc_m=analyte_conc_m,
+            titration_mode="base_with_acid",
+            base_volume_ml=analyte_volume_ml,
         )
+
+    rec_ind_key = sim_data.get("recommended_indicator_key", "bromothymol_blue")
+    ind_keys = list(indicators.keys())
+    with col2:
+        if auto_select_ind:
+            selected_indicator = rec_ind_key
+            rec_ind = indicators[selected_indicator]
+            st.success(
+                f"الكاشف المختار تلقائياً: **{rec_ind['name_ar']}** "
+                f"(مدى التحول pH {rec_ind['transition_range'][0]}–{rec_ind['transition_range'][1]} | "
+                f"حمضي: {rec_ind['color_acid']} -> قاعدي: {rec_ind['color_base']})"
+            )
+        else:
+            selected_indicator = st.selectbox(
+                "الكاشف اللوني (Chemical Indicator)" if is_ar else "Chemical Indicator",
+                options=ind_keys,
+                index=ind_keys.index(rec_ind_key) if rec_ind_key in ind_keys else 0,
+                format_func=lambda k: (
+                    f"{indicators[k]['name_ar' if is_ar else 'name_en']} "
+                    f"(pH {indicators[k]['transition_range'][0]}-{indicators[k]['transition_range'][1]}: "
+                    f"{indicators[k]['color_acid']} -> {indicators[k]['color_base']})"
+                ),
+            )
 
     v_eq = sim_data["v_eq_ml"]
     ph_eq = sim_data["ph_eq"]
     half_eq = sim_data.get("half_v_eq_ml")
     half_ph = sim_data.get("half_ph")
 
+    # Compute endpoint volume and pH for the active indicator
+    active_ind = indicators[selected_indicator]
+    ind_mid = 0.5 * (active_ind["transition_range"][0] + active_ind["transition_range"][1])
+    curve_pts = sim_data["sim_result"]["curve_points"]
+    endpt_row = min(curve_pts, key=lambda pt: abs(pt["ph"] - ind_mid))
+
     st.markdown("---")
 
-    # Step-by-step Interactive Titration addition
-    st.subheader("3. " + ("محاكاة إضافة المحلول خطوة بخطوة" if is_ar else "Interactive Progressive Addition"))
+    st.subheader("3. " + ("محاكاة إضافة المحلول وتغير لون الكاشف داخل الدورق" if is_ar else "Interactive Addition & Flask Color Simulation"))
     max_slider_vol = float(sim_data["volumes_ml"][-1])
     current_vol = st.slider(
-        "حجم المحلول المضاف من السحاحة (مل)" if is_ar else "Volume Added from Burette (mL)",
+        "حجم المحلول المضاف من السحاحة (مل mL)" if is_ar else "Volume Added from Burette (mL)",
         min_value=0.0,
         max_value=max_slider_vol,
         value=float(min(v_eq, max_slider_vol)),
         step=0.2,
     )
 
-    # Calculate current pH at slider volume
     current_state = TitrationEngine.calculate_point_ph(
         v_add=current_vol,
         v_eq=v_eq,
         v_acid=analyte_volume_ml,
-        ca=analyte_conc_m,
-        cb=titrant_conc_m,
+        ca=analyte_conc_m if titration_mode == "acid_with_base" else titrant_conc_m,
+        cb=titrant_conc_m if titration_mode == "acid_with_base" else analyte_conc_m,
         acid_info=acids[selected_acid_key],
         base_info=bases[selected_base_key],
+        titration_mode=titration_mode,
     )
     current_ph = current_state["ph"]
 
-    # Metrics Display
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric(
-            label="نقطة التكافؤ V_eq" if is_ar else "Equivalence Vol",
-            value=f"{v_eq:.2f} mL",
-        )
-    with m2:
-        st.metric(
-            label="درجة حموضة التكافؤ pH_eq" if is_ar else "Equivalence pH",
-            value=f"{ph_eq:.2f}",
-        )
-    with m3:
-        st.metric(
-            label="الحجم المضاف حالياً" if is_ar else "Current Added",
-            value=f"{current_vol:.2f} mL",
-        )
-    with m4:
-        st.metric(
-            label="الرقم الهيدروجيني pH الحالي" if is_ar else "Current pH",
-            value=f"{current_ph:.2f}",
-            delta=f"{current_state['region']}",
-        )
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("حجم التكافؤ الكلي V_eq", f"{v_eq:.2f} mL")
+    m2.metric("pH نقطة التكافؤ", f"{ph_eq:.2f}")
+    m3.metric("نقطة نهاية الكاشف (Endpoint)", f"{endpt_row['volume_added_ml']:.2f} mL", f"pH {endpt_row['ph']:.2f}")
+    m4.metric("الحجم المضاف حالياً", f"{current_vol:.2f} mL")
+    m5.metric("pH الدورق الحالي", f"{current_ph:.2f}", delta=current_state["region"])
 
-    # Build and render Plotly Chart
-    fig = TitrationEngine.create_plotly_curve(
-        sim_data=sim_data,
-        current_v=current_vol,
-        indicator_key=selected_indicator,
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if sim_data.get("is_polyprotic") and len(sim_data.get("step_equivalence_volumes_ml", [])) > 1:
+        steps_str = " ، ".join(
+            f"التكافؤ {i + 1}: {v:.2f} mL"
+            for i, v in enumerate(sim_data["step_equivalence_volumes_ml"])
+        )
+        st.info(f"معايرة متعددة البروتونات/التكافؤ — نقاط التكافؤ المرحلية: {steps_str}")
+
+    viz_col1, viz_col2 = st.columns([2, 3])
+    with viz_col1:
+        flask_svg = TitrationEngine.create_flask_svg(
+            current_ph=current_ph,
+            indicator_key=selected_indicator,
+            current_vol_ml=current_vol,
+            v_eq_ml=v_eq,
+        )
+        st.markdown(flask_svg, unsafe_allow_html=True)
+
+    with viz_col2:
+        fig = TitrationEngine.create_plotly_curve(
+            sim_data=sim_data,
+            current_v=current_vol,
+            indicator_key=selected_indicator,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("دليل الكواشف اللونية المعتمدة (الألوان في الوسط الحمضي والقاعدي ومجالات التحول)", expanded=False):
+        ind_rows = [
+            {
+                "الكاشف اللوني (Indicator)": v["name_ar"],
+                "مجال تغير اللون (pH Range)": f"{v['pH_range'][0]} – {v['pH_range'][1]}",
+                "اللون في الوسط الحمضي (Acidic Color)": v["color_acid"],
+                "اللون في الوسط القاعدي (Basic Color)": v["color_base"],
+                "الملائمة التحليلية": v["suitability_ar"],
+            }
+            for v in indicators.values()
+        ]
+        st.dataframe(pd.DataFrame(ind_rows), use_container_width=True, hide_index=True)
 
     # Indicator Suitability Assessment
     ind_range = indicators[selected_indicator]["transition_range"]
@@ -189,7 +251,7 @@ def render_titration_view(lang: str = "ar"):
         ("الكاشف ملائم لهذه المعايرة لأن مدى تغير لونه يتقاطع مع القفزة الهيدروجينية لنقطة التكافؤ." if is_ar
          else "Selected indicator is suitable: its transition interval encompasses the sharp equivalence pH inflection.")
         if is_suitable
-        else ("الكاشف غير مثالي؛ يفضل اختيار كاشف يتطابق مدى تحوله اللوني بدقة مع pH نقطة التكافؤ." if is_ar
+        else ("الكاشف غير مثالي؛ يفضل تفعيل الاختيار التلقائي أو اختيار كاشف يتطابق مدى تحوله اللوني بدقة مع pH نقطة التكافؤ." if is_ar
               else "Suboptimal indicator choice; select an indicator whose transition range tightly matches the equivalence pH.")
     )
 
@@ -206,7 +268,6 @@ def render_titration_view(lang: str = "ar"):
         unsafe_allow_html=True,
     )
 
-    # Scientific Breakdown of the Titration
     st.markdown("---")
     st.subheader("4. " + ("التفسير العلمي ومراحل المنحنى" if is_ar else "Scientific Breakdown"))
 
@@ -214,11 +275,11 @@ def render_titration_view(lang: str = "ar"):
     with desc_col1:
         st.markdown(
             f"""
-            **{('المعادلة الكيميائية:' if is_ar else 'Chemical Reaction:')}**
-            `{acids[selected_acid_key]['name_en']} + {bases[selected_base_key]['name_en']} -> Salt + H2O`
+            **{('التفاعل الأساسي:' if is_ar else 'Chemical Reaction:')}**
+            `{acids[selected_acid_key]['name_en']} ({selected_acid_key}) + {bases[selected_base_key]['name_en']} ({selected_base_key}) -> Salt + H2O`
 
-            - **{('نوع الحمض:' if is_ar else 'Acid Type:')}** {acids[selected_acid_key]['type'].capitalize()} ({'حمض قوي' if acids[selected_acid_key]['type'] == 'strong' else 'حمض ضعيف'})
-            - **{('نوع القاعدة:' if is_ar else 'Base Type:')}** {bases[selected_base_key]['type'].capitalize()} ({'قاعدة قوية' if bases[selected_base_key]['type'] == 'strong' else 'قاعدة ضعيفة'})
+            - **{('طبيعة الحمض:' if is_ar else 'Acid Type:')}** {acids[selected_acid_key]['strength_ar']}
+            - **{('طبيعة القاعدة:' if is_ar else 'Base Type:')}** {bases[selected_base_key]['strength_ar']}
             - **{('الرقم الهيدروجيني الأولي:' if is_ar else 'Initial pH:')}** {sim_data['initial_ph']:.2f}
             """
         )
@@ -229,7 +290,7 @@ def render_titration_view(lang: str = "ar"):
                 f"""
                 **{('نقطة نصف التكافؤ (Half-Equivalence):' if is_ar else 'Half-Equivalence Point:')}**
                 - **V_half:** {half_eq:.2f} mL
-                - **pH_half:** {half_ph:.2f} *(pH = pKa)*
+                - **pH_half:** {half_ph:.2f} *(pH = pKa1)*
                 - **{('الأهمية الكيميائية:' if is_ar else 'Significance:')}** {('عند هذا الحجم يتساوى تركيز الحمض الضعيف مع قاعدته المرافقة، مما يعطي أقصى سعة للمحلول المنظم (Buffer Capacity).' if is_ar else 'Equal concentrations of weak acid and conjugate base maximize buffer capacity.')}
                 """
             )
@@ -242,4 +303,3 @@ def render_titration_view(lang: str = "ar"):
                 - **{('التعليل:' if is_ar else 'Explanation:')}** {('ينتج ملح متعادل تماماً ولا يحدث تميؤ ملحي، لذلك pH = 7.0 عند 25 درجة مئوية.' if is_ar else 'Neutral salt formed with no salt hydrolysis; pH = 7.0 at 25 °C.')}
                 """
             )
-

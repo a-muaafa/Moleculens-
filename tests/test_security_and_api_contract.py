@@ -232,4 +232,18 @@ def test_unified_api_contract_endpoints_and_status_codes():
     assert audit_res["ok"] is True
     assert audit_res["status_code"] == 200
     assert audit_res["data"]["manually_verified_references"] >= 30
-    assert audit_res["data"]["total_reactions"] == 87
+    assert audit_res["data"]["total_reactions"] == 120
+
+    # 6. Pharmacology Coming Soon endpoint & Titration / DDI API endpoints
+    pharm_res = MolecuLensAPI.pharmacology_overview()
+    assert pharm_res["ok"] is True
+    assert pharm_res["data"]["status"] == "coming_soon"
+    assert len(pharm_res["data"]["pillars"]) == 7
+
+    tit_res = MolecuLensAPI.simulate_titration("H3PO4", "NaOH", 0.1, 25.0, 0.1)
+    assert tit_res["ok"] is True
+    assert tit_res["data"]["is_polyprotic"] is True
+
+    ddi_res = MolecuLensAPI.check_drug_interactions(["Panadol", "Coumadin", "Advil"])
+    assert ddi_res["ok"] is True
+    assert ddi_res["data"]["total_pairs_evaluated"] == 3

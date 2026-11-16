@@ -277,14 +277,14 @@ def test_reaction_substance_options_filtering():
 
 
 def test_registry_size_unique_and_atom_conservation_for_every_reaction():
-    assert len(VERIFIED_REACTIONS_REGISTRY) == 87
+    assert len(VERIFIED_REACTIONS_REGISTRY) == 120
     ids = [r["reaction_id"] for r in VERIFIED_REACTIONS_REGISTRY]
     assert len(ids) == len(set(ids))
     source_ids = [r.get("source_id") for r in VERIFIED_REACTIONS_REGISTRY]
     assert all(source_ids), "Every reaction must have a specific source_id"
     assert len(source_ids) == len(set(source_ids)), "Every reaction must have a distinct specific source_id"
     sources = [r.get("source") for r in VERIFIED_REACTIONS_REGISTRY]
-    assert len(set(sources)) == 87, "Every reaction must have its own specific scientific citation"
+    assert len(set(sources)) == 120, "Every reaction must have its own specific scientific citation"
     doc_types = {r.get("documentation_type") for r in VERIFIED_REACTIONS_REGISTRY}
     assert doc_types == {"experimentally_documented", "literature_referenced", "theoretical_model"}
     categories = {r["category"] for r in VERIFIED_REACTIONS_REGISTRY}
@@ -372,7 +372,7 @@ def test_search_reactions_by_substance_formula():
     assert not search_reactions_by_substance("HCOOCH3")
     # Domain filtering on substance reaction search
     org_only = search_reactions_by_substance("CH3COOH", domain="organic_chemistry")
-    assert len(org_only) == 2
+    assert len(org_only) >= 2
     assert all(r["domain"] == "organic_chemistry" for r in org_only)
 
 

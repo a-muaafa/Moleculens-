@@ -56,4 +56,32 @@ def test_polypharmacy_screening():
     assert res["total_pairs_evaluated"] == 3
     assert res["total_interactions_found"] >= 2
     assert res["severity_summary"]["Major"] >= 2
+    assert len(res["all_pairs_results"]) == 3
+
+
+def test_expanded_therapeutic_classes_brand_names_and_deduplication():
+    expected_classes = {
+        "analgesics_nsaids", "antibiotics", "antihypertensives", "antidiabetics",
+        "anticoagulants", "antihistamines", "gastrointestinal", "antidepressants",
+        "cardiovascular", "respiratory",
+    }
+    assert expected_classes == set(DDIEngine.THERAPEUTIC_CLASSES.keys())
+    assert len(DDIEngine.get_supported_drugs()) >= 40
+
+    # Brand name resolution across therapeutic groups (Losec = Omeprazole, Plavix = Clopidogrel)
+    ix = DDIEngine.check_interaction("Losec", "Plavix")
+    assert ix["has_interaction"] is True
+    assert ix["severity"] == "Major"
+    assert ix["last_updated"]
+
+    # Import deduplication by RxCUI / canonical key
+    before_count = len(DDIEngine.DRUG_CATALOG)
+    imp = DDIEngine.import_or_update_drug_record({
+        "name_en": "Paracetamol",
+        "rxcui": "161",
+        "brand_names": ["Panadol Extra"],
+    })
+    assert imp["imported"] is True
+    assert imp["deduplicated_existing"] is True
+    assert len(DDIEngine.DRUG_CATALOG) == before_count
 
