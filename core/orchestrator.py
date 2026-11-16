@@ -98,3 +98,10 @@ class MolecuLensCore:
     def fetch_catalog_options() -> list[dict[str, Any]]:
         return get_catalog_dropdown_options()
 
+    @staticmethod
+    def api() -> type:
+        """Returns the standardized Backend-Frontend API Contract handler (MolecuLensAPI)."""
+        from core.api_contract import MolecuLensAPI
+
+        return MolecuLensAPI
+

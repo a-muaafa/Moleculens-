@@ -14,6 +14,7 @@ from config.settings import (
     ENTITY_DRUG_SUBSTANCE,
 )
 from core.schemas import build_unified_entity_schema
+from core.security import sanitize_external_record
 from data_integrations.chebi_client import search_chebi_entities
 from data_integrations.chembl_client import fetch_chembl_drug_info, search_chembl_molecules
 from data_integrations.local_db import get_local_database
@@ -60,7 +61,7 @@ class DataManager:
             if allow_network_enrichment and ids.get("chembl_id"):
                 ch_res = fetch_chembl_drug_info(ids["chembl_id"])
                 if ch_res.get("ok"):
-                    unified["pharmacology_details"]["live_chembl_metadata"] = ch_res["data"]
+                    unified["pharmacology_details"]["live_chembl_metadata"] = sanitize_external_record(ch_res["data"])
 
         elif entity_type == ENTITY_BIOMOLECULE_PROTEIN:
             if ids.get("uniprot_id") and "UniProt" not in sources:
@@ -73,15 +74,15 @@ class DataManager:
                 if ids.get("uniprot_id"):
                     up_res = fetch_uniprot_protein_info(ids["uniprot_id"])
                     if up_res.get("ok"):
-                        unified["biology_details"]["live_uniprot_metadata"] = up_res["data"]
+                        unified["biology_details"]["live_uniprot_metadata"] = sanitize_external_record(up_res["data"])
                 if ids.get("pdb_ids"):
                     pdb_res = fetch_pdb_structure_metadata(ids["pdb_ids"][0])
                     if pdb_res.get("ok"):
-                        unified["biology_details"]["live_pdb_metadata"] = pdb_res["data"]
+                        unified["biology_details"]["live_pdb_metadata"] = sanitize_external_record(pdb_res["data"])
                 if ids.get("rhea_ids"):
                     rhea_res = fetch_rhea_reaction_info(ids["rhea_ids"][0])
                     if rhea_res.get("ok"):
-                        unified["biology_details"]["live_rhea_metadata"] = rhea_res["data"]
+                        unified["biology_details"]["live_rhea_metadata"] = sanitize_external_record(rhea_res["data"])
 
         unified["sources"] = list(dict.fromkeys(sources))
         unified["identity_verification"] = verify_substance_structure_identity(unified)

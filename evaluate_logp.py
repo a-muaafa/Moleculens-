@@ -15,7 +15,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+_HERE = Path(__file__).resolve().parent
+ROOT = _HERE if (_HERE / "chemistry_engine").exists() else _HERE.parent
 sys.path.insert(0, str(ROOT))
 
 from chemistry_engine.molecular_intelligence import MolecularIntelligence  # noqa: E402

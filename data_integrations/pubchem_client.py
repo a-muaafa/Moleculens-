@@ -1,9 +1,32 @@
+import time
 import urllib.parse
 import requests
 from chemistry_engine.formula_analyzer import formulas_are_equivalent, normalize_chemical_formula
 from chemistry_engine.structure_analyzer import compute_inchikey, extract_rdkit_formula, validate_and_parse_smiles
-from config.settings import EXTERNAL_API_TIMEOUT_SECONDS, PUBCHEM_BASE_URL
+from config.settings import EXTERNAL_API_MAX_RETRIES, EXTERNAL_API_TIMEOUT_SECONDS, PUBCHEM_BASE_URL
+from core.security import sanitize_external_text, validate_safe_chemical_input
 from data_integrations.cache_store import get_cached_item, set_cached_item
+
+
+def _pubchem_get(url: str, timeout: int = EXTERNAL_API_TIMEOUT_SECONDS) -> requests.Response:
+    attempts = max(1, int(EXTERNAL_API_MAX_RETRIES) + 1)
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            resp = requests.get(url, timeout=timeout)
+            if resp.status_code in {429, 500, 502, 503, 504} and attempt < attempts - 1:
+                time.sleep(0.15 * (attempt + 1))
+                continue
+            return resp
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            last_exc = exc
+            if attempt < attempts - 1:
+                time.sleep(0.15 * (attempt + 1))
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    return requests.get(url, timeout=timeout)
 
 
 def _verify_pubchem_record_identity(
@@ -42,7 +65,9 @@ def _verify_pubchem_record_identity(
 
 
 def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECONDS) -> dict:
-    clean_q = query.strip()
+    ok_in, clean_q, err_in = validate_safe_chemical_input(query, max_len=250, field_name_ar="استعلام البحث")
+    if not ok_in:
+        return {"ok": False, "records": [], "error": err_in, "cache_hit": False}
     cache_key = f"pubchem:name:{clean_q.lower()}"
     hit, cached = get_cached_item(cache_key)
     if hit:
@@ -56,7 +81,7 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
         "Title,MolecularFormula,MolecularWeight,IUPACName,CanonicalSMILES,IsomericSMILES,InChIKey/JSON"
     )
     try:
-        resp = requests.get(url, timeout=timeout)
+        resp = _pubchem_get(url, timeout=timeout)
         if resp.status_code != 200:
             result = {"ok": False, "records": [], "error": f"PubChem HTTP {resp.status_code}", "cache_hit": False}
             if resp.status_code == 404:
@@ -73,11 +98,11 @@ def fetch_pubchem_by_name(query: str, timeout: int = EXTERNAL_API_TIMEOUT_SECOND
             records.append(
                 {
                     "pubchem_cid": p.get("CID"),
-                    "name_en": p.get("Title") or clean_q,
-                    "iupac_name": p.get("IUPACName", ""),
-                    "symbol_or_formula": formula,
+                    "name_en": sanitize_external_text(p.get("Title") or clean_q, max_len=250),
+                    "iupac_name": sanitize_external_text(p.get("IUPACName", ""), max_len=500),
+                    "symbol_or_formula": sanitize_external_text(formula, max_len=120),
                     "canonical_smiles": canon_smi,
-                    "inchikey": inchikey,
+                    "inchikey": sanitize_external_text(inchikey, max_len=64),
                     "identity_verified": struct_verified,
                     "molar_mass": float(p["MolecularWeight"]) if p.get("MolecularWeight") else None,
                     "source": "PubChem PUG REST",

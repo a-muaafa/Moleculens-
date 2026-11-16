@@ -63,38 +63,10 @@ def _split_materials(raw_text: str) -> list[str]:
 
 
 def _resolve_token(token: str) -> tuple[dict[str, Any] | None, str]:
-    """Resolves a single token (name, formula or SMILES) into a catalog entity or valid chemical formula."""
-    res = search_scientific_entity(token, search_type="auto", allow_network=False)
-    if res.get("found") and res.get("selected"):
-        entity = res["selected"]
-        return entity, ""
-    if res.get("is_ambiguous") and res.get("candidates"):
-        entity = res["candidates"][0]
-        return entity, f"المادة «{token}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
-    from chemistry_engine.formula_analyzer import calculate_molar_mass
-    from reaction_engine.prediction import classify_species
+    """Delegates reactant token resolution to the backend reaction engine."""
+    from reaction_engine.prediction import resolve_reactant_token
 
-    spec = classify_species(token)
-    if spec.get("is_valid_formula") and spec.get("formula"):
-        mm = calculate_molar_mass(spec["formula"])
-        if mm > 0:
-            synth_entity = {
-                "key": f"formula_{spec['formula']}",
-                "symbol_or_formula": spec["formula"],
-                "name_ar": spec.get("name_ar") or spec["formula"],
-                "name_en": spec.get("name_en") or spec["formula"],
-                "molar_mass": round(mm, 3),
-                "entity_type": "chemical_compound",
-            }
-            return synth_entity, f"تم التعرف على الصيغة الكيميائية «{spec['formula']}» ({synth_entity['name_ar']}) بالتحليل التركيبي المباشر."
-    res_net = search_scientific_entity(token, search_type="auto", allow_network=True)
-    if res_net.get("found") and res_net.get("selected"):
-        entity = res_net["selected"]
-        return entity, ""
-    if res_net.get("is_ambiguous") and res_net.get("candidates"):
-        entity = res_net["candidates"][0]
-        return entity, f"المادة «{token}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
-    return None, f"تعذّر التعرف على المادة «{token}» (استخدم الاسم أو الصيغة الكيميائية أو SMILES)."
+    return resolve_reactant_token(token)
 
 
 def _render_mode_banner(prediction: dict[str, Any]) -> None:

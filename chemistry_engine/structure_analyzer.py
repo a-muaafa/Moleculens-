@@ -62,14 +62,16 @@ CPK_ELEMENT_COLORS: dict[str, str] = {
 
 
 def validate_and_parse_smiles(smiles: str):
-    if not smiles or not isinstance(smiles, str):
-        return None, None, "لا توجد صيغة SMILES."
-    s_clean = smiles.strip()
+    from core.security import sanitize_external_text, validate_safe_chemical_input
+
+    ok_in, s_clean, err_in = validate_safe_chemical_input(smiles, max_len=500, field_name_ar="صيغة SMILES")
+    if not ok_in:
+        return None, None, err_in
     if not HAS_RDKIT or Chem is None:
         return None, None, "محرك التحليل البنيوي RDKit غير متوفر للتحقق من البنية الجزيئية."
     mol = Chem.MolFromSmiles(s_clean)
     if mol is None:
-        return None, None, f"صيغة SMILES غير صالحة: {smiles}"
+        return None, None, f"صيغة SMILES غير صالحة: {sanitize_external_text(s_clean, max_len=120)}"
     canon = Chem.MolToSmiles(mol, canonical=True)
     return mol, canon, ""
 

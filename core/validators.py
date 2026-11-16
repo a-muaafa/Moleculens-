@@ -1,5 +1,6 @@
 from chemistry_engine.formula_analyzer import is_gaseous_at_stp
 from config.settings import SUPPORTED_AMOUNT_UNITS
+from core.security import contains_unsafe_markup
 
 
 def validate_search_query(query: str) -> tuple[bool, str, str]:
@@ -21,6 +22,12 @@ def validate_search_query(query: str) -> tuple[bool, str, str]:
             False,
             "",
             "النص المدخل يتجاوز الطول المسموح (250 حرفاً): يرجى إدخال اسم علمي محدد أو صيغة كيميائية مختصرة.",
+        )
+    if contains_unsafe_markup(cleaned):
+        return (
+            False,
+            "",
+            "مدخل البحث مرفوض لأسباب أمنية: لا يُسمح بإدخال وسوم HTML أو شيفرات برمجية.",
         )
     return True, cleaned, ""
 

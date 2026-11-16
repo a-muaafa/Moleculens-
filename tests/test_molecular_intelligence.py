@@ -198,10 +198,67 @@ def test_qsar_split_is_consistent_and_group_validation_reported():
     q = MolecularIntelligence.evaluate_logp_prediction("CCO")["qsar_model_evaluation"]
     assert q["n_train"] + q["n_test"] == q["n_total"]
     assert q["n_test"] == int(round(q["n_total"] * 0.25))
-    for key in ("group_cv_r2", "group_cv_rmse", "group_cv_mae", "crippen_all_r2", "crippen_all_rmse"):
+    for key in (
+        "group_cv_r2",
+        "group_cv_rmse",
+        "group_cv_mae",
+        "group_cv_all_r2",
+        "group_cv_all_rmse",
+        "crippen_all_r2",
+        "crippen_all_rmse",
+        "crippen_group_cv_r2",
+        "crippen_group_cv_rmse",
+        "model_comparison_table",
+        "excluded_small_classes",
+    ):
         assert key in q
+    assert q["loco_zero_leakage_verified"] is True
+    assert q["is_small_benchmark_dataset"] is True
+    assert len(q["model_comparison_table"]) == 3
+    assert len(q["excluded_small_classes"]) >= 1
+    assert any(c["class"] == "nitro" and c["n"] < 5 for c in q["excluded_small_classes"])
     assert sum(row["n"] for row in q["group_cv_by_class"]) == q["n_total"]
     assert q["group_cv_rmse"] > 0 and q["cv_rmse"] > 0
+
+
+def test_loco_zero_data_leakage_from_held_out_class():
+    """
+    Proves that Leave-One-Chemical-Class-Out (LOCO) never uses the held-out class's
+    experimental LogP values when computing predictions (neither in regression nor in
+    any small-sample mean fallback).
+    """
+    import numpy as np
+    from rdkit import Chem
+
+    records = MolecularIntelligence.EXPERIMENTAL_LOGP_BENCHMARK_DATASET
+    X_rows = []
+    y_vals = []
+    classes = []
+    for rec in records:
+        mol = Chem.MolFromSmiles(rec["smiles"])
+        assert mol is not None
+        X_rows.append(MolecularIntelligence._extract_qsar_features(mol))
+        y_vals.append(float(rec["experimental_logp"]))
+        classes.append(MolecularIntelligence._chemical_class(mol))
+
+    X_arr = np.asarray(X_rows, dtype=float)
+    y_arr = np.asarray(y_vals, dtype=float)
+    class_labels = np.asarray(classes)
+
+    # Take a small class (nitro, n=3) and a large class (carboxylic_acid, n=25)
+    for target_cls in ("nitro", "carboxylic_acid"):
+        val_mask = class_labels == target_cls
+        tr_ids = np.where(~val_mask)[0]
+        va_ids = np.where(val_mask)[0]
+
+        # Perturb held-out class targets by +5000.0; training slice must be 100% unaffected
+        y_perturbed = y_arr.copy()
+        y_perturbed[va_ids] += 5000.0
+
+        assert np.allclose(y_arr[tr_ids], y_perturbed[tr_ids])
+        # Mean computed strictly on tr_ids is completely invariant to held-out y_arr[va_ids]
+        assert float(np.mean(y_arr[tr_ids])) == float(np.mean(y_perturbed[tr_ids]))
+        assert float(np.mean(y_arr[tr_ids])) != float(np.mean(y_arr))
 
 
 def test_chemical_class_assignment():

@@ -1,7 +1,12 @@
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOCAL_SQLITE_DB_PATH = os.path.join(BASE_DIR, "data", "moleculens_local.db")
+_SQLITE_REL = os.getenv("MOLECULENS_SQLITE_REL_PATH", os.path.join("data", "moleculens_local.db"))
+LOCAL_SQLITE_DB_PATH = (
+    _SQLITE_REL if os.path.isabs(_SQLITE_REL) else os.path.join(BASE_DIR, _SQLITE_REL)
+)
+MOLECULENS_ENV = os.getenv("MOLECULENS_ENV", "development")
+ALLOW_EXTERNAL_NETWORK = os.getenv("ALLOW_EXTERNAL_NETWORK", "true").strip().lower() not in {"0", "false", "no"}
 
 APP_NAME = "MolecuLens"
 APP_SUBTITLE = "Scientific Learning & Exploration Platform"
@@ -145,5 +150,7 @@ PDB_BASE_URL = "https://data.rcsb.org/rest/v1/core/entry"
 RHEA_BASE_URL = "https://www.rhea-db.org/rhea"
 ORD_BASE_URL = "https://open-reaction-database.org"
 
-EXTERNAL_API_TIMEOUT_SECONDS = 5
-CACHE_TTL_SECONDS = 3600
+EXTERNAL_API_TIMEOUT_SECONDS = int(os.getenv("EXTERNAL_API_TIMEOUT_SECONDS", "5"))
+EXTERNAL_API_MAX_RETRIES = int(os.getenv("EXTERNAL_API_MAX_RETRIES", "2"))
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
+CACHE_MAX_ENTRIES = int(os.getenv("CACHE_MAX_ENTRIES", "512"))

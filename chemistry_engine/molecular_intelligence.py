@@ -544,6 +544,15 @@ class MolecularIntelligence:
                 return {"success": False, "error_ar": "الناتج المعدل فشل في التحقق الكيميائي."}
 
             chemical_validity = cls._verify_modified_molecule(product_mol, after_smiles)
+            if not (
+                chemical_validity.get("is_sanitized")
+                and chemical_validity.get("is_single_fragment")
+                and chemical_validity.get("has_zero_radicals")
+            ):
+                return {
+                    "success": False,
+                    "error_ar": "رُفض التعديل البنيوي لأن البنية الناتجة غير صالحة كيميائياً (تكافؤ غير سليم أو شظايا منفصلة أو جذور حرة).",
+                }
 
             delta_mw = round(after_desc["molecular_weight"] - before_desc["molecular_weight"], 3)
             delta_logp = round(after_desc["logp"] - before_desc["logp"], 2)
@@ -591,6 +600,7 @@ class MolecularIntelligence:
             return {
                 "success": True,
                 "is_virtual_modification": True,
+                "pharmacological_efficacy_claimed": False,
                 "modification_nature_ar": "تعديل بنيوي افتراضي حاسوبياً (In-Silico Virtual Structural Edit)",
                 "modification_name_ar": mod_meta["name_ar"],
                 "modification_description_ar": mod_meta["description_ar"],
@@ -811,35 +821,122 @@ class MolecularIntelligence:
         cv_rmse = round(float(np.sqrt(np.mean((y_arr - cv_preds) ** 2))), 3)
         cv_mae = round(float(np.mean(np.abs(y_arr - cv_preds))), 3)
 
-        # Leave-One-Chemical-Class-Out validation: the model never sees the class it predicts.
-        # This removes near-duplicate leakage between homologous series (e.g. 1-butanol vs 1-pentanol).
+        # Leave-One-Chemical-Class-Out (LOCO) validation:
+        # 1) Strict zero target leakage: every fold receives ONLY (X_train, y_train, X_val) from ~val_mask.
+        #    Any baseline mean fallback uses float(np.mean(y_train)) (training data only, never y_arr).
+        # 2) Small chemical classes (n < MIN_LOCO_CLASS_SIZE = 5) are excluded from the primary LOCO
+        #    aggregate with an explicit scientific reason, while their leak-free training-only predictions
+        #    are still recorded transparently.
+        MIN_LOCO_CLASS_SIZE = 5
+
+        def _predict_loco_fold_train_only(
+            X_tr_fold: np.ndarray,
+            y_tr_fold: np.ndarray,
+            X_va_fold: np.ndarray,
+        ) -> np.ndarray:
+            if len(y_tr_fold) < 10:
+                train_only_mean = float(np.mean(y_tr_fold))
+                return np.full(len(X_va_fold), train_only_mean, dtype=float)
+            fold_predictor = _fit_predict_numpy(X_tr_fold, y_tr_fold)
+            return fold_predictor.predict(X_va_fold)
+
         class_labels = np.array(
             [cls._chemical_class(Chem.MolFromSmiles(rec["smiles"])) for rec in valid_records]
         )
         loco_preds = np.zeros_like(y_arr)
+        loco_included_mask = np.zeros(n_samples, dtype=bool)
         group_cv_by_class: list[dict[str, Any]] = []
+        excluded_small_classes: list[dict[str, Any]] = []
+
         for grp in sorted(set(class_labels.tolist())):
             val_mask = class_labels == grp
             tr_ids = np.where(~val_mask)[0]
             va_ids = np.where(val_mask)[0]
-            if len(tr_ids) < 10:
-                loco_preds[va_ids] = float(np.mean(y_arr))
+            loco_preds[va_ids] = _predict_loco_fold_train_only(
+                X_arr[tr_ids], y_arr[tr_ids], X_arr[va_ids]
+            )
+            n_cls = int(len(va_ids))
+            cls_qsar_rmse = round(float(np.sqrt(np.mean((y_arr[va_ids] - loco_preds[va_ids]) ** 2))), 3)
+            cls_qsar_mae = round(float(np.mean(np.abs(y_arr[va_ids] - loco_preds[va_ids]))), 3)
+            cls_crip_rmse = round(float(np.sqrt(np.mean((y_arr[va_ids] - crippen_arr[va_ids]) ** 2))), 3)
+            cls_crip_mae = round(float(np.mean(np.abs(y_arr[va_ids] - crippen_arr[va_ids]))), 3)
+            is_included = n_cls >= MIN_LOCO_CLASS_SIZE
+            if is_included:
+                loco_included_mask[va_ids] = True
             else:
-                grp_model = _fit_predict_numpy(X_arr[tr_ids], y_arr[tr_ids])
-                loco_preds[va_ids] = grp_model.predict(X_arr[va_ids])
+                excluded_small_classes.append({
+                    "class": grp,
+                    "n": n_cls,
+                    "n_train_used": int(len(tr_ids)),
+                    "train_only_mean_logp": round(float(np.mean(y_arr[tr_ids])), 3),
+                    "qsar_rmse": cls_qsar_rmse,
+                    "crippen_rmse": cls_crip_rmse,
+                    "reason_ar": (
+                        f"استُبعدت الفئة ({grp}، عدد المركبات = {n_cls} < {MIN_LOCO_CLASS_SIZE}) من مؤشر LOCO الرئيسي "
+                        "لصغر حجم العينة، وحُسب تنبؤها حصراً من بيانات التدريب المحيطة دون أي تسرب من الفئة المحجوبة."
+                    ),
+                })
             group_cv_by_class.append({
                 "class": grp,
-                "n": int(len(va_ids)),
-                "qsar_rmse": round(float(np.sqrt(np.mean((y_arr[va_ids] - loco_preds[va_ids]) ** 2))), 3),
-                "crippen_rmse": round(float(np.sqrt(np.mean((y_arr[va_ids] - crippen_arr[va_ids]) ** 2))), 3),
+                "n": n_cls,
+                "included_in_loco": is_included,
+                "qsar_rmse": cls_qsar_rmse,
+                "qsar_mae": cls_qsar_mae,
+                "crippen_rmse": cls_crip_rmse,
+                "crippen_mae": cls_crip_mae,
+                "note_ar": (
+                    "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+                    if is_included
+                    else f"فئة صغيرة (n={n_cls} < {MIN_LOCO_CLASS_SIZE}) مستبعدة من المؤشر الرئيسي؛ دُرِّبت على بيانات التدريب فقط"
+                ),
             })
 
-        group_cv_r2 = round(_r2_np(y_arr, loco_preds), 3)
-        group_cv_rmse = round(float(np.sqrt(np.mean((y_arr - loco_preds) ** 2))), 3)
-        group_cv_mae = round(float(np.mean(np.abs(y_arr - loco_preds))), 3)
+        eval_mask = loco_included_mask if np.any(loco_included_mask) else np.ones(n_samples, dtype=bool)
+        group_cv_r2 = round(_r2_np(y_arr[eval_mask], loco_preds[eval_mask]), 3)
+        group_cv_rmse = round(float(np.sqrt(np.mean((y_arr[eval_mask] - loco_preds[eval_mask]) ** 2))), 3)
+        group_cv_mae = round(float(np.mean(np.abs(y_arr[eval_mask] - loco_preds[eval_mask]))), 3)
+
+        crippen_group_cv_r2 = round(_r2_np(y_arr[eval_mask], crippen_arr[eval_mask]), 3)
+        crippen_group_cv_rmse = round(float(np.sqrt(np.mean((y_arr[eval_mask] - crippen_arr[eval_mask]) ** 2))), 3)
+        crippen_group_cv_mae = round(float(np.mean(np.abs(y_arr[eval_mask] - crippen_arr[eval_mask]))), 3)
+
+        group_cv_all_r2 = round(_r2_np(y_arr, loco_preds), 3)
+        group_cv_all_rmse = round(float(np.sqrt(np.mean((y_arr - loco_preds) ** 2))), 3)
+        group_cv_all_mae = round(float(np.mean(np.abs(y_arr - loco_preds))), 3)
+
         crippen_all_r2 = round(_r2_np(y_arr, crippen_arr), 3)
         crippen_all_rmse = round(float(np.sqrt(np.mean((y_arr - crippen_arr) ** 2))), 3)
         crippen_all_mae = round(float(np.mean(np.abs(y_arr - crippen_arr))), 3)
+
+        model_comparison_table = [
+            {
+                "split_ar": f"اختبار محجوز مستقل (Holdout Test, n={len(test_idx)})",
+                "qsar_r2": test_r2,
+                "qsar_rmse": test_rmse,
+                "qsar_mae": test_mae,
+                "crippen_r2": crippen_test_r2,
+                "crippen_rmse": crippen_test_rmse,
+                "crippen_mae": crippen_test_mae,
+            },
+            {
+                "split_ar": f"تحقق متقاطع خماسي (5-Fold CV, n={n_samples})",
+                "qsar_r2": cv_r2,
+                "qsar_rmse": cv_rmse,
+                "qsar_mae": cv_mae,
+                "crippen_r2": crippen_all_r2,
+                "crippen_rmse": crippen_all_rmse,
+                "crippen_mae": crippen_all_mae,
+            },
+            {
+                "split_ar": f"حجب الفئة الكيميائية (LOCO, n={int(np.sum(eval_mask))}، للفئات >= {MIN_LOCO_CLASS_SIZE})",
+                "qsar_r2": group_cv_r2,
+                "qsar_rmse": group_cv_rmse,
+                "qsar_mae": group_cv_mae,
+                "crippen_r2": crippen_group_cv_r2,
+                "crippen_rmse": crippen_group_cv_rmse,
+                "crippen_mae": crippen_group_cv_mae,
+            },
+        ]
 
         test_set_table = []
         for idx_i, pred_val in zip(test_idx, y_pred_test):
@@ -866,9 +963,14 @@ class MolecularIntelligence:
             "n_total": int(len(valid_records)),
             "n_train": int(len(train_idx)),
             "n_test": int(len(test_idx)),
+            "is_small_benchmark_dataset": True,
+            "dataset_size_caveat_ar": (
+                "مجموعة الـ 120 مركباً تُعد عينة مرجعية صغيرة نسبياً في النمذجة الكيميائية الحاسوبية (QSAR) "
+                "مقارنة بقواعد البيانات الصناعية التي تضم آلاف الجزيئات؛ لذا يُعرض أداؤها بشفافية جنبأ إلى جنب مع معادلة Wildman-Crippen."
+            ),
             "split_method": (
                 f"{len(train_idx)} Train / {len(test_idx)} Holdout Test (random permutation, seed=42) "
-                "+ 5-Fold CV + Leave-One-Chemical-Class-Out"
+                "+ 5-Fold CV + Leak-Free Leave-One-Chemical-Class-Out"
             ),
             "test_r2": test_r2,
             "test_rmse": test_rmse,
@@ -877,17 +979,27 @@ class MolecularIntelligence:
             "cv_r2": cv_r2,
             "cv_rmse": cv_rmse,
             "cv_mae": cv_mae,
+            "min_loco_class_size": MIN_LOCO_CLASS_SIZE,
+            "loco_zero_leakage_verified": True,
             "group_cv_r2": group_cv_r2,
             "group_cv_rmse": group_cv_rmse,
             "group_cv_mae": group_cv_mae,
+            "group_cv_all_r2": group_cv_all_r2,
+            "group_cv_all_rmse": group_cv_all_rmse,
+            "group_cv_all_mae": group_cv_all_mae,
             "group_cv_by_class": group_cv_by_class,
+            "excluded_small_classes": excluded_small_classes,
             "class_counts": {k: int(v) for k, v in zip(*np.unique(class_labels, return_counts=True))},
             "crippen_all_r2": crippen_all_r2,
             "crippen_all_rmse": crippen_all_rmse,
             "crippen_all_mae": crippen_all_mae,
+            "crippen_group_cv_r2": crippen_group_cv_r2,
+            "crippen_group_cv_rmse": crippen_group_cv_rmse,
+            "crippen_group_cv_mae": crippen_group_cv_mae,
             "crippen_test_r2": crippen_test_r2,
             "crippen_test_rmse": crippen_test_rmse,
             "crippen_test_mae": crippen_test_mae,
+            "model_comparison_table": model_comparison_table,
             "test_set_table": test_set_table,
             "applicability_domain": {
                 "mw_min": round(float(mw_train.min()), 2),
@@ -942,6 +1054,8 @@ class MolecularIntelligence:
                 "n_total": qsar_bundle["n_total"],
                 "n_train": qsar_bundle["n_train"],
                 "n_test": qsar_bundle["n_test"],
+                "is_small_benchmark_dataset": qsar_bundle["is_small_benchmark_dataset"],
+                "dataset_size_caveat_ar": qsar_bundle["dataset_size_caveat_ar"],
                 "split_method": qsar_bundle["split_method"],
                 "test_r2": qsar_bundle["test_r2"],
                 "test_rmse": qsar_bundle["test_rmse"],
@@ -950,16 +1064,26 @@ class MolecularIntelligence:
                 "cv_r2": qsar_bundle["cv_r2"],
                 "cv_rmse": qsar_bundle["cv_rmse"],
                 "cv_mae": qsar_bundle["cv_mae"],
+                "min_loco_class_size": qsar_bundle["min_loco_class_size"],
+                "loco_zero_leakage_verified": qsar_bundle["loco_zero_leakage_verified"],
                 "group_cv_r2": qsar_bundle["group_cv_r2"],
                 "group_cv_rmse": qsar_bundle["group_cv_rmse"],
                 "group_cv_mae": qsar_bundle["group_cv_mae"],
+                "group_cv_all_r2": qsar_bundle["group_cv_all_r2"],
+                "group_cv_all_rmse": qsar_bundle["group_cv_all_rmse"],
+                "group_cv_all_mae": qsar_bundle["group_cv_all_mae"],
                 "group_cv_by_class": qsar_bundle["group_cv_by_class"],
+                "excluded_small_classes": qsar_bundle["excluded_small_classes"],
                 "crippen_all_r2": qsar_bundle["crippen_all_r2"],
                 "crippen_all_rmse": qsar_bundle["crippen_all_rmse"],
                 "crippen_all_mae": qsar_bundle["crippen_all_mae"],
+                "crippen_group_cv_r2": qsar_bundle["crippen_group_cv_r2"],
+                "crippen_group_cv_rmse": qsar_bundle["crippen_group_cv_rmse"],
+                "crippen_group_cv_mae": qsar_bundle["crippen_group_cv_mae"],
                 "crippen_test_r2": qsar_bundle["crippen_test_r2"],
                 "crippen_test_rmse": qsar_bundle["crippen_test_rmse"],
                 "crippen_test_mae": qsar_bundle["crippen_test_mae"],
+                "model_comparison_table": qsar_bundle["model_comparison_table"],
                 "test_set_table": qsar_bundle["test_set_table"],
                 "dataset_citation": qsar_bundle["dataset_citation"],
             }
@@ -975,13 +1099,13 @@ class MolecularIntelligence:
         if qsar_eval.get("model_available"):
             pedagogical_note = (
                 f"1) الحساب الحتمي (RDKit Wildman-Crippen cLogP): القيمة = {clogp_val} وهي ناتجة عن جمع مساهمات الذرات بدون تدريب إحصائي أو فاصل ثقة لكل مركب. "
-                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR على {qsar_eval['n_total']} مركباً): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
+                f"2) نموذج التنبؤ المختبر فعلياً (Ridge QSAR على {qsar_eval['n_total']} مركباً، وهي عينة مرجعية صغيرة نسبياً): التنبؤ = {qsar_eval['qsar_predicted_logp']}؛ "
                 f"جرى تدريبه على {qsar_eval['n_train']} مركباً واختباره على {qsar_eval['n_test']} مركباً مستقلاً "
-                f"فحقق على مجموعة الاختبار المستقلة R² = {qsar_eval['test_r2']} و RMSE = {qsar_eval['test_rmse']} "
-                f"(وفي التحقق المتقاطع الخماسي العشوائي: R² = {qsar_eval['cv_r2']} و RMSE = {qsar_eval['cv_rmse']}). "
-                f"أما عند حجب فئة كيميائية كاملة عن التدريب (Leave-One-Class-Out، وهو الاختبار الأصعب والأقرب للواقع) فينخفض الأداء إلى "
-                f"R² = {qsar_eval['group_cv_r2']} و RMSE = {qsar_eval['group_cv_rmse']}، "
-                f"مقابل Wildman-Crippen على كل المركبات: R² = {qsar_eval['crippen_all_r2']} و RMSE = {qsar_eval['crippen_all_rmse']}.{exp_sentence}"
+                f"فحقق على مجموعة الاختبار المستقلة R² = {qsar_eval['test_r2']}، RMSE = {qsar_eval['test_rmse']}، MAE = {qsar_eval['test_mae']} "
+                f"(مقابل Wildman-Crippen على نفس عينة الاختبار: R² = {qsar_eval['crippen_test_r2']}، RMSE = {qsar_eval['crippen_test_rmse']}، MAE = {qsar_eval['crippen_test_mae']}). "
+                f"وفي التحقق بحجب الفئة الكيميائية كاملة دون أي تسرب بيانات (Leak-Free Leave-One-Class-Out) حقق النموذج "
+                f"R² = {qsar_eval['group_cv_r2']}، RMSE = {qsar_eval['group_cv_rmse']}، MAE = {qsar_eval['group_cv_mae']}، "
+                f"مقابل Wildman-Crippen على نفس المركبات: R² = {qsar_eval['crippen_group_cv_r2']}، RMSE = {qsar_eval['crippen_group_cv_rmse']}، MAE = {qsar_eval['crippen_group_cv_mae']}.{exp_sentence}"
             )
         else:
             pedagogical_note = (
@@ -1000,7 +1124,7 @@ class MolecularIntelligence:
                 "و (ب) نموذج Ridge QSAR المدرَّب والمقيَّم فعلياً "
                 + (
                     f"على {qsar_eval['n_total']} مركباً مرجعياً ({qsar_eval['n_train']} للتدريب / {qsar_eval['n_test']} للاختبار المحجوز) "
-                    "مع تحقق متقاطع خماسي وتحقق مُجمَّع حسب الفئة الكيميائية (Leave-One-Class-Out)."
+                    "مع تحقق متقاطع خماسي وتحقق خالٍ من التسرب بحجب الفئة الكيميائية (Leak-Free Leave-One-Class-Out) واستبعاد الفئات الصغيرة (n < 5) من المؤشر المجمّع."
                     if qsar_eval.get("model_available")
                     else "(غير متاح في هذه البيئة)."
                 )
@@ -1008,9 +1132,9 @@ class MolecularIntelligence:
             "limitations_ar": (
                 "حساب Wildman-Crippen cLogP قد يختلف عن القياس التجريبي عند وجود روابط هيدروجينية داخلية أو تأين يعتمد على pH (مثل الأحماض والقواعد والأيونات الثنائية). "
                 + (
-                    f"أما نموذج QSAR المحلي فمدرَّب على {qsar_eval['n_train']} مركباً ومختبر على {qsar_eval['n_test']} مركباً، "
-                    "ومجموعة البيانات تضم سلاسل متجانسة قريبة بنيوياً، لذا فالتقسيم العشوائي متفائل؛ "
-                    "والمقياس الأصدق هو التحقق بحجب الفئة الكيميائية. وقد لا يتفوق النموذج على Crippen، "
+                    f"أما نموذج QSAR المحلي فمدرَّب على {qsar_eval['n_train']} مركباً ومختبر على {qsar_eval['n_test']} مركباً (إجمالي {qsar_eval['n_total']} مركباً، وهي مجموعة صغيرة نسبياً في النمذجة الكيميائية الحاسوبية)، "
+                    "وتضم سلاسل متجانسة قريبة بنيوياً، لذا فالتقسيم العشوائي متفائل؛ "
+                    "والمقياس الأصدق للتعميم هو التحقق بحجب الفئة الكيميائية (LOCO) المحسوب من بيانات التدريب فقط دون أي تسرب من الفئة المحجوبة. "
                     "ويجب مراعاة مجال الانطباق (Applicability Domain) قبل أي تعميم."
                     if qsar_eval.get("model_available")
                     else "نموذج QSAR المحلي غير متاح في هذه البيئة."

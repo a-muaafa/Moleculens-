@@ -1,0 +1,434 @@
+{
+  "generated_at_utc": "2026-11-16T17:19:23+00:00",
+  "versions": {
+    "python": "3.11.0",
+    "rdkit": "2026.09.1",
+    "numpy": "2.4.6",
+    "sklearn": "1.9.1"
+  },
+  "dataset_citation": "Sangster, J. (1989) J. Phys. Chem. Ref. Data, 18(3), 1111-1227; Hansch, C., Leo, A., and Hoekman, D. (1995) Exploring QSAR, ACS; Avdeef, A. (2012) Absorption and Drug Development, 2nd Ed., Wiley.",
+  "metrics": {
+    "available": true,
+    "model_name": "Ridge Regression QSAR Model (StandardScaler + Ridge alpha=1.0, 15 Descriptors)",
+    "descriptor_names": [
+      "MolWt",
+      "TPSA",
+      "NumHBD",
+      "NumHBA",
+      "HeavyAtomCount",
+      "RingCount",
+      "NumAromaticRings",
+      "NumRotatableBonds",
+      "FractionCSP3",
+      "NumHeteroatoms",
+      "LabuteASA",
+      "NumCarbons",
+      "NumNitrogens",
+      "NumOxygens",
+      "NumHalogens"
+    ],
+    "n_total": 120,
+    "n_train": 90,
+    "n_test": 30,
+    "is_small_benchmark_dataset": true,
+    "dataset_size_caveat_ar": "مجموعة الـ 120 مركباً تُعد عينة مرجعية صغيرة نسبياً في النمذجة الكيميائية الحاسوبية (QSAR) مقارنة بقواعد البيانات الصناعية التي تضم آلاف الجزيئات؛ لذا يُعرض أداؤها بشفافية جنبأ إلى جنب مع معادلة Wildman-Crippen.",
+    "split_method": "90 Train / 30 Holdout Test (random permutation, seed=42) + 5-Fold CV + Leak-Free Leave-One-Chemical-Class-Out",
+    "test_r2": 0.875,
+    "test_rmse": 0.539,
+    "test_mae": 0.44,
+    "cv_folds": 5,
+    "cv_r2": 0.86,
+    "cv_rmse": 0.575,
+    "cv_mae": 0.437,
+    "min_loco_class_size": 5,
+    "loco_zero_leakage_verified": true,
+    "group_cv_r2": 0.846,
+    "group_cv_rmse": 0.607,
+    "group_cv_mae": 0.467,
+    "group_cv_all_r2": 0.82,
+    "group_cv_all_rmse": 0.651,
+    "group_cv_all_mae": 0.494,
+    "group_cv_by_class": [
+      {
+        "class": "alcohol_or_phenol",
+        "n": 23,
+        "included_in_loco": true,
+        "qsar_rmse": 0.488,
+        "qsar_mae": 0.411,
+        "crippen_rmse": 0.329,
+        "crippen_mae": 0.274,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "aldehyde_or_ketone",
+        "n": 14,
+        "included_in_loco": true,
+        "qsar_rmse": 0.718,
+        "qsar_mae": 0.589,
+        "crippen_rmse": 0.499,
+        "crippen_mae": 0.39,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "amide_or_urea",
+        "n": 12,
+        "included_in_loco": true,
+        "qsar_rmse": 1.022,
+        "qsar_mae": 0.923,
+        "crippen_rmse": 0.713,
+        "crippen_mae": 0.663,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "aromatic_hydrocarbon",
+        "n": 7,
+        "included_in_loco": true,
+        "qsar_rmse": 0.412,
+        "qsar_mae": 0.334,
+        "crippen_rmse": 0.667,
+        "crippen_mae": 0.643,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "carboxylic_acid",
+        "n": 25,
+        "included_in_loco": true,
+        "qsar_rmse": 0.536,
+        "qsar_mae": 0.388,
+        "crippen_rmse": 0.418,
+        "crippen_mae": 0.325,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "ester",
+        "n": 8,
+        "included_in_loco": true,
+        "qsar_rmse": 0.559,
+        "qsar_mae": 0.497,
+        "crippen_rmse": 0.414,
+        "crippen_mae": 0.323,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "ether",
+        "n": 5,
+        "included_in_loco": true,
+        "qsar_rmse": 0.272,
+        "qsar_mae": 0.229,
+        "crippen_rmse": 0.292,
+        "crippen_mae": 0.274,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "halogenated",
+        "n": 5,
+        "included_in_loco": true,
+        "qsar_rmse": 0.186,
+        "qsar_mae": 0.172,
+        "crippen_rmse": 0.434,
+        "crippen_mae": 0.39,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      },
+      {
+        "class": "nitro",
+        "n": 3,
+        "included_in_loco": false,
+        "qsar_rmse": 1.601,
+        "qsar_mae": 1.537,
+        "crippen_rmse": 0.387,
+        "crippen_mae": 0.326,
+        "note_ar": "فئة صغيرة (n=3 < 5) مستبعدة من المؤشر الرئيسي؛ دُرِّبت على بيانات التدريب فقط"
+      },
+      {
+        "class": "nitrogen_compound",
+        "n": 18,
+        "included_in_loco": true,
+        "qsar_rmse": 0.601,
+        "qsar_mae": 0.436,
+        "crippen_rmse": 0.449,
+        "crippen_mae": 0.318,
+        "note_ar": "مدرجة في التقييم المجمّع (حجم الفئة كافٍ)"
+      }
+    ],
+    "excluded_small_classes": [
+      {
+        "class": "nitro",
+        "n": 3,
+        "n_train_used": 117,
+        "train_only_mean_logp": 1.142,
+        "qsar_rmse": 1.601,
+        "crippen_rmse": 0.387,
+        "reason_ar": "استُبعدت الفئة (nitro، عدد المركبات = 3 < 5) من مؤشر LOCO الرئيسي لصغر حجم العينة، وحُسب تنبؤها حصراً من بيانات التدريب المحيطة دون أي تسرب من الفئة المحجوبة."
+      }
+    ],
+    "class_counts": {
+      "alcohol_or_phenol": 23,
+      "aldehyde_or_ketone": 14,
+      "amide_or_urea": 12,
+      "aromatic_hydrocarbon": 7,
+      "carboxylic_acid": 25,
+      "ester": 8,
+      "ether": 5,
+      "halogenated": 5,
+      "nitro": 3,
+      "nitrogen_compound": 18
+    },
+    "crippen_all_r2": 0.906,
+    "crippen_all_rmse": 0.469,
+    "crippen_all_mae": 0.375,
+    "crippen_group_cv_r2": 0.907,
+    "crippen_group_cv_rmse": 0.471,
+    "crippen_group_cv_mae": 0.376,
+    "crippen_test_r2": 0.9,
+    "crippen_test_rmse": 0.48,
+    "crippen_test_mae": 0.374,
+    "model_comparison_table": [
+      {
+        "split_ar": "اختبار محجوز مستقل (Holdout Test, n=30)",
+        "qsar_r2": 0.875,
+        "qsar_rmse": 0.539,
+        "qsar_mae": 0.44,
+        "crippen_r2": 0.9,
+        "crippen_rmse": 0.48,
+        "crippen_mae": 0.374
+      },
+      {
+        "split_ar": "تحقق متقاطع خماسي (5-Fold CV, n=120)",
+        "qsar_r2": 0.86,
+        "qsar_rmse": 0.575,
+        "qsar_mae": 0.437,
+        "crippen_r2": 0.906,
+        "crippen_rmse": 0.469,
+        "crippen_mae": 0.375
+      },
+      {
+        "split_ar": "حجب الفئة الكيميائية (LOCO, n=117، للفئات >= 5)",
+        "qsar_r2": 0.846,
+        "qsar_rmse": 0.607,
+        "qsar_mae": 0.467,
+        "crippen_r2": 0.907,
+        "crippen_rmse": 0.471,
+        "crippen_mae": 0.376
+      }
+    ],
+    "applicability_domain": {
+      "mw_min": 31.06,
+      "mw_max": 360.45,
+      "heavy_min": 2,
+      "heavy_max": 26
+    },
+    "dataset_citation": "Sangster, J. (1989) J. Phys. Chem. Ref. Data, 18(3), 1111-1227; Hansch, C., Leo, A., and Hoekman, D. (1995) Exploring QSAR, ACS; Avdeef, A. (2012) Absorption and Drug Development, 2nd Ed., Wiley."
+  },
+  "test_set_table": [
+    {
+      "المركب (Compound)": "2-بنتانون (2-Pentanone)",
+      "LogP التجريبي الموثق": 0.91,
+      "تنبؤ نموذج QSAR": 1.32,
+      "حساب Crippen cLogP": 1.38,
+      "خطأ QSAR المطلق": 0.41
+    },
+    {
+      "المركب (Compound)": "البنزوفينون (Benzophenone)",
+      "LogP التجريبي الموثق": 3.18,
+      "تنبؤ نموذج QSAR": 3.84,
+      "حساب Crippen cLogP": 2.92,
+      "خطأ QSAR المطلق": 0.66
+    },
+    {
+      "المركب (Compound)": "1-بيوتانول (1-Butanol)",
+      "LogP التجريبي الموثق": 0.88,
+      "تنبؤ نموذج QSAR": 0.66,
+      "حساب Crippen cLogP": 0.78,
+      "خطأ QSAR المطلق": 0.22
+    },
+    {
+      "المركب (Compound)": "بنزوات الإيثيل (Ethyl Benzoate)",
+      "LogP التجريبي الموثق": 2.64,
+      "تنبؤ نموذج QSAR": 2.17,
+      "حساب Crippen cLogP": 1.86,
+      "خطأ QSAR المطلق": 0.47
+    },
+    {
+      "المركب (Compound)": "حمض الجليكوليك (Glycolic Acid)",
+      "LogP التجريبي الموثق": -1.11,
+      "تنبؤ نموذج QSAR": -0.72,
+      "حساب Crippen cLogP": -0.94,
+      "خطأ QSAR المطلق": 0.39
+    },
+    {
+      "المركب (Compound)": "بيوتيل أمين (Butylamine)",
+      "LogP التجريبي الموثق": 0.97,
+      "تنبؤ نموذج QSAR": 0.43,
+      "حساب Crippen cLogP": 0.75,
+      "خطأ QSAR المطلق": 0.54
+    },
+    {
+      "المركب (Compound)": "الفورماميد (Formamide)",
+      "LogP التجريبي الموثق": -1.51,
+      "تنبؤ نموذج QSAR": -0.23,
+      "حساب Crippen cLogP": -0.9,
+      "خطأ QSAR المطلق": 1.28
+    },
+    {
+      "المركب (Compound)": "1-أوكتانول (1-Octanol)",
+      "LogP التجريبي الموثق": 3.0,
+      "تنبؤ نموذج QSAR": 2.42,
+      "حساب Crippen cLogP": 2.34,
+      "خطأ QSAR المطلق": 0.58
+    },
+    {
+      "المركب (Compound)": "البنزالديهايد (Benzaldehyde)",
+      "LogP التجريبي الموثق": 1.48,
+      "تنبؤ نموذج QSAR": 2.15,
+      "حساب Crippen cLogP": 1.5,
+      "خطأ QSAR المطلق": 0.67
+    },
+    {
+      "المركب (Compound)": "الإندوميثاسين (Indomethacin)",
+      "LogP التجريبي الموثق": 4.27,
+      "تنبؤ نموذج QSAR": 4.32,
+      "حساب Crippen cLogP": 3.93,
+      "خطأ QSAR المطلق": 0.05
+    },
+    {
+      "المركب (Compound)": "حمض الفورميك (Formic Acid)",
+      "LogP التجريبي الموثق": -0.54,
+      "تنبؤ نموذج QSAR": 0.0,
+      "حساب Crippen cLogP": -0.3,
+      "خطأ QSAR المطلق": 0.54
+    },
+    {
+      "المركب (Compound)": "إيثيل أمين (Ethylamine)",
+      "LogP التجريبي الموثق": -0.13,
+      "تنبؤ نموذج QSAR": -0.45,
+      "حساب Crippen cLogP": -0.03,
+      "خطأ QSAR المطلق": 0.32
+    },
+    {
+      "المركب (Compound)": "سيكلوهكسانول (Cyclohexanol)",
+      "LogP التجريبي الموثق": 1.23,
+      "تنبؤ نموذج QSAR": 0.58,
+      "حساب Crippen cLogP": 1.31,
+      "خطأ QSAR المطلق": 0.65
+    },
+    {
+      "المركب (Compound)": "الفورمالديهايد (Formaldehyde)",
+      "LogP التجريبي الموثق": 0.35,
+      "تنبؤ نموذج QSAR": 0.46,
+      "حساب Crippen cLogP": -0.18,
+      "خطأ QSAR المطلق": 0.11
+    },
+    {
+      "المركب (Compound)": "الهيدروكينون (Hydroquinone)",
+      "LogP التجريبي الموثق": 0.59,
+      "تنبؤ نموذج QSAR": 0.53,
+      "حساب Crippen cLogP": 1.1,
+      "خطأ QSAR المطلق": 0.06
+    },
+    {
+      "المركب (Compound)": "كلوروبنزين (Chlorobenzene)",
+      "LogP التجريبي الموثق": 2.84,
+      "تنبؤ نموذج QSAR": 2.79,
+      "حساب Crippen cLogP": 2.34,
+      "خطأ QSAR المطلق": 0.05
+    },
+    {
+      "المركب (Compound)": "الثيوفيلين (Theophylline)",
+      "LogP التجريبي الموثق": -0.02,
+      "تنبؤ نموذج QSAR": -0.76,
+      "حساب Crippen cLogP": -1.04,
+      "خطأ QSAR المطلق": 0.74
+    },
+    {
+      "المركب (Compound)": "الميثانول (Methanol)",
+      "LogP التجريبي الموثق": -0.77,
+      "تنبؤ نموذج QSAR": -0.45,
+      "حساب Crippen cLogP": -0.39,
+      "خطأ QSAR المطلق": 0.32
+    },
+    {
+      "المركب (Compound)": "الريسورسينول (Resorcinol)",
+      "LogP التجريبي الموثق": 0.8,
+      "تنبؤ نموذج QSAR": 0.53,
+      "حساب Crippen cLogP": 1.1,
+      "خطأ QSAR المطلق": 0.27
+    },
+    {
+      "المركب (Compound)": "الكيتوبروفين (Ketoprofen)",
+      "LogP التجريبي الموثق": 3.12,
+      "تنبؤ نموذج QSAR": 3.86,
+      "حساب Crippen cLogP": 3.11,
+      "خطأ QSAR المطلق": 0.74
+    },
+    {
+      "المركب (Compound)": "ثنائي إيثيل أمين (Diethylamine)",
+      "LogP التجريبي الموثق": 0.58,
+      "تنبؤ نموذج QSAR": 0.44,
+      "حساب Crippen cLogP": 0.62,
+      "خطأ QSAR المطلق": 0.14
+    },
+    {
+      "المركب (Compound)": "سيكلوهكسانون (Cyclohexanone)",
+      "LogP التجريبي الموثق": 0.81,
+      "تنبؤ نموذج QSAR": 1.0,
+      "حساب Crippen cLogP": 1.52,
+      "خطأ QSAR المطلق": 0.19
+    },
+    {
+      "المركب (Compound)": "حمض البنزويك (Benzoic Acid)",
+      "LogP التجريبي الموثق": 1.87,
+      "تنبؤ نموذج QSAR": 1.69,
+      "حساب Crippen cLogP": 1.38,
+      "خطأ QSAR المطلق": 0.18
+    },
+    {
+      "المركب (Compound)": "الكينولين (Quinoline)",
+      "LogP التجريبي الموثق": 2.03,
+      "تنبؤ نموذج QSAR": 2.31,
+      "حساب Crippen cLogP": 2.23,
+      "خطأ QSAR المطلق": 0.28
+    },
+    {
+      "المركب (Compound)": "الأسيتون (Acetone)",
+      "LogP التجريبي الموثق": -0.24,
+      "تنبؤ نموذج QSAR": 0.53,
+      "حساب Crippen cLogP": 0.6,
+      "خطأ QSAR المطلق": 0.77
+    },
+    {
+      "المركب (Compound)": "الكحول البنزيلي (Benzyl Alcohol)",
+      "LogP التجريبي الموثق": 1.1,
+      "تنبؤ نموذج QSAR": 1.75,
+      "حساب Crippen cLogP": 1.18,
+      "خطأ QSAR المطلق": 0.65
+    },
+    {
+      "المركب (Compound)": "بروبيلين جليكول (Propylene Glycol)",
+      "LogP التجريبي الموثق": -0.92,
+      "تنبؤ نموذج QSAR": -0.64,
+      "حساب Crippen cLogP": -0.64,
+      "خطأ QSAR المطلق": 0.28
+    },
+    {
+      "المركب (Compound)": "الليدوكائين (Lidocaine)",
+      "LogP التجريبي الموثق": 2.44,
+      "تنبؤ نموذج QSAR": 2.88,
+      "حساب Crippen cLogP": 2.58,
+      "خطأ QSAR المطلق": 0.44
+    },
+    {
+      "المركب (Compound)": "اليوريا (Urea)",
+      "LogP التجريبي الموثق": -2.11,
+      "تنبؤ نموذج QSAR": -0.92,
+      "حساب Crippen cLogP": -0.98,
+      "خطأ QSAR المطلق": 1.19
+    },
+    {
+      "المركب (Compound)": "الكلوروفورم (Chloroform)",
+      "LogP التجريبي الموثق": 1.97,
+      "تنبؤ نموذج QSAR": 1.99,
+      "حساب Crippen cLogP": 1.99,
+      "خطأ QSAR المطلق": 0.02
+    }
+  ]
+}

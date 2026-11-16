@@ -487,7 +487,7 @@ def _render_scientific_audit_panel() -> None:
         if audit["overall_passed"]:
             st.success(
                 f"اجتازت جميع التفاعلات ({audit['total_reactions']}) وقواعد الاستنتاج ({audit['total_rules']}) "
-                "فحوص موازنة الذرات والكتلة، اتساق الأطوار الفيزيائية، توافق إشارة الإنثالبي، "
+                "فحوص موازنة الذرات والكتلة، حفظ الشحنة الكهربائية، اتساق الأطوار الفيزيائية، توافق إشارة الإنثالبي، "
                 "وسلامة نطاقات الظروف المرجعية."
             )
         st.warning(audit["reference_check_scope_ar"])

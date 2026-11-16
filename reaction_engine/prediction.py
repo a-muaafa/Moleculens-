@@ -1446,6 +1446,15 @@ def _documented_payload(
             }
         except Exception as exc:
             stoichiometry = {"error_ar": f"تعذّر إتمام الحساب الستوكيومتري: {exc}"}
+    from reaction_engine.scientific_audit import get_reaction_verification_metadata
+
+    rxn_id = rxn.get("reaction_id", "")
+    verif_meta = get_reaction_verification_metadata(rxn_id)
+    confidence_label = (
+        "ثقة عالية — تفاعل موثّق ومراجَع يدوياً من المصدر المرجعي"
+        if verif_meta["reference_manually_verified"]
+        else "تفاعل مسجّل بمرجع ببليوغرافي ومدقق برمجياً (الذرات والشحنة والأطوار) — لم تُراجع الصفحة يدوياً بعد"
+    )
     return {
         "supported": True,
         "mode": "documented",
@@ -1455,9 +1464,12 @@ def _documented_payload(
             f"والنواتج المسجلة هي: " + "، ".join(f"{p['name_ar']} ({p['formula']})" for p in products) + "."
         ),
         "confidence": {
-            "level": "high",
-            "label_ar": "ثقة عالية — تفاعل موثّق بمرجع علمي محدّد",
+            "level": "high" if verif_meta["reference_manually_verified"] else "medium_high",
+            "label_ar": confidence_label,
             "basis_ar": rxn.get("source", ""),
+            "reference_manually_verified": verif_meta["reference_manually_verified"],
+            "verification_status": verif_meta["verification_status"],
+            "verification_badge_ar": verif_meta["verification_badge_ar"],
         },
         "reactants": reactants,
         "products": products,
@@ -1569,9 +1581,13 @@ def _enrich_documented_analysis(
                         "basis_ar": "قواعد الذوبانية المعتمدة في التحليل الكيفي.",
                     }
                 )
+                c_cnt = int(info.get("cation_count", 1) or 1)
+                a_cnt = int(info.get("anion_count", 1) or 1)
+                c_pref = f"{c_cnt} " if c_cnt > 1 else ""
+                a_pref = f"{a_cnt} " if a_cnt > 1 else ""
                 net_ionic = (
-                    f"{info['cation']}{_charge_text(info['cation_charge'])} + "
-                    f"{info['anion']}{_charge_text(info['anion_charge'])} → {p['formula']}(↓)"
+                    f"{c_pref}{info['cation']}{_charge_text(info['cation_charge'])} + "
+                    f"{a_pref}{info['anion']}{_charge_text(-abs(info['anion_charge']))} → {p['formula']}(↓)"
                 )
                 break
 
@@ -1815,3 +1831,68 @@ def _build_explanation_ar(
         lines.append("**الخطوة 7 — التغيّر في درجة الحموضة (pH):** لا ينطبق على هذا النوع من التفاعلات أو تتوفر بيانات غير كافية.")
 
     return "\n".join(lines)
+
+
+def resolve_reactant_token(token: str) -> tuple[dict[str, Any] | None, str]:
+    """
+    Backend resolver for a single reactant token (name, formula, or SMILES).
+    Keeps all chemical formula classification and molar mass computation inside the backend.
+    """
+    from chemistry_engine.formula_analyzer import calculate_molar_mass
+    from search.search_engine import search_scientific_entity
+
+    clean_tok = (token or "").strip()
+    if not clean_tok:
+        return None, "المدخل فارغ."
+
+    res = search_scientific_entity(clean_tok, search_type="auto", allow_network=False)
+    if res.get("found") and res.get("selected"):
+        return res["selected"], ""
+    if res.get("is_ambiguous") and res.get("candidates"):
+        entity = res["candidates"][0]
+        return entity, f"المادة «{clean_tok}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
+
+    spec = classify_species(clean_tok)
+    if spec.get("is_valid_formula") and spec.get("formula"):
+        mm = calculate_molar_mass(spec["formula"])
+        if mm > 0:
+            synth_entity = {
+                "key": f"formula_{spec['formula']}",
+                "symbol_or_formula": spec["formula"],
+                "name_ar": spec.get("name_ar") or spec["formula"],
+                "name_en": spec.get("name_en") or spec["formula"],
+                "molar_mass": round(mm, 3),
+                "entity_type": "chemical_compound",
+            }
+            return (
+                synth_entity,
+                f"تم التعرف على الصيغة الكيميائية «{spec['formula']}» ({synth_entity['name_ar']}) بالتحليل التركيبي المباشر.",
+            )
+
+    res_net = search_scientific_entity(clean_tok, search_type="auto", allow_network=True)
+    if res_net.get("found") and res_net.get("selected"):
+        return res_net["selected"], ""
+    if res_net.get("is_ambiguous") and res_net.get("candidates"):
+        entity = res_net["candidates"][0]
+        return entity, f"المادة «{clean_tok}» لها عدة احتمالات؛ استُخدم الاحتمال الأول: {entity.get('name_ar')}"
+
+    return None, f"تعذّر التعرف على المادة «{clean_tok}» (استخدم الاسم أو الصيغة الكيميائية أو SMILES)."
+
+
+def parse_and_resolve_reactant_text(raw: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """
+    Splits a free-text reactant string on '+', '،', ',', or ';' and resolves each token via the backend.
+    """
+    if not raw or not raw.strip():
+        return [], []
+    normalized = raw.replace("،", "+").replace(";", "+").replace(",", "+")
+    tokens = [t.strip() for t in normalized.split("+") if t.strip()]
+    resolved: list[dict[str, Any]] = []
+    notes: list[str] = []
+    for tok in tokens[:4]:
+        entity, note = resolve_reactant_token(tok)
+        if note:
+            notes.append(note)
+        if entity is not None:
+            resolved.append({"substance": entity, "formula": entity["symbol_or_formula"]})
+    return resolved, notes

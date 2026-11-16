@@ -2,13 +2,12 @@ name: MolecuLens Automated Tests
 
 on:
   push:
-    branches: [ main, master, "feature/**" ]
   pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   test:
+    name: Pytest & Scientific Audit (Python 3.11)
     runs-on: ubuntu-latest
 
     steps:
@@ -21,22 +20,34 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install dependencies with pinned version bounds
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run reproducible QSAR LogP evaluation on clean environment
+        run: |
+          python scripts/evaluate_logp.py
+
       - name: Verify clean SQLite seed and run full Pytest suite
         run: |
-          pytest -v --tb=short
+          rm -f data/moleculens_local.db
+          pytest -v --tb=short --junitxml=results/junit.xml
 
-      - name: Measure test coverage
+      - name: Measure test coverage and write CI job summary
         run: |
-          pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing -q
+          pytest --cov=. --cov-report=xml:coverage.xml --cov-report=term-missing -q | tee results/pytest_summary.txt
+          echo "## MolecuLens Automated QA Summary" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 25 results/pytest_summary.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload coverage report artifact
+      - name: Upload coverage and QSAR evaluation artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: coverage.xml
+          name: moleculens-qa-artifacts
+          path: |
+            coverage.xml
+            results/logp_eval.json
+            results/junit.xml
           if-no-files-found: warn

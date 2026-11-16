@@ -299,25 +299,35 @@ def render_molecular_intelligence_section() -> None:
                         st.warning(qsar["applicability_note_ar"])
 
                     st.info(eval_res["pedagogical_note_ar"])
+                    st.caption(qsar.get("dataset_size_caveat_ar", ""))
 
                     st.markdown(
-                        f"**نتائج مجموعة الاختبار المستقلة الفعلية ({qsar['n_test']} مركباً محتجزاً — {qsar['split_method']}):**"
+                        "**جدول المقارنة المعيارية المباشرة بين Ridge QSAR و Wildman-Crippen (نفس مجموعات التقييم: Holdout + 5-Fold CV + LOCO — بدون تسرب بيانات):**"
                     )
+                    if qsar.get("model_comparison_table"):
+                        comp_df = pd.DataFrame([
+                            {
+                                "منهج التقييم (Evaluation Split)": row["split_ar"],
+                                "QSAR R²": row["qsar_r2"],
+                                "QSAR RMSE": row["qsar_rmse"],
+                                "QSAR MAE": row["qsar_mae"],
+                                "Crippen R²": row["crippen_r2"],
+                                "Crippen RMSE": row["crippen_rmse"],
+                                "Crippen MAE": row["crippen_mae"],
+                            }
+                            for row in qsar["model_comparison_table"]
+                        ])
+                        st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
                     st.caption(
-                        f"اختبار محجوز ({qsar['n_test']} مركباً) — Ridge QSAR: R² = {qsar['test_r2']} | RMSE = {qsar['test_rmse']} | MAE = {qsar['test_mae']} "
-                        f"|| Wildman-Crippen على نفس العينة: R² = {qsar['crippen_test_r2']} | RMSE = {qsar['crippen_test_rmse']} | MAE = {qsar['crippen_test_mae']}"
+                        "التقسيم العشوائي متفائل لأن المجموعة (120 مركباً، وهي عينة صغيرة نسبياً) تضم سلاسل متجانسة قريبة بنيوياً؛ "
+                        "التحقق بحجب الفئة الكيميائية كاملة (Leave-One-Class-Out) يُحسب من بيانات التدريب فقط دون أي تسرب من الفئة المحجوبة."
                     )
-                    st.caption(
-                        f"تحقق متقاطع خماسي عشوائي: R² = {qsar['cv_r2']} | RMSE = {qsar['cv_rmse']} "
-                        f"|| تحقق بحجب فئة كيميائية كاملة: R² = {qsar['group_cv_r2']} | RMSE = {qsar['group_cv_rmse']} | MAE = {qsar['group_cv_mae']} "
-                        f"|| Crippen على كل المركبات: R² = {qsar['crippen_all_r2']} | RMSE = {qsar['crippen_all_rmse']}"
-                    )
-                    st.caption(
-                        "التقسيم العشوائي متفائل لأن المجموعة تضم سلاسل متجانسة قريبة بنيوياً؛ "
-                        "التحقق بحجب الفئة أصدق لأنه يختبر النموذج على فئة لم يرها."
-                    )
-                    with st.expander("الأداء حسب الفئة الكيميائية (Leave-One-Class-Out)", expanded=False):
+                    with st.expander("الأداء حسب الفئة الكيميائية واستبعاد الفئات الصغيرة (Leave-One-Class-Out)", expanded=False):
                         st.dataframe(pd.DataFrame(qsar["group_cv_by_class"]), use_container_width=True, hide_index=True)
+                        if qsar.get("excluded_small_classes"):
+                            for exc_cls in qsar["excluded_small_classes"]:
+                                st.caption(exc_cls["reason_ar"])
                     st.dataframe(pd.DataFrame(qsar["test_set_table"]), use_container_width=True, hide_index=True)
                 else:
                     st.warning("نموذج QSAR الإحصائي غير متاح في البيئة الحالية.")
