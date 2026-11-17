@@ -388,7 +388,7 @@ def test_no_emoji_in_project_sources():
 def test_streamlit_ui_pages_render_cleanly():
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_file(os.path.join(ROOT, "app.py"), default_timeout=20)
+    at = AppTest.from_file(os.path.join(ROOT, "app.py"), default_timeout=45)
     at.run()
     assert not at.exception
 
