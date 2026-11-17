@@ -95,17 +95,17 @@ MANUALLY_VERIFIED_REACTION_SOURCES: dict[str, dict[str, str]] = {
         "verified_source_section": "NIST-JANAF 4th Ed. (1998), NH4Cl(s) formation from HCl(g) + NH3(g), ΔH° = -176.0 kJ/mol",
         "verified_conditions": "Gas phase, 25 °C",
     },
-    "rxn_018_combustion": {
+    "rxn_017_combustion": {
         "verified_equation": "2C2H6(g) + 7O2(g) -> 4CO2(g) + 6H2O(l)",
         "verified_source_section": "Pittam & Pilcher (1972), NIST WebBook CAS 74-84-0, ΔH°c = -1560 kJ/mol (-3120 kJ per 2 mol)",
         "verified_conditions": "Complete combustion in excess O2",
     },
-    "rxn_019_combustion": {
+    "rxn_018_combustion": {
         "verified_equation": "C3H8(g) + 5O2(g) -> 3CO2(g) + 4H2O(l)",
         "verified_source_section": "Rossini (1934), J. Res. NBS 12, 735; NIST WebBook CAS 74-98-6, ΔH°c = -2220 kJ/mol",
         "verified_conditions": "Complete combustion in excess O2",
     },
-    "rxn_023_combustion": {
+    "rxn_022_combustion": {
         "verified_equation": "C2H5OH(l) + 3O2(g) -> 2CO2(g) + 3H2O(l)",
         "verified_source_section": "Chao & Rossini (1965), J. Chem. Eng. Data 10, 374; NIST CAS 64-17-5, ΔH°c = -1367 kJ/mol",
         "verified_conditions": "Bomb calorimetry complete combustion",
@@ -165,22 +165,27 @@ MANUALLY_VERIFIED_REACTION_SOURCES: dict[str, dict[str, str]] = {
         "verified_source_section": "Ullmann's Encyclopedia (2012), Sulfuric Acid and Sulfur Trioxide, Sec. 4.2, V2O5 at 420-450 °C",
         "verified_conditions": "420-450 °C, V2O5 catalyst, gas phase",
     },
-    "rxn_053_redox_synthesis": {
+    "rxn_052_redox_synthesis": {
         "verified_equation": "Fe2O3(s) + 3CO(g) -> 2Fe(s) + 3CO2(g)",
         "verified_source_section": "Ullmann's Encyclopedia (2012), Iron Blast Furnace Process, 800-1000 °C",
         "verified_conditions": "Blast furnace 600-1200 °C (optimal 900 °C)",
     },
-    "rxn_058_decomposition": {
+    "rxn_056_redox_synthesis": {
+        "verified_equation": "N2(g) + O2(g) -> 2NO(g)",
+        "verified_source_section": "NIST-JANAF 4th Ed. (1998), p. 1666, ΔH°f(NO) = +90.29 kJ/mol (+180.6 kJ per 2 mol)",
+        "verified_conditions": "High temperature / electric arc (1000-3000 °C)",
+    },
+    "rxn_057_decomposition": {
         "verified_equation": "CaCO3(s) -> CaO(s) + CO2(g)",
         "verified_source_section": "Ullmann's Encyclopedia (2012), Lime and Limestone, Calcination at 850-900 °C, ΔH° = +178.3 kJ/mol",
         "verified_conditions": "Thermal calcination at ~850 °C",
     },
-    "rxn_059_decomposition": {
+    "rxn_058_decomposition": {
         "verified_equation": "2KClO3(s) -> 2KCl(s) + 3O2(g)",
         "verified_source_section": "Greenwood & Earnshaw 2nd Ed. (1997), Ch. 14, p. 603, MnO2-catalyzed at 250-350 °C",
         "verified_conditions": "Heating at 250-350 °C with MnO2 catalyst",
     },
-    "rxn_066_organic_reaction": {
+    "rxn_065_organic_reaction": {
         "verified_equation": "CH3COOH(l) + C2H5OH(l) -> CH3COOCH2CH3(l) + H2O(l)",
         "verified_source_section": "March's Advanced Organic Chemistry 8th Ed. (2020), Rxn 16-24, p. 1196",
         "verified_conditions": "Concentrated H2SO4 catalyst, heating",

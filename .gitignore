@@ -97,5 +97,6 @@ temp/
 *.pem
 *.key
 
-# Local SQLite cache (rebuilt automatically)
-data/moleculens_local.db
+# Local SQLite database is rebuilt at runtime (CREATE TABLE IF NOT EXISTS)
+data/*.db
+data/*.db-journal

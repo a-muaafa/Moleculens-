@@ -320,7 +320,7 @@ def render_molecular_intelligence_section() -> None:
                         st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
                     st.caption(
-                        "التقسيم العشوائي متفائل لأن المجموعة (120 مركباً، وهي عينة صغيرة نسبياً) تضم سلاسل متجانسة قريبة بنيوياً؛ "
+                        f"التقسيم العشوائي متفائل لأن المجموعة ({qsar['n_total']} مركباً، وهي عينة صغيرة نسبياً) تضم سلاسل متجانسة قريبة بنيوياً؛ "
                         "التحقق بحجب الفئة الكيميائية كاملة (Leave-One-Class-Out) يُحسب من بيانات التدريب فقط دون أي تسرب من الفئة المحجوبة."
                     )
                     with st.expander("الأداء حسب الفئة الكيميائية واستبعاد الفئات الصغيرة (Leave-One-Class-Out)", expanded=False):

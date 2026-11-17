@@ -531,3 +531,53 @@ def test_ddi_known_serious_pair_is_flagged():
 
     res = DDIEngine.screen_polypharmacy(["warfarin", "aspirin"])
     assert res["total_interactions_found"] >= 1
+
+
+# ==============================================================================
+# 8. Regression tests for consistency fixes
+# ==============================================================================
+
+
+def _equation_key_from_registry(rxn):
+    return (
+        sorted((s["formula"], int(s["coefficient"])) for s in rxn["reactants"]),
+        sorted((s["formula"], int(s["coefficient"])) for s in rxn["products"]),
+    )
+
+
+def _equation_key_from_text(equation: str):
+    def side(text):
+        items = []
+        for token in text.split(" + "):
+            m = re.match(r"\s*(\d*)\s*(\S+)", token)
+            items.append((re.sub(r"\((?:s|l|g|aq)\)$", "", m.group(2)), int(m.group(1) or 1)))
+        return sorted(items)
+
+    left, right = equation.split("->")
+    return side(left), side(right)
+
+
+def test_every_manual_verification_entry_matches_its_registry_reaction_exactly():
+    """A 'manually verified' badge must never be attached to a different reaction (e.g. after renumbering)."""
+    from reaction_engine.reaction_registry import VERIFIED_REACTIONS_REGISTRY
+    from reaction_engine.scientific_audit import MANUALLY_VERIFIED_REACTION_SOURCES
+
+    by_id = {r["reaction_id"]: r for r in VERIFIED_REACTIONS_REGISTRY}
+    mismatches = []
+    for rid, meta in MANUALLY_VERIFIED_REACTION_SOURCES.items():
+        assert rid in by_id, f"unknown reaction id {rid}"
+        if _equation_key_from_registry(by_id[rid]) != _equation_key_from_text(meta["verified_equation"]):
+            mismatches.append((rid, meta["verified_equation"]))
+    assert not mismatches, mismatches
+
+
+def test_no_runtime_database_or_env_file_is_tracked_by_gitignore_rules():
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "data/*.db" in gitignore
+    assert re.search(r"(?m)^\.env\s*$", gitignore)
+
+
+def test_readme_does_not_hardcode_a_passing_test_count_or_static_success_badge():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "img.shields.io/badge/tests-" not in readme
+    assert not re.search(r"\b\d+\s*(?:passed|اختباراً ناجحاً)", readme)

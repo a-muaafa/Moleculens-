@@ -970,7 +970,7 @@ class MolecularIntelligence:
             "n_test": int(len(test_idx)),
             "is_small_benchmark_dataset": True,
             "dataset_size_caveat_ar": (
-                "مجموعة الـ 120 مركباً تُعد عينة مرجعية صغيرة نسبياً في النمذجة الكيميائية الحاسوبية (QSAR) "
+                f"مجموعة الـ {len(valid_records)} مركباً تُعد عينة مرجعية صغيرة نسبياً في النمذجة الكيميائية الحاسوبية (QSAR) "
                 "مقارنة بقواعد البيانات الصناعية التي تضم آلاف الجزيئات؛ لذا يُعرض أداؤها بشفافية جنبأ إلى جنب مع معادلة Wildman-Crippen."
             ),
             "split_method": (
