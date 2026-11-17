@@ -379,6 +379,20 @@ def render_prediction_section() -> None:
     _render_mode_banner(prediction)
 
     if not prediction.get("supported"):
+        if prediction.get("is_no_reaction") or prediction.get("no_reaction_detected"):
+            st.markdown(
+                '<div style="background-color: #2b1f14; border: 1px solid #c2410c; border-radius: 8px; padding: 14px; margin-bottom: 14px;">'
+                '<h4 style="color: #fb923c; margin: 0 0 8px 0;">تأكيد علمي: لا يحدث تفاعل كيميائي (No Reaction Confirmed)</h4>'
+                f'<p style="color: #fed7aa; margin: 0 0 6px 0;"><strong>النتيجة المباشرة:</strong> {_esc(prediction.get("no_reaction_reason_ar") or prediction.get("verdict_ar", ""))}</p>'
+                f'<p style="color: #e2e8f0; font-size: 0.9em; margin: 0;"><strong>الأساس العلمي والدافع الثرموديناميكي:</strong> {_esc(prediction.get("scientific_basis_ar") or prediction.get("explanation_ar", ""))}</p>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+            c_react, _ = st.columns([1, 1])
+            with c_react:
+                _render_species_table(prediction.get("reactants", []), "المواد المختبرة (Tested Materials - Unreactive)")
+            return
+
         missing = prediction.get("missing_information_ar", [])
         if missing:
             st.markdown("**ما الذي ينقص هذه النتيجة؟**")
@@ -428,6 +442,12 @@ def render_prediction_section() -> None:
 
     if prediction.get("conditions_required_ar"):
         st.markdown(f"**الظروف المطلوبة لحدوث التفاعل:** {_esc(prediction['conditions_required_ar'])}")
+
+    unreacted = prediction.get("unreacted_species") or []
+    if unreacted:
+        st.markdown("**المواد المتفرجة غير المتفاعلة (Spectator Substances):**")
+        for u in unreacted:
+            st.markdown(f"- **{_esc(u.get('name_ar', ''))} ({_esc(u.get('formula', ''))}):** {_esc(u.get('role_ar', 'مادة متفرجة'))}")
 
     _render_bonds_and_energy(prediction)
 

@@ -259,13 +259,6 @@ def test_api_titration_valid_and_invalid_parameters(api):
         _assert_envelope(res, allowed_status={400})
 
 
-def test_api_ddi_valid_and_invalid_inputs(api):
-    good = api.check_drug_interactions(["warfarin", "aspirin"])
-    _assert_envelope(good, allowed_status={200})
-    for bad in ([], ["warfarin"], None, "warfarin,aspirin"):
-        _assert_envelope(api.check_drug_interactions(bad), allowed_status={400})
-
-
 def test_api_scientific_audit_endpoint(api):
     res = api.scientific_audit()
     _assert_envelope(res, allowed_status={200})
@@ -508,29 +501,6 @@ def test_concentration_calculator_known_values():
     assert dil["success"] is True
     assert dil["v2"] == pytest.approx(100.0)
     assert dil["solvent_to_add"] == pytest.approx(90.0)
-
-
-def test_ddi_pairwise_counts_duplicates_and_unknown_drugs():
-    from pharmacy.ddi_engine import DDIEngine
-
-    three = DDIEngine.screen_polypharmacy(["warfarin", "aspirin", "omeprazole"])
-    assert three["success"] is True
-    assert three["total_pairs_evaluated"] == 3
-    assert len(three["all_pairs_results"]) == 3
-
-    unknown = DDIEngine.screen_polypharmacy(["warfarin", "zzz-not-a-drug"])
-    assert unknown["success"] is True
-    assert unknown["total_interactions_found"] == 0  # no interaction is invented for an unknown drug
-
-    dup = DDIEngine.screen_polypharmacy(["warfarin", "Warfarin", "aspirin"])
-    assert dup["duplicate_inputs_detected"]
-
-
-def test_ddi_known_serious_pair_is_flagged():
-    from pharmacy.ddi_engine import DDIEngine
-
-    res = DDIEngine.screen_polypharmacy(["warfarin", "aspirin"])
-    assert res["total_interactions_found"] >= 1
 
 
 # ==============================================================================

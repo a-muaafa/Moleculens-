@@ -57,9 +57,11 @@ def render_titration_view(lang: str = "ar") -> None:
         a_spec = acids[selected_acid_key]
         st.caption(
             f"**{a_spec['name_ar']} ({selected_acid_key}):** {a_spec.get('strength_ar', '')} | "
+            f"التصنيف: {a_spec.get('category_ar', '')} | "
             f"الكتلة المولية: `{a_spec.get('molar_mass', 0)} g/mol` | "
             f"ثوابت التأين pKa: `{', '.join(str(x) for x in a_spec.get('pKa_list', [a_spec['pKa']]))}` | "
-            f"الذوبانية: {a_spec.get('solubility_ar', '')}"
+            f"الذوبانية: {a_spec.get('solubility_ar', '')} | "
+            f"المصدر: *{a_spec.get('source', 'CRC Handbook / Harris QCA')}*"
         )
 
         base_options = list(bases.keys())
@@ -76,9 +78,11 @@ def render_titration_view(lang: str = "ar") -> None:
         b_spec = bases[selected_base_key]
         st.caption(
             f"**{b_spec['name_ar']} ({selected_base_key}):** {b_spec.get('strength_ar', '')} | "
+            f"التصنيف: {b_spec.get('category_ar', '')} | "
             f"الكتلة المولية: `{b_spec.get('molar_mass', 0)} g/mol` | "
             f"ثوابت التأين pKb: `{', '.join(str(x) for x in b_spec.get('pKb_list', [b_spec['pKb']]))}` | "
-            f"الذوبانية: {b_spec.get('solubility_ar', '')}"
+            f"الذوبانية: {b_spec.get('solubility_ar', '')} | "
+            f"المصدر: *{b_spec.get('source', 'CRC Handbook / Harris QCA')}*"
         )
 
         mode_options = [
@@ -237,6 +241,7 @@ def render_titration_view(lang: str = "ar") -> None:
                 "اللون في الوسط الحمضي (Acidic Color)": v["color_acid"],
                 "اللون في الوسط القاعدي (Basic Color)": v["color_base"],
                 "الملائمة التحليلية": v["suitability_ar"],
+                "المصدر العلمي المرجعي": v.get("source", "Harris QCA / CRC Handbook"),
             }
             for v in indicators.values()
         ]

@@ -447,6 +447,10 @@ INDICATORS_DATABASE: dict[str, dict[str, Any]] = {
     },
 }
 
+from titration.acid_base_catalog import finalize_species_tables
+
+finalize_species_tables(ACID_SPECIES_DATABASE, BASE_SPECIES_DATABASE, INDICATORS_DATABASE)
+
 
 def solve_quadratic_positive(a: float, b: float, c: float) -> float:
     """Solves ax^2 + bx + c = 0 for the physical positive root."""
@@ -478,17 +482,15 @@ def select_optimal_indicator_key(ph_eq: float, case_key: str) -> str:
     """Selects the scientifically optimal color indicator based on equivalence pH and titration type."""
     if case_key == "strong_acid_strong_base" and 6.2 <= ph_eq <= 7.8:
         return "bromothymol_blue"
-    if ph_eq >= 8.0:
-        return "phenolphthalein"
-    if ph_eq <= 4.3:
-        return "methyl_orange"
-    if 4.3 < ph_eq <= 5.8:
-        return "methyl_red"
-    if 5.8 < ph_eq < 6.8:
-        return "bromocresol_purple"
-    if 6.8 <= ph_eq < 8.0:
-        return "bromothymol_blue"
-    return "phenolphthalein"
+    candidates = []
+    for k, ind in INDICATORS_DATABASE.items():
+        low, high = ind.get("pH_range", (7.0, 7.0))
+        mid = (low + high) / 2.0
+        covers = low <= ph_eq <= high
+        dist = abs(mid - ph_eq)
+        candidates.append((0 if covers else 1, dist, k))
+    candidates.sort()
+    return candidates[0][2] if candidates else "phenolphthalein"
 
 
 def get_indicator_state_at_ph(indicator_key: str, current_ph: float) -> dict[str, str]:

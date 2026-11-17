@@ -98,3 +98,45 @@ def test_expanded_acids_bases_indicators_and_polyprotic_simulation():
     assert "<svg" in svg
     assert "#EC4899" in svg
 
+
+def test_comprehensive_acid_base_and_indicator_catalogue():
+    acids = TitrationEngine.ACID_DATABASE
+    bases = TitrationEngine.BASE_DATABASE
+    indicators = TitrationEngine.INDICATORS
+
+    assert len(acids) >= 40
+    assert len(bases) >= 30
+    assert len(indicators) >= 23
+
+    # Every entry has mandatory metadata
+    for key, spec in acids.items():
+        assert "name_ar" in spec and "name_en" in spec
+        assert "pKa" in spec and "pKa_list" in spec
+        assert "molar_mass" in spec and spec["molar_mass"] > 0
+        assert "category_ar" in spec
+        assert "source" in spec and len(spec["source"]) >= 10
+        assert "solubility_ar" in spec
+
+    for key, spec in bases.items():
+        assert "name_ar" in spec and "name_en" in spec
+        assert "pKb" in spec and "pKb_list" in spec
+        assert "molar_mass" in spec and spec["molar_mass"] > 0
+        assert "category_ar" in spec
+        assert "source" in spec and len(spec["source"]) >= 10
+        assert "solubility_ar" in spec
+
+    for key, spec in indicators.items():
+        assert "name_ar" in spec and "name_en" in spec
+        assert "pH_range" in spec and len(spec["pH_range"]) == 2
+        assert "color_acid" in spec and "color_base" in spec
+        assert "source" in spec and len(spec["source"]) >= 10
+
+    # Simulation with new acid and base
+    res1 = TitrationEngine.simulate_titration("HBr", "LiOH", 0.1, 20.0, 0.1)
+    assert res1["success"] is True
+    assert res1["v_eq_ml"] == pytest.approx(20.0, abs=0.01)
+
+    res2 = TitrationEngine.simulate_titration("C3H6O2", "NaOH", 0.1, 25.0, 0.1)
+    assert res2["success"] is True
+    assert res2["ph_eq"] > 8.0
+

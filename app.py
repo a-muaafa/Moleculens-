@@ -1,7 +1,7 @@
 """
 Main entry point for the MolecuLens scientific platform.
 Integrates Explore & Understand, Reaction Prediction, Reaction Lab,
-Molecular Intelligence, Titration Lab, Concentration Lab, and Drug-Drug Interactions.
+Molecular Intelligence, Titration Lab, and Concentration Lab.
 """
 
 from typing import Any
@@ -14,7 +14,6 @@ from frontend.molecular_intelligence_view import render_molecular_intelligence_s
 from frontend.titration_view import render_titration_view
 from frontend.concentration_view import render_concentration_view
 from frontend.pharmacology_view import render_pharmacology_view
-from frontend.ddi_view import render_ddi_view
 from frontend.styles import inject_platform_styles
 
 st.set_page_config(page_title=f"{APP_NAME} | {APP_SLOGAN}", layout="wide")
@@ -60,7 +59,6 @@ nav_options = {
     "titration": "4. Titration Lab (مختبر المعايرة)",
     "concentration": "5. Concentration Lab (حاسبة التراكيز)",
     "pharmacology": "6. Pharmacology – علم الأدوية (Coming Soon)",
-    "ddi": "7. Drug Interactions (التداخلات الدوائية)",
 }
 
 nav_keys = list(nav_options.keys())
@@ -94,8 +92,6 @@ elif active_tab == "concentration":
     render_concentration_view(lang=app_lang)
 elif active_tab == "pharmacology":
     render_pharmacology_view(lang=app_lang)
-elif active_tab == "ddi":
-    render_ddi_view(lang=app_lang)
 
 st.divider()
 st.caption(

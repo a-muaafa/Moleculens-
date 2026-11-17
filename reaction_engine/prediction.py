@@ -40,6 +40,8 @@ NONMETAL_ELEMENTS: set[str] = {
     "H", "C", "N", "O", "F", "P", "S", "Cl", "Se", "Br", "I", "Si", "B", "As", "Te",
 }
 
+NOBLE_GASES: set[str] = {"He", "Ne", "Ar", "Kr", "Xe", "Rn"}
+
 ALKALI_METALS: set[str] = {"Li", "Na", "K", "Rb", "Cs"}
 ALKALINE_EARTH_METALS: set[str] = {"Be", "Mg", "Ca", "Sr", "Ba"}
 
@@ -181,6 +183,7 @@ SOURCE_CAREY = (
 
 KIND_METAL = "metal"
 KIND_NONMETAL_ELEMENT = "nonmetal_element"
+KIND_NOBLE_GAS = "noble_gas"
 KIND_ELEMENTAL_MOLECULE = "elemental_molecule"
 KIND_STRONG_ACID = "strong_acid"
 KIND_WEAK_ACID = "weak_acid"
@@ -199,6 +202,7 @@ KIND_UNKNOWN = "unknown"
 KIND_LABELS_AR: dict[str, str] = {
     KIND_METAL: "عنصر فلزي",
     KIND_NONMETAL_ELEMENT: "عنصر لافلزي",
+    KIND_NOBLE_GAS: "غاز نبيل خامل",
     KIND_ELEMENTAL_MOLECULE: "جزيء عنصري",
     KIND_STRONG_ACID: "حمض قوي",
     KIND_WEAK_ACID: "حمض ضعيف",
@@ -516,7 +520,9 @@ def classify_species(formula: str, name_ar: str = "", name_en: str = "") -> dict
     if len(elements) == 1:
         el = next(iter(elements))
         cnt = counts[el]
-        if cnt == 1:
+        if el in NOBLE_GASES:
+            info["kind"] = KIND_NOBLE_GAS
+        elif cnt == 1:
             if el in NONMETAL_ELEMENTS:
                 info["kind"] = KIND_NONMETAL_ELEMENT
             else:
@@ -528,7 +534,7 @@ def classify_species(formula: str, name_ar: str = "", name_en: str = "") -> dict
             info["kind"] = KIND_ELEMENTAL_MOLECULE
         info["name_ar"] = name_ar or ELEMENT_NAMES_AR.get(el, el)
         info["name_en"] = name_en or ELEMENT_NAMES_EN.get(el, el)
-        info["kind_label_ar"] = KIND_LABELS_AR[info["kind"]]
+        info["kind_label_ar"] = KIND_LABELS_AR.get(info["kind"], KIND_LABELS_AR[KIND_UNKNOWN])
         return info
 
     # --- hydrocarbons (C and H only) ---
@@ -1283,13 +1289,129 @@ def _build_observations_payload(extra: dict[str, Any]) -> list[dict[str, Any]]:
     return list(extra.get("observations", []))
 
 
-def _insufficient_payload(reason_ar: str, missing_ar: list[str], species: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
+def check_explicit_no_reaction(species: list[dict[str, Any]]) -> dict[str, str] | None:
+    """
+    Scientifically verifies whether the combination is a known non-reacting system:
+    1. Noble gases (inert electron octet).
+    2. Metal below hydrogen with non-oxidizing acid (Cu/Ag/Au/Pt/Hg + HCl/HBr/HI/H2SO4).
+    3. Single displacement where incoming metal is less active than salt cation (Cu + ZnSO4).
+    4. Halogen displacement where incoming halogen is less active than halide (Br2 + KCl).
+    5. Aqueous mixture of two soluble salts yielding only soluble spectator ions (NaCl + KNO3).
+    6. Non-reactive acid-acid mixtures without redox driving force (HCl + HBr).
+    """
+    # 1. Noble gases
+    for sp in species:
+        if sp.get("formula") in NOBLE_GASES or sp.get("kind") == KIND_NOBLE_GAS:
+            f = sp.get("formula", "")
+            name = sp.get("name_ar", f)
+            return {
+                "reason_ar": f"لا يحدث تفاعل كيميائي: الغاز النبيل ({name} {f}) خامل كيميائياً في الشروط القياسية.",
+                "scientific_basis_ar": (
+                    f"يمتلك عنصر {name} ({f}) غلاف تكافؤ إلكتروني مكتمل ومستقر ثرموديناميكياً بدرجة فائقة (توزيع إلكتروني خامل). "
+                    "لا يميل لفقد أو كسب أو مشاركة الإلكترونات في الشروط المعملية العادية، لذا فهو خامل كيميائياً ولا يتفاعل مع هذه المواد."
+                ),
+            }
+
+    # 2. Metal below hydrogen with non-oxidizing acid (e.g. Cu + HCl, Ag + HCl, Au + HCl, Pt + HCl, Hg + HCl)
+    metals = _find_species(species, KIND_METAL)
+    acids = _find_species(species, KIND_STRONG_ACID) + _find_species(species, KIND_WEAK_ACID)
+    for m in metals:
+        m_sym = m.get("cation", m.get("formula", ""))
+        is_below_h = (m_sym in NOBLE_METALS) or (metal_activity_index(m_sym) > metal_activity_index("H"))
+        if is_below_h:
+            for ac in acids:
+                if ac.get("formula") in {"HCl", "HBr", "HI", "H2SO4"}:
+                    m_name = m.get("name_ar", m_sym)
+                    ac_name = ac.get("name_ar", ac.get("formula"))
+                    return {
+                        "reason_ar": f"لا يحدث تفاعل كيميائي: فلز {m_name} ({m_sym}) يقع أسفل الهيدروجين في سلسلة النشاط الكيميائي ولا يزيحه من حمض {ac_name}.",
+                        "scientific_basis_ar": (
+                            f"يقع فلز {m_name} ({m_sym}) أسفل الهيدروجين في السلسلة الكهروكيميائية وسلسلة النشاط الفلزي "
+                            f"(جهد الاختزال القياسي له موجب مقارنة بـ E° = 0.00 V للهيدروجين)، "
+                            f"لذلك لا يستطيع اختزال أيونات H⁺ في حمض {ac_name} غير المؤكسد، ولا يحدث تفاعل إحلال مفرد أو تصاعد لغاز الهيدروجين."
+                        ),
+                    }
+
+    # 3. Single displacement where incoming metal is less active than salt cation (e.g. Cu + ZnSO4, Ag + CuSO4)
+    salts = _find_species(species, KIND_SALT)
+    for m in metals:
+        m_sym = m.get("cation", m.get("formula", ""))
+        for s in salts:
+            salt_cation = s.get("cation", "")
+            if salt_cation and salt_cation not in {"H", "NH4"} and salt_cation != m_sym:
+                if metal_activity_index(m_sym) >= 0 and metal_activity_index(salt_cation) >= 0:
+                    if not is_more_active_metal(m_sym, salt_cation):
+                        m_name = m.get("name_ar", m_sym)
+                        return {
+                            "reason_ar": f"لا يحدث تفاعل كيميائي: الفلز {m_name} ({m_sym}) أقل نشاطاً من كاتيون {salt_cation} في الملح.",
+                            "scientific_basis_ar": (
+                                f"الفلز {m_name} ({m_sym}) يقع في مرتبة أدنى في سلسلة النشاط الكيميائي مقارنة بكاتيون {salt_cation}، "
+                                f"وبالتالي لا يمتلك طاقة دافعة ثرموديناميكية (جهد خلية كلفاني موجب) لاختزال كاتيونات الملح وإزاحتها، ولا يحدث تفاعل إحلال مفرد."
+                            ),
+                        }
+
+    # 4. Halogen displacement where incoming halogen is less active than halide (e.g. Br2 + KCl, I2 + NaCl)
+    halogens = [s for s in species if s.get("formula") in {"Cl2", "Br2", "I2", "F2"}]
+    for hal in halogens:
+        hal_f = hal["formula"]
+        for s in salts:
+            anion = s.get("anion", "")
+            if anion in {"F", "Cl", "Br", "I"}:
+                hal_map = {"F2": 0, "Cl2": 1, "Br2": 2, "I2": 3}
+                anion_map = {"F": 0, "Cl": 1, "Br": 2, "I": 3}
+                hal_rank = hal_map.get(hal_f, 99)
+                anion_rank = anion_map.get(anion, 99)
+                if hal_rank > anion_rank:
+                    return {
+                        "reason_ar": f"لا يحدث تفاعل كيميائي: الهالوجين {hal_f} أضعف أكسدةً وألفة إلكترونية من أنيون {anion}⁻ في الملح.",
+                        "scientific_basis_ar": (
+                            f"الهالوجين {hal_f} يمتلك جهد اختزال قياسي وألفة إلكترونية أقل من الهالوجين المقابل للأنيون {anion}⁻ في المحلول، "
+                            f"لذا فهو غير قادر على أكسدة أنيونات {anion}⁻ وتحريرها، ولا تحدث إزاحة للهالوجين."
+                        ),
+                    }
+
+    # 5. Mixture of two soluble salts whose metathesis yields only completely soluble products (e.g. NaCl + KNO3)
+    if len(salts) >= 2 and len(species) == 2:
+        s1, s2 = salts[0], salts[1]
+        c1, a1 = s1.get("cation", ""), s1.get("anion", "")
+        c2, a2 = s2.get("cation", ""), s2.get("anion", "")
+        if c1 and a1 and c2 and a2 and c1 != c2 and a1 != a2:
+            p1_insoluble = is_salt_insoluble(c1, a2)
+            p2_insoluble = is_salt_insoluble(c2, a1)
+            if not p1_insoluble and not p2_insoluble:
+                return {
+                    "reason_ar": f"لا يحدث تفاعل كيميائي: خلط محلولي {s1.get('formula')} و {s2.get('formula')} ينتج فقط أيونات ذائبة ومتفرجة دون تكوّن راسب أو غاز.",
+                    "scientific_basis_ar": (
+                        f"عند خلط محلول {s1.get('name_ar', s1['formula'])} ({s1['formula']}) مع {s2.get('name_ar', s2['formula'])} ({s2['formula']}) في الماء، "
+                        f"تكون جميع النواتج المحتملة للتبادل المزدوج أملاحاً تامة الذوبان والتأين. "
+                        f"لا يتشكل راسب صلب، ولا يتصاعد غاز، ولا يتكون جزيء غير متأين كالماء، وبالتالي تظل جميع الأيونات ({c1}⁺, {c2}⁺, {a1}⁻, {a2}⁻) "
+                        "أيونات متفرجة (Spectator Ions) حرة في المحلول المائي دون حدوث تفاعل كيميائي."
+                    ),
+                }
+
+    return None
+
+
+def _insufficient_payload(
+    reason_ar: str,
+    missing_ar: list[str],
+    species: list[dict[str, Any]],
+    is_no_reaction: bool = False,
+    no_reaction_reason_ar: str = "",
+    scientific_basis_ar: str = "",
+) -> dict[str, Any]:
+    payload = {
         "supported": False,
         "mode": "insufficient_evidence",
-        "mode_label_ar": "لا تتوفر بيانات كافية (Insufficient Evidence)",
+        "mode_label_ar": "لا يحدث تفاعل كيميائي (No Reaction)" if is_no_reaction else "لا تتوفر بيانات كافية (Insufficient Evidence)",
         "verdict_ar": reason_ar,
-        "confidence": {"level": "none", "label_ar": "لا يمكن تقديره", "basis_ar": "لا يوجد أساس استدلال موثوق لهذه المجموعة."},
+        "is_no_reaction": is_no_reaction,
+        "no_reaction_detected": is_no_reaction,
+        "confidence": {
+            "level": "high" if is_no_reaction else "none",
+            "label_ar": "مؤكد علمياً بعدم حدوث تفاعل" if is_no_reaction else "لا يمكن تقديره",
+            "basis_ar": scientific_basis_ar if is_no_reaction else "لا يوجد أساس استدلال موثوق لهذه المجموعة.",
+        },
         "reactants": [
             {
                 "formula": s["formula"],
@@ -1303,14 +1425,28 @@ def _insufficient_payload(reason_ar: str, missing_ar: list[str], species: list[d
         ],
         "products": [],
         "observations": [],
-        "ph_analysis": {"available": False, "summary_ar": "لا يتوفر حساب pH لعدم وجود مسار تفاعل موثوق.", "detail_ar": ""},
+        "ph_analysis": {"available": False, "summary_ar": "لا يتوفر حساب pH لعدم حدوث تفاعل كيميائي." if is_no_reaction else "لا يتوفر حساب pH لعدم وجود مسار تفاعل موثوق.", "detail_ar": ""},
         "evidence": [],
-        "missing_information_ar": missing_ar,
+        "missing_information_ar": missing_ar if missing_ar else ["لا توجد معلومات إضافية ناقصة؛ المنظومة متزنة كيميائياً."],
         "explanation_ar": (
-            "تعذّر تحديد مسار تفاعل موثوق لهذه المواد. "
-            "تلتزم منصة MolecuLens بمبدأ عدم اختلاق النواتج: يُعرض غياب الأدلة بدل معادلة مُقدَّرة قد تكون مضللة."
+            scientific_basis_ar
+            if is_no_reaction
+            else (
+                "تعذّر تحديد مسار تفاعل موثوق لهذه المواد. "
+                "تلتزم منصة MolecuLens بمبدأ عدم اختلاق النواتج: يُعرض غياب الأدلة بدل معادلة مُقدَّرة قد تكون مضللة."
+            )
         ),
     }
+    if is_no_reaction:
+        payload["no_reaction_reason_ar"] = no_reaction_reason_ar
+        payload["scientific_basis_ar"] = scientific_basis_ar
+    return payload
+
+
+def _matches_species_input(inp: dict[str, Any], subset: Any) -> bool:
+    sub = inp.get("substance", {}) or {}
+    f = sub.get("symbol_or_formula") or inp.get("formula", "")
+    return any(s.get("formula") == f or s.get("input_formula") == f for s in subset)
 
 
 def predict_reaction(
@@ -1326,6 +1462,9 @@ def predict_reaction(
       2. "rule_inferred"       — derived from a declared general-chemistry rule (with source + limits).
       3. "insufficient_evidence" — no reliable basis; products are NOT invented.
     """
+    import itertools
+    from reaction_engine.reaction_registry import find_verified_reactions
+
     species: list[dict[str, Any]] = []
     for item in reactant_inputs:
         sub = item.get("substance", {}) or {}
@@ -1353,8 +1492,6 @@ def predict_reaction(
         )
 
     # ---- Tier 1: documented reactions from the verified registry -----------------------
-    from reaction_engine.reaction_registry import find_verified_reactions
-
     formulas = [s["formula"] for s in species]
     documented = find_verified_reactions(formulas, reaction_type=None, domain=None)
     if documented:
@@ -1366,26 +1503,69 @@ def predict_reaction(
         ]
         return payload
 
+    # If 3 or more species, check if any subset of size >= 2 matches a documented reaction!
+    if len(species) > 2:
+        for k in range(len(species) - 1, 1, -1):
+            for subset in itertools.combinations(species, k):
+                sub_formulas = [s["formula"] for s in subset]
+                sub_documented = find_verified_reactions(sub_formulas, reaction_type=None, domain=None)
+                if sub_documented:
+                    rxn = sub_documented[0]
+                    unreacted = [s for s in species if s not in subset]
+                    sub_inputs = [inp for inp in (reactant_inputs or []) if _matches_species_input(inp, subset)]
+                    payload = _documented_payload(rxn, list(subset), sub_inputs, unreacted_species=unreacted)
+                    payload["alternatives"] = [
+                        {"reaction_id": r["reaction_id"], "reaction_name_ar": r["reaction_name_ar"], "category": r.get("category", "")}
+                        for r in sub_documented[1:]
+                    ]
+                    return payload
+
     # ---- Tier 2: rule-based inference ------------------------------------------------
     inference = _infer_by_rules(species)
-    if inference is None:
+    if inference is not None:
+        return _finalize_inferred(inference, species, reactant_inputs)
+
+    # If 3 or more species, check if any pair of species reacts via rules!
+    if len(species) > 2:
+        for pair in itertools.combinations(species, 2):
+            inf = _infer_by_rules(list(pair))
+            if inf is not None:
+                unreacted = [s for s in species if s not in pair]
+                pair_inputs = [inp for inp in (reactant_inputs or []) if _matches_species_input(inp, pair)]
+                return _finalize_inferred(inf, list(pair), pair_inputs, unreacted_species=unreacted)
+
+    # ---- Explicit "No Reaction" Detection ----
+    no_rxn = check_explicit_no_reaction(species)
+    if no_rxn:
         return _insufficient_payload(
-            "لا توجد قاعدة كيميائية موثقة تسمح بالتنبؤ بتفاعل هذه المواد معاً في المحرك الحالي.",
+            no_rxn["reason_ar"],
             [
-                "أضف بيانات مرجعية موثقة (مرجع علمي أو تجربة مخبرية) لهذه المجموعة إلى سجل التفاعلات.",
-                "أو حدّد نوع التفاعل المتوقع يدوياً واستخدم Reaction Lab الموثّق.",
-                "أو استخدم محرك التنبؤ القواعدي المدعوم بقواعد التفاعل العضوي بعد توسيع قاعدة المعرفة.",
+                "تم التحقق علمياً من عدم توفر دافع ثرموديناميكي أو كهروكيميائي لحدوث تفاعل في الشروط المعتادة.",
+                "لا حاجة لإضافة متفاعلات أخرى ما لم تكن هناك رغبة في دراسة تفاعل كيميائي مختلف.",
             ],
             species,
+            is_no_reaction=True,
+            no_reaction_reason_ar=no_rxn["reason_ar"],
+            scientific_basis_ar=no_rxn["scientific_basis_ar"],
         )
 
-    return _finalize_inferred(inference, species, reactant_inputs)
+    # ---- Fallback Tier 3: Insufficient evidence (never invent products) ----
+    return _insufficient_payload(
+        "لا توجد قاعدة كيميائية موثقة تسمح بالتنبؤ بتفاعل هذه المواد معاً في المحرك الحالي.",
+        [
+            "أضف بيانات مرجعية موثقة (مرجع علمي أو تجربة مخبرية) لهذه المجموعة إلى سجل التفاعلات.",
+            "أو حدّد نوع التفاعل المتوقع يدوياً واستخدم Reaction Lab الموثّق.",
+            "أو استخدم محرك التنبؤ القواعدي المدعوم بقواعد التفاعل العضوي بعد توسيع قاعدة المعرفة.",
+        ],
+        species,
+    )
 
 
 def _documented_payload(
     rxn: dict[str, Any],
     species: list[dict[str, Any]],
     reactant_inputs: list[dict[str, Any]] | None = None,
+    unreacted_species: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     reactants = [
         {
@@ -1455,7 +1635,7 @@ def _documented_payload(
         if verif_meta["reference_manually_verified"]
         else "تفاعل مسجّل بمرجع ببليوغرافي ومدقق برمجياً (الذرات والشحنة والأطوار) — لم تُراجع الصفحة يدوياً بعد"
     )
-    return {
+    payload = {
         "supported": True,
         "mode": "documented",
         "mode_label_ar": "تفاعل موثّق في سجل التفاعلات المعتمد (Documented Reaction)",
@@ -1508,6 +1688,25 @@ def _documented_payload(
         "assumptions_and_limits_ar": rxn.get("assumptions_and_limits_ar", ""),
         "alternatives": [],
     }
+    if unreacted_species:
+        unreacted_table = [
+            {
+                "formula": s["formula"],
+                "name_ar": s["name_ar"],
+                "name_en": s.get("name_en", s["formula"]),
+                "role_ar": "مادة متفرجة / لم تشارك في مسار التفاعل (Spectator / Inert)",
+            }
+            for s in unreacted_species
+        ]
+        payload["unreacted_species"] = unreacted_table
+        names_str = "، ".join(f"{s['name_ar']} ({s['formula']})" for s in unreacted_species)
+        observations.append({
+            "type": "spectator",
+            "text_ar": f"المواد المتفرجة: {names_str} لم تشارك في التفاعل وبقيت دون استهلاك.",
+            "basis_ar": "حفظ المادة للمواد المتفرجة غير المتفاعلة."
+        })
+        payload["explanation_ar"] += f" ملاحظة: تشمل المدخلات مواد متفرجة لم تشارك في التفاعل ({names_str})."
+    return payload
 
 
 def _enrich_documented_analysis(
@@ -1631,6 +1830,7 @@ def _finalize_inferred(
     inference: dict[str, Any],
     species: list[dict[str, Any]],
     reactant_inputs: list[dict[str, Any]],
+    unreacted_species: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rule = inference["rule"]
     reactants = inference["reactants"]
@@ -1729,7 +1929,7 @@ def _finalize_inferred(
         stoichiometry=stoichiometry,
     )
 
-    return {
+    payload = {
         "supported": True,
         "mode": "rule_inferred",
         "mode_label_ar": "استنتاج قواعدي — غير موثّق تجريبياً (Rule-Based Inference)",
@@ -1778,6 +1978,25 @@ def _finalize_inferred(
         "explanation_ar": explanation_ar,
         "alternatives": [],
     }
+    if unreacted_species:
+        unreacted_table = [
+            {
+                "formula": s["formula"],
+                "name_ar": s["name_ar"],
+                "name_en": s.get("name_en", s["formula"]),
+                "role_ar": "مادة متفرجة / لم تشارك في مسار التفاعل (Spectator / Inert)",
+            }
+            for s in unreacted_species
+        ]
+        payload["unreacted_species"] = unreacted_table
+        names_str = "، ".join(f"{s['name_ar']} ({s['formula']})" for s in unreacted_species)
+        observations.append({
+            "type": "spectator",
+            "text_ar": f"المواد المتفرجة: {names_str} لم تشارك في التفاعل وبقيت دون استهلاك.",
+            "basis_ar": "حفظ المادة للمواد المتفرجة غير المتفاعلة."
+        })
+        payload["explanation_ar"] += f" ملاحظة: تشمل المواد المدخلة مواد متفرجة لم تشارك في التفاعل ({names_str})."
+    return payload
 
 
 def _build_explanation_ar(

@@ -1,7 +1,7 @@
 """
 Home overview and hero header components for MolecuLens.
 Features modular cards for Explore & Understand, Reaction Lab, Titration Lab,
-Concentration Lab, and Drug-Drug Interactions with bilingual support.
+and Concentration Lab with bilingual support.
 """
 
 from typing import Callable, Any
@@ -25,7 +25,7 @@ def render_hero_header(lang: str = "ar") -> None:
         "وستتولى النواة العلمية للمنصة جلب البيانات الموثقة وإجراء الحسابات بدقة وموثوقية عالية."
         if is_ar
         else "Interactive scientific learning platform for pharmacy and chemistry students before entering the laboratory (Pre-Lab Simulation). "
-        "Explore elements, compounds, drugs, and proteins, or simulate titrations, chemical reactions, concentration recipes, and drug-drug interactions with scientific rigor."
+        "Explore elements, compounds, drugs, and proteins, or simulate titrations, chemical reactions and concentration recipes with scientific rigor."
     )
 
     st.markdown(
@@ -125,7 +125,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             on_navigate("titration")
 
     st.markdown("<br/>", unsafe_allow_html=True)
-    c5, c6, c7 = st.columns(3)
+    c5, c6 = st.columns(2)
 
     with c5:
         st.markdown(
@@ -160,20 +160,3 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         )
         if st.button("معاينة Pharmacology (Coming Soon)" if is_ar else "Preview Pharmacology", key="home_go_pharmacology"):
             on_navigate("pharmacology")
-
-    with c7:
-        st.markdown(
-            f"""
-<div class="ml-section-card">
-  <h3>7. Drug Interactions</h3>
-  <p><strong>{('فاحص التداخلات الدوائية الموسّع (10 مجموعات علاجية)' if is_ar else 'Expanded Drug-Drug Interactions (DDI)')}</strong></p>
-  <p>
-    {('فحص التداخلات الدوائية الثنائية والوصفات المتعددة بالاسم العلمي أو التجاري، وتحديث البيانات من RxNorm و openFDA و PubChem مع التنبيه السريري الإلزامي.' if is_ar
-      else 'Pairwise and polypharmacy interaction screening across 10 therapeutic classes with RxNorm/openFDA synchronization and safety disclaimers.')}
-  </p>
-</div>
-""",
-            unsafe_allow_html=True,
-        )
-        if st.button("الدخول إلى Drug Interactions" if is_ar else "Open Drug Interactions", key="home_go_ddi"):
-            on_navigate("ddi")

@@ -462,32 +462,6 @@ class MolecuLensAPI:
             )
 
     @staticmethod
-    def check_drug_interactions(drugs: list[str]) -> dict[str, Any]:
-        endpoint = "/api/v1/ddi/screen"
-        from pharmacy.ddi_engine import DDIEngine
-
-        if not drugs or not isinstance(drugs, list) or len(drugs) < 2:
-            return make_api_response(
-                ok=False,
-                status_code=400,
-                ui_state="error",
-                endpoint=endpoint,
-                message_ar="يلزم إدخال دواءين على الأقل لفحص التداخلات الدوائية.",
-                message_en="At least two drugs are required for DDI screening.",
-                error_code="INSUFFICIENT_DRUGS",
-            )
-        res = DDIEngine.screen_polypharmacy(drugs)
-        return make_api_response(
-            ok=True,
-            status_code=200,
-            ui_state="ready",
-            endpoint=endpoint,
-            message_ar="تم فحص التداخلات الدوائية لجميع أزواج الأدوية المدخلة.",
-            message_en="Pairwise drug-drug interaction screening completed.",
-            data=res,
-        )
-
-    @staticmethod
     def pharmacology_overview() -> dict[str, Any]:
         endpoint = "/api/v1/pharmacology/overview"
         from frontend.pharmacology_view import PHARMACOLOGY_PILLARS

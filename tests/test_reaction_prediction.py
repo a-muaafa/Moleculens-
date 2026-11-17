@@ -227,3 +227,83 @@ def test_ai_assistant_handles_insufficient_evidence():
     res = predict_reaction(_inputs(["HCl", "HNO3"]))
     text = AIScientificAssistant.explain_reaction_prediction(res)
     assert "البيانات الناقصة" in text
+
+
+# --------------------------------------------------------------------------------------
+# Explicit No Reaction & Multi-Reactant Tests
+# --------------------------------------------------------------------------------------
+
+
+def test_explicit_no_reaction_metal_below_hydrogen_with_acid():
+    res = predict_reaction(_inputs(["Cu", "HCl"]))
+    assert res["supported"] is False
+    assert res["is_no_reaction"] is True
+    assert res["no_reaction_detected"] is True
+    assert "النحاس" in res["verdict_ar"] or "Cu" in res["verdict_ar"]
+    assert "سلسلة النشاط" in res["scientific_basis_ar"] or "الكهروكيميائية" in res["scientific_basis_ar"]
+    assert res["products"] == []
+
+
+def test_explicit_no_reaction_soluble_salts_spectator_ions():
+    res = predict_reaction(_inputs(["NaCl", "KNO3"]))
+    assert res["supported"] is False
+    assert res["is_no_reaction"] is True
+    assert "أيونات" in res["scientific_basis_ar"] or "متفرجة" in res["scientific_basis_ar"]
+    assert res["products"] == []
+
+
+def test_explicit_no_reaction_less_active_halogen():
+    res = predict_reaction(_inputs(["Br2", "KCl"]))
+    assert res["supported"] is False
+    assert res["is_no_reaction"] is True
+    assert "الهالوجين" in res["scientific_basis_ar"] or "أكسدة" in res["scientific_basis_ar"]
+    assert res["products"] == []
+
+
+def test_explicit_no_reaction_less_active_metal_displacement():
+    res = predict_reaction(_inputs(["Cu", "ZnSO4"]))
+    assert res["supported"] is False
+    assert res["is_no_reaction"] is True
+    assert "سلسلة النشاط" in res["scientific_basis_ar"]
+    assert res["products"] == []
+
+
+def test_explicit_no_reaction_noble_gas():
+    res = predict_reaction(_inputs(["He", "O2"]))
+    assert res["supported"] is False
+    assert res["is_no_reaction"] is True
+    assert "الغاز النبيل" in res["verdict_ar"] or "خامل" in res["scientific_basis_ar"]
+    assert res["products"] == []
+
+
+def test_multi_reactant_with_spectator_substance():
+    res = predict_reaction(_inputs(["HCl", "NaOH", "NaCl"]))
+    assert res["supported"] is True
+    assert res["mode"] == "documented"
+    unreacted = res.get("unreacted_species", [])
+    assert len(unreacted) == 1
+    assert unreacted[0]["formula"] == "NaCl"
+    assert any("المواد المتفرجة" in obs.get("text_ar", "") for obs in res["observations"])
+
+
+def test_multi_reactant_documented_three_species():
+    res = predict_reaction(_inputs(["Fe", "O2", "H2O"]))
+    assert res["supported"] is True
+    assert res["mode"] == "documented"
+    assert any(p["formula"] == "Fe(OH)3" for p in res["products"])
+
+
+def test_expanded_32_verified_reactions():
+    from reaction_engine.reaction_registry import find_verified_reaction
+
+    rxn = find_verified_reaction(["Fe", "Cl2"])
+    assert rxn is not None
+    assert rxn["source_id"] == "Greenwood-Earnshaw-2ed-Ch25-FeCl3"
+
+    rxn_hbr = find_verified_reaction(["H2", "Br2"])
+    assert rxn_hbr is not None
+
+    rxn_precip = find_verified_reaction(["NiCl2", "NaOH"])
+    assert rxn_precip is not None
+    assert any(p["formula"] == "Ni(OH)2" for p in rxn_precip["products"])
+
