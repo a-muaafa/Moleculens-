@@ -96,3 +96,6 @@ temp/
 !.env.example
 *.pem
 *.key
+
+# Local SQLite cache (rebuilt automatically)
+data/moleculens_local.db
