@@ -140,3 +140,28 @@ def test_comprehensive_acid_base_and_indicator_catalogue():
     assert res2["success"] is True
     assert res2["ph_eq"] > 8.0
 
+
+def test_polyprotic_step_equivalence_buffer_capacity_dilution_and_limitations():
+    # 1. Polyprotic H3PO4 stepwise equivalence points
+    sim_p = TitrationEngine.simulate_titration("H3PO4", "NaOH", 0.1, 25.0, 0.1)
+    steps = sim_p["step_equivalence_points"]
+    assert len(steps) == 3
+    assert steps[0]["volume_ml"] == pytest.approx(25.0, abs=0.01)
+    assert steps[0]["ph"] == pytest.approx(0.5 * (2.15 + 7.20), abs=0.05)
+    assert steps[1]["volume_ml"] == pytest.approx(50.0, abs=0.01)
+    assert steps[1]["ph"] == pytest.approx(0.5 * (7.20 + 12.35), abs=0.05)
+
+    # 2. Buffer capacity & endpoint error analysis for weak acid
+    sim_w = TitrationEngine.simulate_titration("CH3COOH", "NaOH", 0.1, 25.0, 0.1)
+    assert sim_w["buffer_analysis"]["has_buffer_region"] is True
+    assert sim_w["buffer_analysis"]["max_buffer_capacity_mol_l_ph"] > 0.02
+    assert "relative_error_pct" in sim_w["titration_error_analysis"]
+    assert len(sim_w["step_by_step_calculation"]) >= 5
+    assert len(sim_w["model_limitations_ar"]) >= 3
+
+    # 3. Dilution effect on initial pH (25 mL of 0.1 M HCl diluted with 50 mL water -> 0.0333 M -> pH ~ 1.48)
+    sim_undil = TitrationEngine.simulate_titration("HCl", "NaOH", 0.1, 25.0, 0.1, dilution_water_ml=0.0)
+    sim_dil = TitrationEngine.simulate_titration("HCl", "NaOH", 0.1, 25.0, 0.1, dilution_water_ml=50.0)
+    assert sim_dil["v_eq_ml"] == pytest.approx(sim_undil["v_eq_ml"], abs=0.01)
+    assert sim_dil["initial_ph"] > sim_undil["initial_ph"] + 0.4
+

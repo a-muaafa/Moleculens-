@@ -539,7 +539,28 @@ def analyze_chemical_reaction(
     doc_type = rxn.get("documentation_type", "experimentally_documented")
     doc_label_ar = rxn.get("documentation_label_ar") or DOCUMENTATION_TYPE_LABELS_AR.get(doc_type, "")
 
+    from reaction_engine.reaction_enrichment import (
+        build_ionic_equation_analysis,
+        detect_competing_pathways,
+        evaluate_reaction_equilibrium,
+        evaluate_reaction_safety_and_hazards,
+        get_reaction_lab_coverage_boundaries,
+    )
+    ionic_info = build_ionic_equation_analysis(r_specs, p_specs, rxn.get("category", ""))
+    equil_info = evaluate_reaction_equilibrium(r_specs, p_specs, rxn.get("category", ""), eq_unicode, rxn_id=rxn["reaction_id"])
+    competing_info = detect_competing_pathways(r_specs, r_specs, p_specs, rxn.get("category", ""), alternatives=alternatives)
+    safety_info = evaluate_reaction_safety_and_hazards(r_specs, p_specs, rxn.get("category", ""), conditions=merged_conditions)
+    coverage_info = get_reaction_lab_coverage_boundaries()
+
     return {
+        "ionic_analysis": ionic_info,
+        "complete_ionic": ionic_info["complete_ionic_equation"],
+        "net_ionic": ionic_info["net_ionic_equation"],
+        "spectator_ions": ionic_info["spectator_ions"],
+        "equilibrium_info": equil_info,
+        "competing_pathways": competing_info,
+        "safety_warnings": safety_info,
+        "coverage_boundaries": coverage_info,
         "supported": True,
         "reaction_id": rxn["reaction_id"],
         "category": rxn.get("category", ""),

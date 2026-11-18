@@ -119,4 +119,22 @@
 ### 4.6 تقرير التدقيق العلمي المستقل (`/api/v1/reactions/audit`)
 - **الدالة:** `MolecuLensAPI.scientific_audit()`
 - **المخرجات (`data` عند `200 OK`):**
-  - نتائج فحص الـ 87 تفاعلاً والـ 13 قاعدة استنتاج، مع التمييز الصريح بين التفاعلات المراجعة يدوياً من المصدر (`manually_verified_references = 34`) والتفاعلات المدققة برمجياً (`algorithmically_verified_only_references = 53`).
+  - نتائج فحص الـ 152 تفاعلاً والـ 13 قاعدة استنتاج، مع التمييز الصريح بين التفاعلات المراجعة يدوياً من المصدر (`manually_verified_references = 36`) والتفاعلات المدققة برمجياً (`algorithmically_verified_only_references = 116`).
+
+### 4.7 محاكاة المعايرة الحجمية (`/api/v1/titration/simulate`)
+- **الدالة:** `MolecuLensAPI.simulate_titration(acid_key, base_key, acid_conc_m=0.1, acid_volume_ml=25.0, base_conc_m=0.1, titration_mode="acid_with_base")`
+- **المخرجات (`data` عند `200 OK`):**
+  - منحنى المعايرة لـ 41 حمضاً و30 قاعدة و23 كاشفاً، نقاط التكافؤ المرحلية (`step_equivalence_points`)، سعة المحلول المنظم (`buffer_analysis`)، مقارنة نقطة التكافؤ بنقطة النهاية (`titration_error_analysis`)، والحسابات خطوة بخطوة.
+
+### 4.8 توليد تقرير التجربة بصيغة PDF وHTML (`/api/v1/reports/experiment`)
+- **الدالة:** `MolecuLensAPI.generate_experiment_report(experiment_payload, report_type="reaction_experiment", custom_conditions=None)`
+- **المخرجات (`data` عند `200 OK`):**
+  - `report`: بيانات التقرير المهيكلة (المواد، الكميات، الظروف، المعادلة الموزونة والأيونية، الحسابات، التفسير، المراجع، حدود التنبؤ، وتحذيرات السلامة).
+  - `printable_html`: مستند HTML كامل جاهز للطباعة.
+  - `pdf_available`: حالة توفر ملف PDF المولّد.
+
+### 4.9 مصفوفة الشفافية المعمارية للذكاء الاصطناعي (`/api/v1/ai/architecture-matrix`)
+- **الدالة:** `MolecuLensAPI.ai_architecture_matrix()`
+- **المخرجات (`data` عند `200 OK`):**
+  - `architecture_matrix`: تصنيف كل وظيفة في المنصة (نموذج مدرب `trained_ml_model` مقابل خوارزمية كيمياء معلوماتية `cheminformatics_graph_algorithm` مقابل قاعدة أو معادلة كيميائية حتمية `deterministic_rule_or_equation`).
+  - `model_card`, `scaffold_split_evaluation`, `hybrid_residual_qsar`, `baseline_comparison_analysis`, `dataset_quality_audit`.

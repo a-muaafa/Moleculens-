@@ -1,7 +1,7 @@
 """
 Main entry point for the MolecuLens scientific platform.
-Integrates Explore & Understand, Reaction Prediction, Reaction Lab,
-Molecular Intelligence, Titration Lab, and Concentration Lab.
+Integrates Explore & Understand, the unified Reaction Lab (Reaction Prediction & Stoichiometry),
+Molecular Intelligence, Titration Lab, Concentration Lab, and Pharmacology (Coming Soon).
 """
 
 from typing import Any

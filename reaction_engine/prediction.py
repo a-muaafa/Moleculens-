@@ -1440,6 +1440,12 @@ def _insufficient_payload(
     if is_no_reaction:
         payload["no_reaction_reason_ar"] = no_reaction_reason_ar
         payload["scientific_basis_ar"] = scientific_basis_ar
+    from reaction_engine.reaction_enrichment import (
+        evaluate_reaction_safety_and_hazards,
+        get_reaction_lab_coverage_boundaries,
+    )
+    payload["safety_warnings"] = evaluate_reaction_safety_and_hazards(payload["reactants"], [], category="")
+    payload["coverage_boundaries"] = get_reaction_lab_coverage_boundaries()
     return payload
 
 
@@ -1501,6 +1507,11 @@ def predict_reaction(
             {"reaction_id": r["reaction_id"], "reaction_name_ar": r["reaction_name_ar"], "category": r.get("category", "")}
             for r in documented[1:]
         ]
+        if custom_conditions:
+            from reaction_engine.reaction_service import evaluate_reaction_conditions_compatibility
+            payload["conditions_compatibility"] = evaluate_reaction_conditions_compatibility(
+                rxn.get("conditions", {}), custom_conditions, category=rxn.get("category", ""), reference_conditions_spec=rxn.get("reference_conditions_spec")
+            )
         return payload
 
     # If 3 or more species, check if any subset of size >= 2 matches a documented reaction!
@@ -1599,7 +1610,7 @@ def _documented_payload(
     yields: list[dict[str, Any]] = []
     reactants_table: list[dict[str, Any]] = []
     limiting_reagent = None
-    if reactant_inputs and any(item.get("amount") is not None for item in reactant_inputs):
+    if reactant_inputs and any(item.get("amount") is not None or (item.get("concentration_m") is not None and item.get("volume_ml") is not None) for item in reactant_inputs):
         try:
             user_inputs = [
                 {
@@ -1611,6 +1622,8 @@ def _documented_payload(
                     "formula": item.get("formula", ""),
                     "amount": item.get("amount") if item.get("amount") is not None else 1.0,
                     "unit": item.get("unit", "mol"),
+                    "concentration_m": item.get("concentration_m"),
+                    "volume_ml": item.get("volume_ml"),
                 }
                 for item in reactant_inputs
             ]
@@ -1706,6 +1719,27 @@ def _documented_payload(
             "basis_ar": "حفظ المادة للمواد المتفرجة غير المتفاعلة."
         })
         payload["explanation_ar"] += f" ملاحظة: تشمل المدخلات مواد متفرجة لم تشارك في التفاعل ({names_str})."
+    from reaction_engine.reaction_enrichment import (
+        build_ionic_equation_analysis,
+        detect_competing_pathways,
+        evaluate_reaction_equilibrium,
+        evaluate_reaction_safety_and_hazards,
+        get_reaction_lab_coverage_boundaries,
+    )
+    ionic_info = build_ionic_equation_analysis(reactants, products, payload["category"], existing_net_ionic=net_ionic)
+    payload["ionic_analysis"] = ionic_info
+    payload["complete_ionic"] = ionic_info["complete_ionic_equation"]
+    payload["spectator_ions"] = ionic_info["spectator_ions"]
+    payload["equilibrium_info"] = evaluate_reaction_equilibrium(
+        reactants, products, payload["category"], payload["equation_unicode"], rxn_id=rxn_id
+    )
+    payload["competing_pathways"] = detect_competing_pathways(
+        species, reactants, products, payload["category"], alternatives=payload.get("alternatives")
+    )
+    payload["safety_warnings"] = evaluate_reaction_safety_and_hazards(
+        reactants, products, payload["category"], conditions=payload.get("conditions")
+    )
+    payload["coverage_boundaries"] = get_reaction_lab_coverage_boundaries()
     return payload
 
 
@@ -1891,6 +1925,8 @@ def _finalize_inferred(
                 "formula": item.get("formula", ""),
                 "amount": item.get("amount", 1.0),
                 "unit": item.get("unit", "mol"),
+                "concentration_m": item.get("concentration_m"),
+                "volume_ml": item.get("volume_ml"),
             }
             for item in reactant_inputs
         ]
@@ -1996,6 +2032,27 @@ def _finalize_inferred(
             "basis_ar": "حفظ المادة للمواد المتفرجة غير المتفاعلة."
         })
         payload["explanation_ar"] += f" ملاحظة: تشمل المواد المدخلة مواد متفرجة لم تشارك في التفاعل ({names_str})."
+    from reaction_engine.reaction_enrichment import (
+        build_ionic_equation_analysis,
+        detect_competing_pathways,
+        evaluate_reaction_equilibrium,
+        evaluate_reaction_safety_and_hazards,
+        get_reaction_lab_coverage_boundaries,
+    )
+    ionic_info = build_ionic_equation_analysis(reactants, products, payload["category"], existing_net_ionic=net_ionic)
+    payload["ionic_analysis"] = ionic_info
+    payload["complete_ionic"] = ionic_info["complete_ionic_equation"]
+    payload["spectator_ions"] = ionic_info["spectator_ions"]
+    payload["equilibrium_info"] = evaluate_reaction_equilibrium(
+        reactants, products, payload["category"], payload["equation_unicode"], rule_id=rule["rule_id"]
+    )
+    payload["competing_pathways"] = detect_competing_pathways(
+        species, reactants, products, payload["category"], alternatives=payload.get("alternatives")
+    )
+    payload["safety_warnings"] = evaluate_reaction_safety_and_hazards(
+        reactants, products, payload["category"]
+    )
+    payload["coverage_boundaries"] = get_reaction_lab_coverage_boundaries()
     return payload
 
 

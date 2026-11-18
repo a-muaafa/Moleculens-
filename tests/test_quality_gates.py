@@ -3,7 +3,7 @@ Quality & security gates for MolecuLens.
 
 Covers: secret scanning, XSS / input validation, SSRF-safe URL filter, API contract for every
 endpoint (valid and invalid inputs), missing data, external-service failure, reaction mass and
-charge conservation (including negative tests), titration, concentration and drug-interaction
+charge conservation (including negative tests), titration, concentration, and report-generation
 calculations.
 
 Tests that need optional heavy libraries (plotly, streamlit, RDKit) skip cleanly when the library
@@ -551,3 +551,15 @@ def test_readme_does_not_hardcode_a_passing_test_count_or_static_success_badge()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "img.shields.io/badge/tests-" not in readme
     assert not re.search(r"\b\d+\s*(?:passed|اختباراً ناجحاً)", readme)
+
+
+def test_no_ddi_references_remain_in_repository():
+    """Verifies that Drug-Drug Interactions (DDI) has been completely removed from code and docs."""
+    ddi_pattern = re.compile(r"(\bddi\b|drug[-_ ]drug|التداخلات الدوائية)", re.IGNORECASE)
+    offenders = []
+    for path in _iter_repo_text_files():
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if ddi_pattern.search(text):
+            offenders.append(str(path.relative_to(ROOT)))
+    assert not offenders, f"Found remaining DDI mentions in: {offenders}"
+

@@ -26,6 +26,7 @@ def test_local_results_are_not_affected_by_debouncing():
 
 
 def test_debounce_blocks_a_second_external_lookup():
+    _reset_debounce()
     set_network_debounce_seconds(30.0)
     try:
         first = search_scientific_entity("zzz-nonexistent-query-1", allow_network=True)
@@ -38,6 +39,7 @@ def test_debounce_blocks_a_second_external_lookup():
 
 
 def test_forced_network_lookup_bypasses_the_debounce():
+    _reset_debounce()
     set_network_debounce_seconds(30.0)
     try:
         search_scientific_entity("zzz-nonexistent-query-3", allow_network=True)

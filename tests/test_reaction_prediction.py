@@ -307,3 +307,44 @@ def test_expanded_32_verified_reactions():
     assert rxn_precip is not None
     assert any(p["formula"] == "Ni(OH)2" for p in rxn_precip["products"])
 
+
+def test_complete_ionic_spectator_ions_equilibrium_competing_and_safety():
+    # 1. Aqueous precipitation: AgNO3 + NaCl -> AgCl(s) + NaNO3(aq)
+    res_ppt = predict_reaction(_inputs(["AgNO3", "NaCl"]))
+    assert res_ppt["supported"] is True
+    assert "AgCl(s)" in res_ppt["complete_ionic"]
+    assert len(res_ppt["spectator_ions"]) == 2
+    assert any("Na" in ion for ion in res_ppt["spectator_ions"])
+    assert any("NO₃" in ion or "NO3" in ion for ion in res_ppt["spectator_ions"])
+    assert res_ppt["equilibrium_info"]["is_reversible"] is False
+
+    # 2. Reversible esterification: CH3COOH + C2H5OH ⇌ CH3COOCH2CH3 + H2O
+    res_est = predict_reaction(_inputs(["CH3COOH", "C2H5OH"]))
+    assert res_est["supported"] is True
+    assert res_est["equilibrium_info"]["is_reversible"] is True
+    assert res_est["equilibrium_info"]["reaction_arrow"] == "⇌"
+    assert "100%" in res_est["equilibrium_info"]["yield_equilibrium_note_ar"]
+
+    # 3. Competing pathways on hydrocarbon combustion & polyprotic acid neutralization
+    res_comb = predict_reaction(_inputs(["CH4", "O2"]))
+    assert res_comb["competing_pathways"]["has_competing_pathways"] is True
+
+    res_poly = predict_reaction(_inputs(["H2SO4", "NaOH"]))
+    assert res_poly["competing_pathways"]["has_competing_pathways"] is True
+
+    # 4. Safety warnings & coverage boundaries
+    res_na = predict_reaction(_inputs(["Na", "H2O"]))
+    assert res_na["safety_warnings"]["has_hazards"] is True
+    assert res_na["safety_warnings"]["hazard_level"] == "high"
+    assert res_na["safety_warnings"]["operational_instructions_withheld"] is True
+    assert res_na["coverage_boundaries"]["documented_reactions_count"] == 152
+
+    # 5. Concentration + volume input support in stoichiometry
+    res_cv = predict_reaction([
+        {"formula": "HCl", "concentration_m": 0.5, "volume_ml": 100.0},
+        {"formula": "NaOH", "concentration_m": 0.5, "volume_ml": 50.0},
+    ])
+    assert res_cv["supported"] is True
+    assert res_cv["limiting_reagent"]["formula"] == "NaOH"
+    assert res_cv["limiting_reagent"]["initial_mol"] == pytest.approx(0.025, abs=1e-4)
+

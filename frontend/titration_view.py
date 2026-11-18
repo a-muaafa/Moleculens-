@@ -1,6 +1,6 @@
 """
 Titration Lab frontend view for MolecuLens.
-Interactive acid-base titration simulator with 13 acids, 10 bases, 9 indicators,
+Interactive acid-base titration simulator with 41 acids, 30 bases, 23 indicators,
 automatic optimal indicator selection, dynamic Erlenmeyer flask color SVG,
 polyprotic stepwise equivalence points, and endpoint vs. equivalence point detection.
 """
@@ -308,3 +308,55 @@ def render_titration_view(lang: str = "ar") -> None:
                 - **{('التعليل:' if is_ar else 'Explanation:')}** {('ينتج ملح متعادل تماماً ولا يحدث تميؤ ملحي، لذلك pH = 7.0 عند 25 درجة مئوية.' if is_ar else 'Neutral salt formed with no salt hydrolysis; pH = 7.0 at 25 °C.')}
                 """
             )
+
+    buf_info = sim_data.get("buffer_analysis") or {}
+    err_info = sim_data.get("titration_error_analysis") or {}
+    if buf_info.get("summary_ar"):
+        st.info(f"**تحليل المحلول المنظم وسعة التنظيم (Buffer Capacity β):** {buf_info['summary_ar']}")
+    if err_info.get("summary_ar"):
+        st.caption(f"**التفريق بين نقطة التكافؤ ونقطة النهاية اللونية:** {err_info['distinction_explanation_ar']} — {err_info['summary_ar']}")
+
+    if sim_data.get("step_equivalence_points") and len(sim_data["step_equivalence_points"]) > 1:
+        with st.expander("جدول نقاط التكافؤ المرحلية للأحماض والقواعد متعددة البروتونات (Stepwise Equivalence Points)", expanded=True):
+            step_rows = [
+                {
+                    "المرحلة (Step)": s["step"],
+                    "حجم التكافؤ V_eq (mL)": s["volume_ml"],
+                    "pH نقطة التكافؤ المرحلية": s["ph"],
+                    "حجم نصف التكافؤ V_half (mL)": s["half_equivalence_volume_ml"],
+                    "pH نصف التكافؤ (pKa)": s["half_equivalence_ph"] if s["half_equivalence_ph"] is not None else "—",
+                    "الكاشف الأنسب للمرحلة": s["recommended_indicator_name_ar"],
+                }
+                for s in sim_data["step_equivalence_points"]
+            ]
+            st.dataframe(pd.DataFrame(step_rows), use_container_width=True, hide_index=True)
+
+    with st.expander("الحسابات الرياضية خطوة بخطوة (Step-by-Step Titration Calculations)", expanded=False):
+        for step_line in sim_data.get("step_by_step_calculation", []):
+            st.markdown(f"- {step_line}")
+
+    with st.expander("حدود نموذج المعايرة المبسط والحالات التي لا ينطبق عليها (Model Limitations)", expanded=False):
+        for lim_line in sim_data.get("model_limitations_ar", []):
+            st.markdown(f"- {lim_line}")
+
+    from reaction_engine.report_generator import ExperimentReportGenerator
+    rep_tit = ExperimentReportGenerator.build_titration_report_data(sim_data)
+    pdf_tit = ExperimentReportGenerator.generate_experiment_pdf_bytes(rep_tit)
+    html_tit = ExperimentReportGenerator.generate_printable_html_report(rep_tit)
+    t_dl1, t_dl2 = st.columns(2)
+    with t_dl1:
+        st.download_button(
+            "تحميل تقرير المعايرة بصيغة PDF (Download Titration PDF Report)",
+            data=pdf_tit,
+            file_name=f"moleculens_titration_{selected_acid_key}_{selected_base_key}.pdf",
+            mime="application/pdf",
+            key="tit_download_pdf_btn",
+        )
+    with t_dl2:
+        st.download_button(
+            "تحميل تقرير المعايرة للطباعة (Printable HTML Report)",
+            data=html_tit.encode("utf-8"),
+            file_name=f"moleculens_titration_{selected_acid_key}_{selected_base_key}.html",
+            mime="text/html",
+            key="tit_download_html_btn",
+        )

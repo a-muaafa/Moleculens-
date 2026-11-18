@@ -2,11 +2,11 @@
 Expanded Titration Engine for MolecuLens Virtual Titration Lab.
 
 Supports:
-1. 13 Acids (Strong, Weak, Monoprotic, Diprotic, Triprotic):
+1. 41 Acids (Strong, Weak, Monoprotic, Diprotic, Triprotic):
    HCl, H2SO4, HNO3, H3PO4, CH3COOH, HCOOH, C6H8O7, H2C2O4, C3H6O3, C7H6O2, H2CO3, H3BO3, HF.
-2. 10 Bases (Strong, Weak, Mono/Di-functional Hydroxides, Amines, Carbonates):
+2. 30 Bases (Strong, Weak, Mono/Di-functional Hydroxides, Amines, Carbonates):
    NaOH, KOH, Ca(OH)2, Ba(OH)2, NH3, Mg(OH)2, CH3NH2, C2H5NH2, NaHCO3, Na2CO3.
-3. 9 Color Indicators with acidic/basic/transition hex colors and pH transition intervals:
+3. 23 Color Indicators with acidic/basic/transition hex colors and pH transition intervals:
    Phenolphthalein, Methyl Orange, Methyl Red, Bromothymol Blue, Bromocresol Green,
    Bromocresol Purple, Thymol Blue, Litmus, Phenol Red.
 4. Automatic optimal indicator selection, polyprotic stepwise equivalence points,
@@ -18,7 +18,12 @@ from __future__ import annotations
 import html
 import math
 from typing import Any
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except ImportError:
+    from core._plotly_fallback import register_plotly_fallback_in_sys_modules
+    register_plotly_fallback_in_sys_modules()
+    import plotly.graph_objects as go
 
 KW_25C = 1.0e-14
 
@@ -535,6 +540,7 @@ class TitrationSimulator:
         titrant_conc_m: float = 0.1,
         max_titrant_ratio: float = 2.2,
         points_count: int = 160,
+        dilution_water_ml: float = 0.0,
     ) -> dict[str, Any]:
         is_acid_analyte = analyte_formula in ACID_SPECIES_DATABASE
         if is_acid_analyte:
@@ -551,10 +557,13 @@ class TitrationSimulator:
             val_titrant = int(acid_spec.get("protons", 1))
 
         c_analyte = max(0.001, float(analyte_conc_m))
-        v_analyte = max(1.0, float(analyte_volume_ml))
+        v_analyte_raw = max(1.0, float(analyte_volume_ml))
+        v_dilution = max(0.0, float(dilution_water_ml or 0.0))
+        v_analyte = v_analyte_raw + v_dilution
         c_titrant = max(0.001, float(titrant_conc_m))
 
-        n_analyte_mmol = c_analyte * v_analyte
+        n_analyte_mmol = c_analyte * v_analyte_raw
+        c_analyte_effective = n_analyte_mmol / v_analyte
         # First equivalence volume (1st proton/hydroxide) and total stoichiometric equivalence volume
         v_eq1_ml = (n_analyte_mmol * 1.0) / (c_titrant * val_titrant)
         v_eq_total_ml = (n_analyte_mmol * val_analyte) / (c_titrant * val_titrant)
@@ -653,10 +662,10 @@ class TitrationSimulator:
             if mode == "acid_analyte_titrated_by_base":
                 if v_tit == 0.0:
                     if acid_type == "strong":
-                        ph_val = compute_ph_from_h(c_analyte * val_analyte)
+                        ph_val = compute_ph_from_h(c_analyte_effective * val_analyte)
                     else:
                         ka = acid_spec["Ka"]
-                        h_val = solve_quadratic_positive(1.0, ka, -ka * c_analyte)
+                        h_val = solve_quadratic_positive(1.0, ka, -ka * c_analyte_effective)
                         ph_val = compute_ph_from_h(h_val)
                     stage = "نقطة البداية (Initial Point)"
                 elif v_tit < v_eq_ml - 1e-5:
@@ -687,10 +696,10 @@ class TitrationSimulator:
             else:
                 if v_tit == 0.0:
                     if base_type == "strong":
-                        ph_val = compute_ph_from_oh(c_analyte * val_analyte)
+                        ph_val = compute_ph_from_oh(c_analyte_effective * val_analyte)
                     else:
                         kb = base_spec["Kb"]
-                        oh_val = solve_quadratic_positive(1.0, kb, -kb * c_analyte)
+                        oh_val = solve_quadratic_positive(1.0, kb, -kb * c_analyte_effective)
                         ph_val = compute_ph_from_oh(oh_val)
                     stage = "نقطة البداية (Initial Point)"
                 elif v_tit < v_eq_ml - 1e-5:
@@ -740,6 +749,101 @@ class TitrationSimulator:
             f"({indicator_info['pH_range'][0]} - {indicator_info['pH_range'][1]}) يتقاطع مع القفزة الهيدروجينية."
         )
 
+        step_equivalence_points: list[dict[str, Any]] = []
+        for s_idx, s_vol in enumerate(step_equivalence_volumes_ml, start=1):
+            if s_idx < val_analyte:
+                if mode == "acid_analyte_titrated_by_base" and s_idx < len(pka_list):
+                    s_ph = round(0.5 * (float(pka_list[s_idx - 1]) + float(pka_list[s_idx])), 2)
+                elif mode == "base_analyte_titrated_by_acid" and s_idx < len(pkb_list):
+                    s_ph = round(14.0 - 0.5 * (float(pkb_list[s_idx - 1]) + float(pkb_list[s_idx])), 2)
+                else:
+                    s_ph = ph_eq
+            else:
+                s_ph = ph_eq
+            half_v_s = round(v_eq1_ml * (s_idx - 0.5), 2)
+            if mode == "acid_analyte_titrated_by_base" and acid_type == "weak":
+                half_ph_s = round(float(pka_list[min(s_idx - 1, len(pka_list) - 1)]), 2)
+            elif mode == "base_analyte_titrated_by_acid" and base_type == "weak":
+                half_ph_s = round(14.0 - float(pkb_list[min(s_idx - 1, len(pkb_list) - 1)]), 2)
+            else:
+                half_ph_s = None
+            step_ind_key = select_optimal_indicator_key(s_ph, case_key)
+            step_equivalence_points.append({
+                "step": s_idx,
+                "volume_ml": s_vol,
+                "ph": s_ph,
+                "half_equivalence_volume_ml": half_v_s,
+                "half_equivalence_ph": half_ph_s,
+                "recommended_indicator_key": step_ind_key,
+                "recommended_indicator_name_ar": INDICATORS_DATABASE[step_ind_key]["name_ar"],
+            })
+
+        # Quantitative Buffer Analysis (Van Slyke Buffer Capacity beta_max at half-equivalence)
+        if ph_half_eq is not None:
+            c_buf_half = (n_analyte_mmol / (v_analyte + 0.5 * v_eq1_ml))
+            beta_max = round(0.576 * c_buf_half, 4)
+            buf_range = (round(max(0.0, ph_half_eq - 1.0), 2), round(min(14.0, ph_half_eq + 1.0), 2))
+            buffer_analysis = {
+                "has_buffer_region": True,
+                "half_equivalence_volume_ml": round(v_eq1_ml * 0.5, 2),
+                "optimal_buffer_ph": ph_half_eq,
+                "effective_buffer_range_ph": buf_range,
+                "max_buffer_capacity_mol_l_ph": beta_max,
+                "summary_ar": (
+                    f"تتشكل منطقة محلول منظم (Buffer Region) فعالة في النطاق الهيدروجيني (pH {buf_range[0]} – {buf_range[1]}) "
+                    f"وتبلغ أقصى سعة تنظيمية (Van Slyke Buffer Capacity β_max ≈ {beta_max} mol/L·pH) عند نصف التكافؤ "
+                    f"(V = {v_eq1_ml * 0.5:.2f} mL، حيث pH = {ph_half_eq:.2f})."
+                ),
+            }
+        else:
+            buffer_analysis = {
+                "has_buffer_region": False,
+                "half_equivalence_volume_ml": None,
+                "optimal_buffer_ph": None,
+                "effective_buffer_range_ph": None,
+                "max_buffer_capacity_mol_l_ph": 0.0,
+                "summary_ar": "لا تتشكل منطقة محلول منظم كلاسيكية في معايرة حمض قوي مع قاعدة قوية لأن كلا الطرفين تام التأين.",
+            }
+
+        vol_diff_ml = round(float(endpoint_pt["volume_added_ml"]) - round(v_eq_ml, 2), 3)
+        rel_err_pct = round(100.0 * abs(vol_diff_ml) / max(1e-6, v_eq_ml), 2)
+        titration_error_analysis = {
+            "equivalence_volume_ml": round(v_eq_ml, 2),
+            "equivalence_ph": ph_eq,
+            "endpoint_volume_ml": endpoint_pt["volume_added_ml"],
+            "endpoint_ph": endpoint_pt["ph"],
+            "volume_difference_ml": vol_diff_ml,
+            "relative_error_pct": rel_err_pct,
+            "summary_ar": (
+                f"الفرق بين نقطة التكافؤ النظرية (V_eq = {v_eq_ml:.2f} mL عند pH = {ph_eq:.2f}) "
+                f"ونقطة النهاية اللونية للكاشف (V_end = {endpoint_pt['volume_added_ml']:.2f} mL عند pH = {endpoint_pt['ph']:.2f}) "
+                f"هو ΔV = {vol_diff_ml:+g} mL (خطأ معايرة نسبي = {rel_err_pct}%)."
+            ),
+            "distinction_explanation_ar": (
+                "نقطة التكافؤ (Equivalence Point) هي النقطة الستوكيومترية النظرية التي تتساوى عندها مكافئات الحمض والقاعدة تماماً، "
+                "بينما نقطة النهاية (Endpoint) هي النقطة التجريبية التي يتغير عندها لون الكاشف المرئي فعلياً."
+            ),
+        }
+
+        step_by_step_calculation = [
+            f"1) حساب كمية المادة في الدورق (Analyte Moles): n = C × V = {c_analyte:g} M × {v_analyte_raw:g} mL = {n_analyte_mmol:.4f} mmol (إجمالي المكافئات = {n_analyte_mmol * val_analyte:.4f} meq).",
+            f"2) حساب حجم التكافؤ الأول وحجم التكافؤ الكلي: V_eq1 = {v_eq1_ml:.2f} mL | V_eq_total = (n × z_analyte) / (C_titrant × z_titrant) = {v_eq_ml:.2f} mL.",
+            f"3) الرقم الهيدروجيني الابتدائي قبل الإضافة (V = 0 mL، حجم التخفيف المضاف = {v_dilution:g} mL): pH_0 = {curve_data[0]['ph']:.2f}.",
+            (
+                f"4) منطقة المحلول المنظم (Henderson-Hasselbalch): عند نصف التكافؤ الأول (V = {v_eq1_ml * 0.5:.2f} mL) يتساوى [HA] و [A⁻] فيكون pH = pKa = {ph_half_eq:.2f}."
+                if ph_half_eq is not None
+                else "4) قبل التكافؤ: يُحسب pH مباشرةً من فائض أيونات الهيدرونيوم أو الهيدروكسيد القوية مقسوماً على الحجم الكلي (V_analyte + V_added)."
+            ),
+            f"5) عند نقطة التكافؤ الكلي (V_eq = {v_eq_ml:.2f} mL، الحجم الكلي = {total_vol_at_eq:.2f} mL، تركيز الملح = {c_salt_at_eq:.4f} M): pH_eq = {ph_eq:.2f}.",
+        ]
+
+        model_limitations_ar = [
+            "يفترض النموذج محاليل مائية مخففة مثالية عند 25 °C (معاملات الفعالية الأيونية γ± ≈ 1.0 و Kw = 1.0×10⁻¹⁴)؛ وفي التراكيز العالية (> 0.5 M) ينبغي تصحيح القوة الأيونية بمعادلة ديباي-هوكل (Debye-Hückel).",
+            "في معايرة حمض ضعيف مع قاعدة ضعيفة (Weak Acid – Weak Base) تكون قفزة pH عند التكافؤ ضحلة جداً، فلا تعطي الكواشف اللونية البصرية نقطة نهاية حادة ويلزم استخدام مقياس pH إلكتروني (Potentiometric Titration).",
+            "في الأحماض متعددة البروتونات ذات ثوابت التأين المتقاربة (ΔpKa < 3) أو الضعيفة جداً (pKa > 10 مثل البروتون الثالث لحمض الفوسفوريك pKa3 = 12.35)، تندمج قفزات التكافؤ أو يحجبها أثر التسوية للماء.",
+            "للقواعد شحيحة الذوبان (مثل Mg(OH)₂)، يخضع التركيز الفعلي في المحلول المائي لاتزان حاصل الإذابة (Ksp) وليس للتفكك التام في التراكيز العالية.",
+        ]
+
         return {
             "mode": mode,
             "case_key": case_key,
@@ -775,6 +879,12 @@ class TitrationSimulator:
             } if ph_half_eq is not None else None,
             "recommended_indicator_key": best_indicator_key,
             "recommended_indicator": indicator_info,
+            "step_equivalence_points": step_equivalence_points,
+            "buffer_analysis": buffer_analysis,
+            "titration_error_analysis": titration_error_analysis,
+            "step_by_step_calculation": step_by_step_calculation,
+            "model_limitations_ar": model_limitations_ar,
+            "dilution_water_ml": v_dilution,
             "curve_points": curve_data,
             "explanation_ar": explanation_ar,
         }
@@ -922,6 +1032,7 @@ class TitrationEngine:
         base_conc_m: float,
         titration_mode: str = "acid_with_base",
         base_volume_ml: float | None = None,
+        dilution_water_ml: float = 0.0,
     ) -> dict[str, Any]:
         if acid_key not in cls.ACID_DATABASE:
             raise ValueError(f"Unknown acid key: {acid_key}")
@@ -938,6 +1049,7 @@ class TitrationEngine:
                 analyte_volume_ml=v_base,
                 analyte_conc_m=base_conc_m,
                 titrant_conc_m=acid_conc_m,
+                dilution_water_ml=dilution_water_ml,
             )
         else:
             sim = TitrationSimulator.simulate_titration(
@@ -946,6 +1058,7 @@ class TitrationEngine:
                 analyte_volume_ml=acid_volume_ml,
                 analyte_conc_m=acid_conc_m,
                 titrant_conc_m=base_conc_m,
+                dilution_water_ml=dilution_water_ml,
             )
 
         eq = sim["equivalence_point"]
@@ -962,6 +1075,12 @@ class TitrationEngine:
             "endpoint_volume_ml": endpt["volume_ml"],
             "endpoint_ph": endpt["ph"],
             "step_equivalence_volumes_ml": sim["step_equivalence_volumes_ml"],
+            "step_equivalence_points": sim["step_equivalence_points"],
+            "buffer_analysis": sim["buffer_analysis"],
+            "titration_error_analysis": sim["titration_error_analysis"],
+            "step_by_step_calculation": sim["step_by_step_calculation"],
+            "model_limitations_ar": sim["model_limitations_ar"],
+            "dilution_water_ml": sim["dilution_water_ml"],
             "is_polyprotic": sim["is_polyprotic"],
             "initial_ph": curve[0]["ph"] if curve else 7.0,
             "half_v_eq_ml": half_eq["volume_ml"] if half_eq else None,

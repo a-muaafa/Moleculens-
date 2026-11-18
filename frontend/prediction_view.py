@@ -417,8 +417,15 @@ def render_prediction_section() -> None:
         else:
             st.error("تحذير: المعادلة لا تحفظ الذرات — راجع بيانات النواتج.")
 
+    if prediction.get("complete_ionic"):
+        st.markdown(f"**المعادلة الأيونية الكاملة (Complete Ionic Equation):** `{_esc(prediction['complete_ionic'])}`")
     if prediction.get("net_ionic"):
         st.markdown(f"**المعادلة الصافية الأيونية (Net Ionic Equation):** `{_esc(prediction['net_ionic'])}`")
+    if prediction.get("spectator_ions"):
+        st.markdown(f"**الأيونات المتفرجة في المحلول (Aqueous Spectator Ions):** `{_esc(' ، '.join(prediction['spectator_ions']))}`")
+    equil = prediction.get("equilibrium_info") or {}
+    if equil.get("equilibrium_type_ar"):
+        st.markdown(f"**حالة الاتزان والعكوسية ({_esc(equil.get('reaction_arrow', '→'))}):** {_esc(equil['equilibrium_type_ar'])} — {_esc(equil.get('driving_force_ar', ''))}")
 
     c_react, c_prod = st.columns(2)
     with c_react:
@@ -511,11 +518,49 @@ def render_prediction_section() -> None:
         for lim in limits:
             st.markdown(f"- {lim}")
 
+    competing = prediction.get("competing_pathways") or {}
+    if competing.get("has_competing_pathways"):
+        st.markdown("**المسارات التفاعلية المتنافسة والبديلة (Competing & Alternative Pathways):**")
+        for pw in competing.get("pathways", []):
+            st.markdown(
+                f"- **{_esc(pw.get('pathway_name_ar', ''))}:** عند *{_esc(pw.get('condition_trigger_ar', ''))}* "
+                f"← {_esc(pw.get('products_summary_ar', ''))}"
+            )
+
+    safety = prediction.get("safety_warnings") or {}
+    if safety.get("warnings_ar"):
+        st.markdown(f"**تحذيرات السلامة المخبرية ({_esc(safety.get('hazard_level_ar', ''))}):**")
+        for w in safety.get("warnings_ar", []):
+            st.warning(w)
+        st.caption(safety.get("virtual_lab_disclaimer_ar", ""))
+
     alternatives = prediction.get("alternatives", []) or []
     if alternatives:
         st.caption(
             "تفاعلات موثّقة أخرى لنفس المواد (مسارات مختلفة): "
             + " ، ".join(a.get("reaction_name_ar", "") for a in alternatives)
+        )
+
+    from reaction_engine.report_generator import ExperimentReportGenerator
+    rep_pred = ExperimentReportGenerator.build_reaction_report_data(prediction)
+    pdf_pred = ExperimentReportGenerator.generate_experiment_pdf_bytes(rep_pred)
+    html_pred = ExperimentReportGenerator.generate_printable_html_report(rep_pred)
+    p_dl1, p_dl2 = st.columns(2)
+    with p_dl1:
+        st.download_button(
+            "تصدير تقرير التوقع بصيغة PDF (Export Prediction PDF Report)",
+            data=pdf_pred,
+            file_name="moleculens_prediction_report.pdf",
+            mime="application/pdf",
+            key="pred_download_pdf_btn",
+        )
+    with p_dl2:
+        st.download_button(
+            "تصدير تقرير التوقع للطباعة (Printable HTML Report)",
+            data=html_pred.encode("utf-8"),
+            file_name="moleculens_prediction_report.html",
+            mime="text/html",
+            key="pred_download_html_btn",
         )
 
     st.markdown("</div>", unsafe_allow_html=True)

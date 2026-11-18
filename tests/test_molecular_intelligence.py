@@ -273,3 +273,48 @@ def test_chemical_class_assignment():
     }
     for smi, expected in cases.items():
         assert MolecularIntelligence._chemical_class(Chem.MolFromSmiles(smi)) == expected
+
+
+def test_scaffold_split_hybrid_qsar_uncertainty_attribution_and_ai_matrix():
+    res = MolecularIntelligence.evaluate_logp_prediction("CC(C)Cc1ccc(cc1)C(C)C(=O)O")
+    assert res["available"] is True
+    q = res["qsar_model_evaluation"]
+
+    # 1. Scaffold Split with zero scaffold leakage
+    scaf = q["scaffold_split_evaluation"]
+    assert scaf["scaffold_zero_leakage_verified"] is True
+    assert scaf["scaffold_leak_violations"] == 0
+    assert scaf["n_unique_scaffolds"] >= 15
+    assert scaf["qsar_scaffold_r2"] > 0.70
+
+    # 2. Hybrid Residual QSAR & Baseline Comparison Analysis
+    hyb = q["hybrid_residual_qsar"]
+    assert hyb["hybrid_test_r2"] > 0.80
+    assert hyb["hybrid_test_rmse"] > 0.0
+    base_cmp = q["baseline_comparison_analysis"]
+    assert base_cmp["pure_qsar_test_win_or_tie_count"] >= 10
+    assert len(base_cmp["classes_where_pure_qsar_outperforms_crippen"]) >= 2
+
+    # 3. Prediction uncertainty & feature attribution
+    unc = q["prediction_uncertainty"]
+    assert unc["prediction_std_error"] > 0.0
+    assert len(unc["prediction_interval_95"]) == 2
+    assert unc["prediction_interval_95"][0] < q["qsar_predicted_logp"] < unc["prediction_interval_95"][1]
+    assert len(q["feature_contributions"]) == 15
+    assert "Feature Attribution" in q["prediction_explanation_ar"]
+
+    # 4. Dataset quality audit, model card, similarity meaning, and AI architecture matrix
+    audit = q["dataset_quality_audit"]
+    assert audit["duplicate_smiles_count"] == 0
+    assert audit["total_records"] == 120
+    assert q["model_card"]["version"] == "2.0.0"
+
+    sim_exp = MolecularIntelligence.explain_similarity_score(0.82)
+    assert "Activity Cliffs" in sim_exp["meaning_ar"]
+    assert len(sim_exp["limitations_ar"]) >= 3
+
+    matrix = MolecularIntelligence.get_ai_vs_deterministic_architecture_matrix()
+    assert len(matrix) >= 5
+    paradigms = {row["paradigm"] for row in matrix}
+    assert {"trained_ml_model", "cheminformatics_graph_algorithm", "deterministic_rule_or_equation"} <= paradigms
+

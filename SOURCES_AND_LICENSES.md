@@ -21,21 +21,21 @@
 
 ---
 
-## 3. المراجع المطبوعة والدستورية لسجل التفاعلات المحلي (Literature Citations for the 87 Reactions)
-يُوثق كل تفاعل من التفاعلات الـ87 في `reaction_engine/reaction_registry.py` بمعرف مرجعي فريد (`source_id`) وتصنيف توثيقي صريح (`experimentally_documented` | `literature_referenced` | `theoretical_model`) استناداً إلى المراجع القياسية التالية:
+## 3. المراجع المطبوعة والدستورية لسجل التفاعلات المحلي (Literature Citations for the 152 Verified Reactions)
+يُوثق كل تفاعل من التفاعلات الـ**152** في `reaction_engine/reaction_registry.py` بمعرف مرجعي فريد (`source_id`) وتصنيف توثيقي صريح (`experimentally_documented` = 102 | `literature_referenced` = 41 | `theoretical_model` = 9) مع التحقق اليدوي المباشر لـ 36 تفاعلاً محورياً من صفحاتها المرجعية الأصلية (`MANUALLY_VERIFIED_REACTION_SOURCES`) استناداً إلى المراجع القياسية التالية:
 1. **United States Pharmacopeia and National Formulary (USP 43–NF 38)** & **European Pharmacopoeia (Ph. Eur. 10th Ed.)**: معايرة الأحماض والقواعد القياسية واختبارات الهوية الدوائية.
-2. **Vogel's Textbook of Macro and Semimicro Qualitative Inorganic Analysis (5th Ed., 1979)** & **Vogel's Textbook of Quantitative Chemical Analysis (5th Ed., 1989)**: تفاعلات الترسيب النوعي والوزني، وتفاعلات الكربونات والبيكربونات، وإحلال الفلزات.
+2. **Vogel's Textbook of Macro and Semimicro Qualitative Inorganic Analysis (5th Ed., 1979)** & **Vogel's Textbook of Quantitative Chemical Analysis (5th/6th Ed., 1989/1999)**: تفاعلات الترسيب النوعي والوزني، وتفاعلات الكربونات والبيكربونات، وإحلال الفلزات.
 3. **Greenwood, N.N. & Earnshaw, A., Chemistry of the Elements (2nd Ed., Butterworth-Heinemann, 1997)**: تفاعلات الأكسدة والاختزال غير العضوية وتحضير الأكاسيد والهاليدات.
-4. **Chase, M.W., NIST-JANAF Thermochemical Tables (4th Ed., J. Phys. Chem. Ref. Data, Monograph 9, 1998)**: التفاعلات الحرارية القياسية وتكوين الأكاسيد والأملاح.
+4. **Chase, M.W., NIST-JANAF Thermochemical Tables (4th Ed., J. Phys. Chem. Ref. Data, Monograph 9, 1998)** & **CRC Handbook of Chemistry and Physics (97th/104th Ed., 2016/2023)**: التفاعلات الحرارية القياسية، تكوين الأكاسيد والأملاح، وثوابت تأين الأحماض والقواعد ($pK_a, pK_b$).
 5. **Ullmann's Encyclopedia of Industrial Chemistry (Wiley-VCH, 2012)**: العمليات الصناعية القياسية (عملية هابر-بوش، طريقة التلامس، كلسنة الحجر الجيري، التحليل الكهربائي للماء).
-6. **Smith, M.B., March's Advanced Organic Chemistry (8th Ed., Wiley, 2020)** & **Vogel's Textbook of Practical Organic Chemistry (5th Ed., 1989)**: تفاعلات أسترة فيشر، الهدرجة الحفزية، الهلجنة، والنترتة العطرية.
+6. **Smith, M.B., March's Advanced Organic Chemistry (8th Ed., Wiley, 2020)** & **Carey, G.A. & Sundberg, R.J., Advanced Organic Chemistry (5th Ed., Springer, 2007)**: تفاعلات أسترة فيشر، الهدرجة الحفزية، الهلجنة، والنترتة العطرية.
 7. **Nelson, D.L. & Cox, M.M., Lehninger Principles of Biochemistry (8th Ed., W.H. Freeman, 2021)**: المعادلات الستوكيومترية الكلية للتنفس الخلوي الهوائي، البناء الضوئي، والتخمر الكحولي.
-8. **Skoog, D.A., West, D.M., Holler, F.J., Crouch, S.R., Fundamentals of Analytical Chemistry (9th Ed., Cengage Learning, 2014)**: نماذج التوازن الكيميائي، منحنيات المعايرة حمض-قاعدة، وسعة المحاليل المنظمة.
-9. **FDA Approved Drug Products with Therapeutic Equivalence Evaluations (Orange Book)** & **British National Formulary (BNF 85)**: مصفوفة التداخلات الدوائية (DDI) ومستويات الخطورة وتوصيات التدبير السريري.
+8. **Harris, D.C., Quantitative Chemical Analysis (9th Ed., W.H. Freeman, 2015)** & **Skoog, D.A. et al., Fundamentals of Analytical Chemistry (9th Ed., Cengage, 2014)**: نماذج التوازن الكيميائي، منحنيات المعايرة حمض-قاعدة، الكواشف اللونية (41 حمضاً، 30 قاعدة، 23 كاشفاً)، وسعة المحاليل المنظمة (Van Slyke Buffer Capacity).
+9. **Sangster, J. (1989) J. Phys. Chem. Ref. Data 18(3):1111-1227**, **Hansch, C., Leo, A. & Hoekman, D. (1995) Exploring QSAR, ACS**, & **Avdeef, A. (2012) Absorption and Drug Development, 2nd Ed., Wiley**: مجموعة البيانات المرجعية التجريبية (120 مركباً) لنمذجة وتقييم معامل التوزيع ($\log P$).
 
 ---
 
 ## 4. المكتبات البرمجية مفتوحة المصدر (Open-Source Software Libraries)
 - **RDKit Cheminformatics:** BSD 3-Clause License ([https://www.rdkit.org](https://www.rdkit.org))
 - **Streamlit Framework:** Apache License 2.0 ([https://streamlit.io](https://streamlit.io))
-- **NumPy / Pandas / Plotly / Requests / Pillow / Pytest:** BSD / MIT / Apache 2.0 Licenses
+- **NumPy / Pandas / Plotly / Requests / Pillow / ReportLab / Pytest:** BSD / MIT / Apache 2.0 Licenses

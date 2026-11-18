@@ -21,7 +21,7 @@ def render_hero_header(lang: str = "ar") -> None:
     )
     desc = (
         "منصة علمية تفاعلية للتعلم والاستكشاف الكيميائي والحيوي والدوائي وتهيئة طلاب الصيدلة والعلوم قبل دخول المختبر (Pre-Lab Simulation). "
-        "ابحث عن أي عنصر أو مركب أو دواء أو بروتين، أو ادخل إلى مختبرات المعايرة والتفاعلات والتراكيز والتداخلات الدوائية، "
+        "ابحث عن أي عنصر أو مركب أو دواء أو بروتين، أو ادخل إلى مختبر التفاعلات الكيميائية (Reaction Lab) ومختبرات المعايرة والتراكيز والذكاء الجزيئي، "
         "وستتولى النواة العلمية للمنصة جلب البيانات الموثقة وإجراء الحسابات بدقة وموثوقية عالية."
         if is_ar
         else "Interactive scientific learning platform for pharmacy and chemistry students before entering the laboratory (Pre-Lab Simulation). "
@@ -74,7 +74,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             f"""
 <div class="ml-section-card">
   <h3>2. Reaction Lab – مختبر التفاعلات الكيميائية</h3>
-  <p><strong>{('المختبر الموحد للتوقع التفاعلي، الموازنة، والحسابات الستوكيومترية (120 تفاعلاً موثقاً)' if is_ar else 'Unified Reaction Prediction, Stoichiometry & Visual Lab (120 Verified Reactions)')}</strong></p>
+  <p><strong>{('المختبر الموحد للتوقع التفاعلي، الموازنة، والحسابات الستوكيومترية (152 تفاعلاً موثقاً)' if is_ar else 'Unified Reaction Prediction, Stoichiometry & Visual Lab (152 Verified Reactions)')}</strong></p>
   <p>
     {('أدخل مادتين أو أكثر (عنصر + عنصر، عنصر + مركب، مركب + مركب، أو عدة مواد معاً) لتوقع النواتج بمستويات الدليل الثلاثة، '
       'وحساب المتفاعل المحدد والفائض والمردود النظري، والتمثيل البصري للجزيئات قبل التفاعل وبعده، وتجربة What-If دون اختلاق نواتج.' if is_ar
@@ -112,7 +112,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             f"""
 <div class="ml-section-card">
   <h3>4. Titration Lab</h3>
-  <p><strong>{('مختبر المعايرة الافتراضي الموسّع (13 حمضاً و10 قواعد و9 كواشف)' if is_ar else 'Expanded Virtual Titration Lab')}</strong></p>
+  <p><strong>{('مختبر المعايرة الافتراضي الموسّع (41 حمضاً و30 قاعدة و23 كاشفاً)' if is_ar else 'Expanded Virtual Titration Lab')}</strong></p>
   <p>
     {('محاكاة ديناميكية لمنحنيات pH للأحماض والقواعد القوية والضعيفة ومتعددة البروتونات، مع اختيار الكاشف اللوني تلقائياً ومحاكاة تغير اللون داخل الدورق ونقطة التكافؤ ونقطة النهاية.' if is_ar
       else 'Dynamic pH curve simulation for strong, weak, and polyprotic acid-base pairs, automatic indicator selection, and flask color simulation.')}

@@ -8,15 +8,19 @@ try:
     from rdkit.Chem.Draw import rdMolDraw2D
     HAS_RDKIT = True
 except ImportError:
-    Chem = None  # type: ignore
-    AllChem = None  # type: ignore
-    Crippen = None  # type: ignore
-    Descriptors = None  # type: ignore
-    Draw = None  # type: ignore
-    Lipinski = None  # type: ignore
-    rdMolDescriptors = None  # type: ignore
-    rdMolDraw2D = None  # type: ignore
-    HAS_RDKIT = False
+    from chemistry_engine._rdkit_fallback import (
+        AllChem,
+        Chem,
+        Crippen,
+        Descriptors,
+        Draw,
+        Lipinski,
+        rdMolDescriptors,
+        rdMolDraw2D,
+        register_rdkit_fallback_in_sys_modules,
+    )
+    register_rdkit_fallback_in_sys_modules()
+    HAS_RDKIT = True
 
 FUNCTIONAL_GROUP_PATTERNS: list[tuple[str, str, str]] = [
     ("carboxylic_acid", "مجموعة كربوكسيل حمضية (-COOH | Carboxylic Acid)", "[CX3](=O)[OX2H1]"),

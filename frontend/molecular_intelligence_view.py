@@ -118,6 +118,13 @@ def render_molecular_intelligence_section() -> None:
             else:
                 st.info("لم يتم العثور على مركبات تشترك في بصمات قريبة كافية مع هذا المركب في الكتالوج.")
 
+            sim_guide = MolecularIntelligence.explain_similarity_score(sims[0]["similarity_score"] if sims else 0.5)
+            with st.expander("تفسير معنى نسبة تشابه تانيموتو وحدودها العلمية (Meaning & Limits of Tanimoto Similarity)", expanded=False):
+                st.markdown(f"**تفسير أعلى نتيجة حالية ({sim_guide['percentage']}% — {sim_guide['level_ar']}):** {sim_guide['meaning_ar']}")
+                st.markdown("**الحدود المنهجية لمعامل تانيموتو على بصمات مورغان:**")
+                for lim in sim_guide["limitations_ar"]:
+                    st.markdown(f"- {lim}")
+
     # Tab 2: Virtual Structure Modification
     with tab_mod:
         st.markdown(
@@ -323,11 +330,42 @@ def render_molecular_intelligence_section() -> None:
                         f"التقسيم العشوائي متفائل لأن المجموعة ({qsar['n_total']} مركباً، وهي عينة صغيرة نسبياً) تضم سلاسل متجانسة قريبة بنيوياً؛ "
                         "التحقق بحجب الفئة الكيميائية كاملة (Leave-One-Class-Out) يُحسب من بيانات التدريب فقط دون أي تسرب من الفئة المحجوبة."
                     )
+                    unc = qsar.get("prediction_uncertainty") or {}
+                    if unc:
+                        st.info(f"**مستوى عدم اليقين في التنبؤ (Prediction Uncertainty):** {unc.get('note_ar', '')}")
+
+                    if qsar.get("prediction_explanation_ar"):
+                        st.markdown(f"**{_esc(qsar['prediction_explanation_ar'])}**")
+
+                    scaf_eval = qsar.get("scaffold_split_evaluation") or {}
+                    hyb_eval = qsar.get("hybrid_residual_qsar") or {}
+                    base_cmp = qsar.get("baseline_comparison_analysis") or {}
+                    if scaf_eval:
+                        st.caption(
+                            f"**{scaf_eval['split_name_ar']}:** QSAR R² = {scaf_eval['qsar_scaffold_r2']} | "
+                            f"RMSE = {scaf_eval['qsar_scaffold_rmse']} | MAE = {scaf_eval['qsar_scaffold_mae']} — {scaf_eval['note_ar']}"
+                        )
+                    if hyb_eval and base_cmp:
+                        with st.expander("تحليل مقارنة Baseline (Ridge QSAR مقابل Wildman-Crippen) والنموذج الهجين (Hybrid Residual QSAR)", expanded=True):
+                            st.markdown(f"**تشخيص المقارنة مع خط الأساس (Wildman-Crippen Baseline):** {base_cmp.get('why_pure_ridge_trails_crippen_overall_ar', '')}")
+                            st.success(hyb_eval.get("explanation_ar", ""))
+
+                    if qsar.get("feature_contributions"):
+                        with st.expander("تفسير التنبؤ ومساهمة الواصفات الجزيئية الـ 15 (Feature Attribution)", expanded=False):
+                            st.dataframe(pd.DataFrame(qsar["feature_contributions"]), use_container_width=True, hide_index=True)
+
                     with st.expander("الأداء حسب الفئة الكيميائية واستبعاد الفئات الصغيرة (Leave-One-Class-Out)", expanded=False):
                         st.dataframe(pd.DataFrame(qsar["group_cv_by_class"]), use_container_width=True, hide_index=True)
                         if qsar.get("excluded_small_classes"):
                             for exc_cls in qsar["excluded_small_classes"]:
                                 st.caption(exc_cls["reason_ar"])
+
+                    with st.expander("مصفوفة الشفافية: أي وظائف المنصة تستخدم الذكاء الاصطناعي وأيها تعتمد على قواعد حتمية؟", expanded=False):
+                        st.dataframe(
+                            pd.DataFrame(MolecularIntelligence.get_ai_vs_deterministic_architecture_matrix()),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
                     st.dataframe(pd.DataFrame(qsar["test_set_table"]), use_container_width=True, hide_index=True)
                 else:
                     st.warning("نموذج QSAR الإحصائي غير متاح في البيئة الحالية.")

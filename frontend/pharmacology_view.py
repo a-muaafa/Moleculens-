@@ -8,107 +8,10 @@ from __future__ import annotations
 
 import html
 import streamlit as st
-
-PHARMACOLOGY_PILLARS: list[dict[str, str]] = [
-    {
-        "code": "classification",
-        "title_ar": "1. تصنيف الأدوية والمجموعات العلاجية",
-        "title_en": "1. Drug Classification & Therapeutic Classes",
-        "desc_ar": (
-            "تصنيف منهجي للأدوية وفق نظام ATC العالمي والمجموعات العلاجية والدوائية "
-            "(المسكنات، المضادات الحيوية، أدوية القلب والضغط، السكري، الجهاز الهضمي، والتنفسي)."
-        ),
-        "desc_en": (
-            "Systematic organization of medications by WHO ATC classification and therapeutic families "
-            "(analgesics, antibiotics, cardiovascular, antidiabetics, GI, and respiratory agents)."
-        ),
-        "planned_sources": "WHO ATC Index, RxNorm, ChEMBL",
-    },
-    {
-        "code": "moa",
-        "title_ar": "2. آليات عمل الأدوية (Mechanism of Action)",
-        "title_en": "2. Mechanism of Action (MoA)",
-        "desc_ar": (
-            "تفسير جزيئي وخلوي لكيفية إحداث الدواء لتأثيره العلاجي: تثبيط الإنزيمات، "
-            "تنشيط أو حصر المستقبلات، تعديل القنوات الأيونية، أو التداخل مع المسارات الأيضية."
-        ),
-        "desc_en": (
-            "Molecular and cellular explanation of therapeutic action: enzyme inhibition, "
-            "receptor agonism/antagonism, ion channel modulation, and metabolic pathway targeting."
-        ),
-        "planned_sources": "ChEMBL Mechanism API, IUPHAR/BPS Guide to Pharmacology",
-    },
-    {
-        "code": "targets",
-        "title_ar": "3. المستقبلات والأهداف الحيوية (Receptors & Biological Targets)",
-        "title_en": "3. Receptors & Biological Targets",
-        "desc_ar": (
-            "ربط المادة الدوائية بالبروتينات والمستقبلات المستهدفة (GPCRs، القنوات الأيونية، "
-            "الإنزيمات، والمستقبلات النووية) مع معرفات UniProt و PDB."
-        ),
-        "desc_en": (
-            "Linking active pharmaceutical ingredients to biological macromolecular targets "
-            "(GPCRs, ion channels, enzymes, nuclear receptors) with UniProt and PDB cross-references."
-        ),
-        "planned_sources": "UniProtKB, RCSB PDB, Open Targets",
-    },
-    {
-        "code": "adme",
-        "title_ar": "4. الحرائك الدوائية (Pharmacokinetics — ADME)",
-        "title_en": "4. Pharmacokinetics (ADME Profile)",
-        "desc_ar": (
-            "دراسة رحلة الدواء داخل الجسم: الامتصاص (Absorption) والتوافر الحيوي، التوزيع (Distribution) "
-            "والارتباط ببروتينات البلازما، الأيض الكبدي (Metabolism / CYP450)، والإطراح (Excretion) وعمر النصف."
-        ),
-        "desc_en": (
-            "Quantitative profiling of Absorption (bioavailability), Distribution (volume of distribution, "
-            "plasma protein binding), Metabolism (CYP450 isoenzymes), and Excretion (clearance, half-life)."
-        ),
-        "planned_sources": "FDA Clinical Pharmacology Monographs, ChEMBL ADMET",
-    },
-    {
-        "code": "dose_response",
-        "title_ar": "5. العلاقة بين الجرعة والاستجابة (Dose–Response Relationship)",
-        "title_en": "5. Dose–Response Relationship & Therapeutic Index",
-        "desc_ar": (
-            "نمذجة منحنيات التركيز والاستجابة (EC50, IC50, Emax)، الفعالية القصوى (Efficacy) مقابل القوة الدوائية (Potency)، "
-            "والنافذة العلاجية (Therapeutic Window) ومؤشر الأمان الدوائي."
-        ),
-        "desc_en": (
-            "Modeling graded and quantal dose-response curves (EC50, IC50, Emax), potency vs. efficacy, "
-            "and therapeutic index safety margins."
-        ),
-        "planned_sources": "Goodman & Gilman's Pharmacological Basis of Therapeutics",
-    },
-    {
-        "code": "adverse_effects",
-        "title_ar": "6. الآثار الجانبية وموانع الاستخدام (Adverse Effects & Contraindications)",
-        "title_en": "6. Adverse Effects & Contraindications",
-        "desc_ar": (
-            "توثيق التفاعلات الضارة الشائعة والخطيرة، التحذيرات المؤطرة (Boxed Warnings)، "
-            "موانع الاستخدام، والاحتياطات في القصور الكلوي أو الكبدي والحمل والرضاعة."
-        ),
-        "desc_en": (
-            "Structured catalog of adverse drug reactions, boxed warnings, contraindications, "
-            "and special population precautions (renal/hepatic impairment, pregnancy)."
-        ),
-        "planned_sources": "openFDA Drug Labeling API, DailyMed",
-    },
-    {
-        "code": "references",
-        "title_ar": "7. المعلومات الدوائية والمراجع العلمية (Drug Monographs & References)",
-        "title_en": "7. Drug Monographs & Scientific References",
-        "desc_ar": (
-            "ربط كل بطاقة دوائية بمراجعها الدستورية والسريرية المعتمدة (FDA، EMA، BNF، USP-NF) "
-            "مع توثيق تاريخ آخر تحديث وتراخيص البيانات."
-        ),
-        "desc_en": (
-            "Direct linkage of each drug monograph to authoritative regulatory and pharmacopeial "
-            "references (FDA, EMA, BNF, USP-NF) with update timestamps and license provenance."
-        ),
-        "planned_sources": "openFDA (CC0), RxNorm (NLM), PubChem (Public Domain)",
-    },
-]
+from pharmacy.pharmacology_module import (
+    PHARMACOLOGY_EDUCATIONAL_DISCLAIMER_AR,
+    PHARMACOLOGY_PILLARS,
+)
 
 
 def render_pharmacology_view(lang: str = "ar") -> None:
@@ -141,10 +44,12 @@ def render_pharmacology_view(lang: str = "ar") -> None:
     st.info(
         "هذا القسم في حالة (Coming Soon – قيد التطوير): تم تصميم الهيكل المعماري للأقسام الفرعية السبعة أدناه "
         "وتجهيز نقاط الربط البرمجية دون تفعيل وظائف غير مكتملة أو عرض بيانات وهمية، التزاماً بمعيار الصرامة العلمية في MolecuLens. "
-        "يمكنك حالياً استخدام قسم (التداخلات الدوائية — Drug Interactions) وقسم (الذكاء الجزيئي — Molecular Intelligence) المتاحين بالكامل."
+        "يمكنك حالياً استكشاف الأدوية ومحددات ليبينسكي وبطاقات السلامة في قسم (Explore & Understand) وقسم (الذكاء الجزيئي — Molecular Intelligence)."
         if is_ar
         else "This module is currently in 'Coming Soon – Under Development' status. The 7 architectural pillars below are structured and ready for backend integration without exposing incomplete features or placeholder data."
     )
+
+    st.warning(PHARMACOLOGY_EDUCATIONAL_DISCLAIMER_AR)
 
     st.subheader(
         "المحاور العلمية السبعة المخطط تفعيلها في قسم علم الأدوية (Planned Pharmacology Modules)"

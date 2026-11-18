@@ -244,3 +244,30 @@ def test_unified_api_contract_endpoints_and_status_codes():
     assert tit_res["ok"] is True
     assert tit_res["data"]["is_polyprotic"] is True
 
+
+def test_experiment_report_pdf_and_ai_architecture_api_endpoints():
+    from reaction_engine.report_generator import ExperimentReportGenerator
+
+    rxn_pred = MolecuLensAPI.predict_reaction("HCl + NaOH")
+    assert rxn_pred["ok"] is True
+
+    rep_res = MolecuLensAPI.generate_experiment_report(rxn_pred["data"], report_type="reaction_experiment")
+    assert rep_res["ok"] is True
+    assert rep_res["status_code"] == 200
+    assert rep_res["data"]["pdf_available"] is True
+    assert rep_res["data"]["pdf_size_bytes"] > 200
+    assert "<html" in rep_res["data"]["printable_html"]
+
+    pdf_bytes = ExperimentReportGenerator.generate_experiment_pdf_bytes(rep_res["data"]["report"])
+    assert pdf_bytes.startswith(b"%PDF-1.")
+
+    tit_sim = MolecuLensAPI.simulate_titration("CH3COOH", "NaOH", 0.1, 25.0, 0.1)
+    tit_rep = MolecuLensAPI.generate_experiment_report(tit_sim["data"], report_type="titration_experiment")
+    assert tit_rep["ok"] is True
+    assert tit_rep["data"]["pdf_available"] is True
+
+    ai_mat = MolecuLensAPI.ai_architecture_matrix()
+    assert ai_mat["ok"] is True
+    assert ai_mat["status_code"] == 200
+    assert len(ai_mat["data"]["architecture_matrix"]) >= 5
+

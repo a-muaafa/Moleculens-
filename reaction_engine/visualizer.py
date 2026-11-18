@@ -9,7 +9,12 @@ from __future__ import annotations
 import re
 from typing import Any
 import html
-import plotly.graph_objects as go
+try:
+    import plotly.graph_objects as go
+except ImportError:
+    from core._plotly_fallback import register_plotly_fallback_in_sys_modules
+    register_plotly_fallback_in_sys_modules()
+    import plotly.graph_objects as go
 
 from chemistry_engine.formula_analyzer import (
     calculate_molar_mass,

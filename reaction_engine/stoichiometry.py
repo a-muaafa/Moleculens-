@@ -52,17 +52,26 @@ def compute_reaction_stoichiometry(
                 matched_user = u_item
                 break
 
-        input_amount = float(matched_user["amount"]) if matched_user else float(coeff)
-        input_unit = matched_user.get("unit", "mol") if matched_user else "mol"
         u_sub_dict = matched_user.get("substance") if matched_user else None
-        initial_moles = convert_amount_to_moles(
-            input_amount,
-            input_unit,
-            mm,
-            formula=formula,
-            substance=u_sub_dict,
-            rxn_state=r_state,
-        )
+        if matched_user and matched_user.get("concentration_m") is not None and matched_user.get("volume_ml") is not None:
+            c_m = float(matched_user["concentration_m"])
+            v_ml = float(matched_user["volume_ml"])
+            if c_m <= 0 or v_ml <= 0:
+                raise ValueError("Concentration and volume must be strictly positive.")
+            initial_moles = c_m * (v_ml / 1000.0)
+            input_amount = v_ml
+            input_unit = f"mL @ {c_m:g} M"
+        else:
+            input_amount = float(matched_user["amount"]) if (matched_user and matched_user.get("amount") is not None) else float(coeff)
+            input_unit = matched_user.get("unit", "mol") if matched_user else "mol"
+            initial_moles = convert_amount_to_moles(
+                input_amount,
+                input_unit,
+                mm,
+                formula=formula,
+                substance=u_sub_dict,
+                rxn_state=r_state,
+            )
         extent_i = initial_moles / coeff
 
         item_record = {

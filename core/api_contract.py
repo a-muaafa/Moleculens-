@@ -464,7 +464,7 @@ class MolecuLensAPI:
     @staticmethod
     def pharmacology_overview() -> dict[str, Any]:
         endpoint = "/api/v1/pharmacology/overview"
-        from frontend.pharmacology_view import PHARMACOLOGY_PILLARS
+        from pharmacy.pharmacology_module import PHARMACOLOGY_EDUCATIONAL_DISCLAIMER_AR, PHARMACOLOGY_PILLARS
 
         return make_api_response(
             ok=True,
@@ -477,5 +477,71 @@ class MolecuLensAPI:
                 "status": "coming_soon",
                 "status_label_ar": "Coming Soon – قيد التطوير",
                 "pillars": PHARMACOLOGY_PILLARS,
+                "educational_vs_medical_disclaimer_ar": PHARMACOLOGY_EDUCATIONAL_DISCLAIMER_AR,
             },
         )
+
+    @staticmethod
+    def generate_experiment_report(
+        experiment_payload: dict[str, Any],
+        report_type: str = "reaction_experiment",
+        custom_conditions: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        endpoint = "/api/v1/reports/experiment"
+        if not isinstance(experiment_payload, dict) or not experiment_payload:
+            return make_api_response(
+                ok=False,
+                status_code=400,
+                ui_state="error",
+                endpoint=endpoint,
+                message_ar="بيانات التجربة مطلوبة لتوليد التقرير العلمي.",
+                message_en="Experiment payload is required to generate a report.",
+                error_code="INVALID_REPORT_PAYLOAD",
+            )
+        from reaction_engine.report_generator import ExperimentReportGenerator
+
+        if report_type == "titration_experiment":
+            rep_data = ExperimentReportGenerator.build_titration_report_data(experiment_payload)
+        else:
+            rep_data = ExperimentReportGenerator.build_reaction_report_data(
+                experiment_payload, custom_conditions=custom_conditions
+            )
+        html_doc = ExperimentReportGenerator.generate_printable_html_report(rep_data)
+        pdf_bytes = ExperimentReportGenerator.generate_experiment_pdf_bytes(rep_data)
+        return make_api_response(
+            ok=True,
+            status_code=200,
+            ui_state="ready",
+            endpoint=endpoint,
+            message_ar="تم إنشاء تقرير التجربة العلمي بصيغتي PDF وHTML القابل للطباعة.",
+            message_en="Scientific experiment report generated in PDF and printable HTML formats.",
+            data={
+                "report": rep_data,
+                "printable_html": html_doc,
+                "pdf_available": len(pdf_bytes) > 0 and pdf_bytes.startswith(b"%PDF-"),
+                "pdf_size_bytes": len(pdf_bytes),
+            },
+        )
+
+    @staticmethod
+    def ai_architecture_matrix() -> dict[str, Any]:
+        endpoint = "/api/v1/ai/architecture-matrix"
+        matrix = MolecularIntelligence.get_ai_vs_deterministic_architecture_matrix()
+        bundle = MolecularIntelligence.train_and_evaluate_qsar_logp_model()
+        return make_api_response(
+            ok=True,
+            status_code=200,
+            ui_state="ready",
+            endpoint=endpoint,
+            message_ar="تم استرجاع مصفوفة الشفافية المعمارية للذكاء الاصطناعي وتوثيق نماذج QSAR.",
+            message_en="AI vs. Deterministic architecture transparency matrix and model card retrieved.",
+            data={
+                "architecture_matrix": matrix,
+                "model_card": bundle.get("model_card"),
+                "baseline_comparison_analysis": bundle.get("baseline_comparison_analysis"),
+                "scaffold_split_evaluation": bundle.get("scaffold_split_evaluation"),
+                "hybrid_residual_qsar": bundle.get("hybrid_residual_qsar"),
+                "dataset_quality_audit": bundle.get("dataset_quality_audit"),
+            },
+        )
+

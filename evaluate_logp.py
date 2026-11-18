@@ -35,7 +35,7 @@ def main() -> int:
         except Exception:
             versions[mod] = None
 
-    skip = {"pipeline", "test_set_table"}
+    skip = {"pipeline", "test_set_table", "_numpy_ref_mu", "_numpy_ref_std", "_numpy_ref_beta", "_numpy_ref_y_mean", "_numpy_xtx_inv", "_hybrid_res_predictor"}
     result = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "versions": versions,

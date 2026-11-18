@@ -120,7 +120,7 @@ def render_reaction_lab_section() -> None:
   <p>
     يجمع هذا المختبر الموحد بين: <strong>(1) التوقع الكيميائي الذكي لأي مادتين أو أكثر</strong> (عنصر + عنصر، عنصر + مركب، مركب + مركب، أو عدة مواد معاً)
     بمستويات الدليل الثلاثة مع تحليل ماذا لو (What-If) والتمثيل البصري للجزيئات قبل التفاعل وبعده،
-    و<strong>(2) مختبر الحسابات المولية والستوكيومترية الموثقة</strong> وتصفح قاعدة بيانات التفاعلات الموسعة (120 تفاعلاً موثقاً)
+    و<strong>(2) مختبر الحسابات المولية والستوكيومترية الموثقة</strong> وتصفح قاعدة بيانات التفاعلات الموسعة (152 تفاعلاً موثقاً)
     مع حساب المتفاعل المحدد والفائض والمردود النظري دون اختلاق أي تفاعلات أو نواتج غير موثقة.
   </p>
 </div>
@@ -134,7 +134,7 @@ def render_reaction_lab_section() -> None:
         render_prediction_section()
 
     st.markdown("---")
-    st.markdown("<h3>القسم الثاني: الحسابات الستوكيومترية الموجهة وموسوعة التفاعلات المصنفة (120 تفاعلاً)</h3>", unsafe_allow_html=True)
+    st.markdown("<h3>القسم الثاني: الحسابات الستوكيومترية الموجهة وموسوعة التفاعلات المصنفة (152 تفاعلاً موثقاً)</h3>", unsafe_allow_html=True)
 
     c_dom, c_type, c_cat = st.columns(3)
     with c_dom:
@@ -373,8 +373,92 @@ def render_reaction_lab_section() -> None:
             unsafe_allow_html=True,
         )
 
+    _render_reaction_enrichment_and_report_panel(rxn_result)
     _render_end_to_end_visual_experiment(rxn_result)
     _render_scientific_audit_panel()
+
+
+def _render_reaction_enrichment_and_report_panel(rxn_result: dict[str, Any]) -> None:
+    """Renders complete/net ionic equations, chemical equilibrium, competing pathways, safety warnings, and PDF report export."""
+    from reaction_engine.report_generator import ExperimentReportGenerator
+
+    ionic = rxn_result.get("ionic_analysis") or {}
+    equil = rxn_result.get("equilibrium_info") or {}
+    competing = rxn_result.get("competing_pathways") or {}
+    safety = rxn_result.get("safety_warnings") or {}
+    coverage = rxn_result.get("coverage_boundaries") or {}
+
+    c_ion, c_eq = st.columns(2)
+    with c_ion:
+        st.markdown(
+            f"""
+<div class="ml-card">
+  <h4>التمثيل الأيوني والأيونات المتفرجة (Ionic Equations &amp; Spectator Ions)</h4>
+  <p><strong>المعادلة الأيونية الكاملة (Complete Ionic):</strong> <span class="ltr-inline">{ionic.get('complete_ionic_equation', '—')}</span></p>
+  <p><strong>المعادلة الأيونية الصافية (Net Ionic):</strong> <span class="ltr-inline">{ionic.get('net_ionic_equation', '—')}</span></p>
+  <p style="margin-bottom:0;color:#475569;">{ionic.get('spectator_ions_summary_ar', '')}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+    with c_eq:
+        st.markdown(
+            f"""
+<div class="ml-card">
+  <h4>الاتزان الكيميائي والعكوسية (Chemical Equilibrium &amp; Reversibility)</h4>
+  <p><strong>طبيعة المسار ({equil.get('reaction_arrow', '→')}):</strong> {equil.get('equilibrium_type_ar', '')}</p>
+  <p><strong>الدافع الثرموديناميكي:</strong> {equil.get('driving_force_ar', '')}</p>
+  <p style="margin-bottom:0;color:#b45309;font-size:0.9rem;">{equil.get('yield_equilibrium_note_ar', '')}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    if competing.get("has_competing_pathways"):
+        with st.expander("التفاعلات المتنافسة والمسارات البديلة المحتملة (Competing Reactions & Alternative Pathways)", expanded=False):
+            st.info(competing.get("summary_ar", ""))
+            for pw in competing.get("pathways", []):
+                st.markdown(
+                    f"- **{pw.get('pathway_name_ar', '')}:** يحدث عند *{pw.get('condition_trigger_ar', '')}* "
+                    f"← النواتج المتوقعة: **{pw.get('products_summary_ar', '')}** *(المرجع: {pw.get('source_basis_ar', '')})*"
+                )
+
+    if safety.get("warnings_ar"):
+        with st.expander(f"تحذيرات السلامة المخبرية وحدود المحاكاة الافتراضية ({safety.get('hazard_level_ar', '')})", expanded=bool(safety.get("has_hazards"))):
+            for w in safety.get("warnings_ar", []):
+                st.warning(w)
+            st.caption(safety.get("operational_safety_policy_ar", ""))
+            st.caption(safety.get("virtual_lab_disclaimer_ar", ""))
+
+    if coverage:
+        with st.expander("حدود تغطية النظام والمواد والتفاعلات المدعومة (System Coverage Boundaries)", expanded=False):
+            st.markdown("**ما يغطيه المحرك علمياً:**")
+            for cap in coverage.get("covered_capabilities_ar", []):
+                st.markdown(f"- {cap}")
+            st.markdown("**ما يقع خارج نطاق المحرك الحالي (لا يدّعي النظام تحليله):**")
+            for lim in coverage.get("unsupported_boundaries_ar", []):
+                st.markdown(f"- {lim}")
+
+    rep_data = ExperimentReportGenerator.build_reaction_report_data(rxn_result)
+    pdf_bytes = ExperimentReportGenerator.generate_experiment_pdf_bytes(rep_data)
+    html_report = ExperimentReportGenerator.generate_printable_html_report(rep_data)
+    dl_c1, dl_c2 = st.columns(2)
+    with dl_c1:
+        st.download_button(
+            "تحميل تقرير التجربة بصيغة PDF (Download Experiment PDF Report)",
+            data=pdf_bytes,
+            file_name=f"moleculens_reaction_{rxn_result.get('reaction_id', 'report')}.pdf",
+            mime="application/pdf",
+            key="rxn_lab_download_pdf",
+        )
+    with dl_c2:
+        st.download_button(
+            "تحميل تقرير التجربة للطباعة والمشاركة (Printable HTML Report)",
+            data=html_report.encode("utf-8"),
+            file_name=f"moleculens_reaction_{rxn_result.get('reaction_id', 'report')}.html",
+            mime="text/html",
+            key="rxn_lab_download_html",
+        )
 
 
 def _render_end_to_end_visual_experiment(rxn_result: dict[str, Any]) -> None:
@@ -494,7 +578,7 @@ def _render_end_to_end_visual_experiment(rxn_result: dict[str, Any]) -> None:
 
 
 def _render_scientific_audit_panel() -> None:
-    """Renders the independent scientific audit summary for the 87-reaction registry & 13 rules."""
+    """Renders the independent scientific audit summary for the 152-reaction registry & 13 rules."""
     from reaction_engine.scientific_audit import audit_registry_and_rules
 
     with st.expander("تقرير التدقيق العلمي المستقل لقاعدة التفاعلات والمراجع (Independent Scientific Registry & Rules Audit)", expanded=False):
