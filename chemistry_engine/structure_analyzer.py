@@ -1,3 +1,4 @@
+import sys
 from io import BytesIO
 import re
 from typing import Any
@@ -7,6 +8,7 @@ try:
     from rdkit.Chem import AllChem, Crippen, Descriptors, Draw, Lipinski, rdMolDescriptors
     from rdkit.Chem.Draw import rdMolDraw2D
     HAS_RDKIT = True
+    USING_RDKIT_FALLBACK = bool(getattr(sys.modules.get('rdkit'), '__is_fallback__', False))
 except ImportError:
     from chemistry_engine._rdkit_fallback import (
         AllChem,
@@ -21,6 +23,35 @@ except ImportError:
     )
     register_rdkit_fallback_in_sys_modules()
     HAS_RDKIT = True
+    USING_RDKIT_FALLBACK = True
+
+def get_cheminformatics_engine_info() -> dict[str, Any]:
+    """
+    Returns transparent metadata about whether native C++ RDKit or the Pure-Python Fallback is active.
+    Never reports the Pure-Python Fallback version as a native RDKit release.
+    """
+    if USING_RDKIT_FALLBACK:
+        return {
+            "using_fallback": True,
+            "engine_name": "Pure-Python RDKit Fallback",
+            "engine_label_ar": "البديل المدمج بلغة Python (Pure-Python Fallback)",
+            "engine_version": "pure-python-fallback-1.0",
+            "native_rdkit_available": False,
+            "equivalence_note_ar": (
+                "تعمل البيئة الحالية بالبديل المدمج بلغة Python لعدم توفر مكتبة RDKit الأصلية؛ "
+                "النتائج تعليمية ولا يُدّعى تكافؤها التام مع RDKit دون اختبارات مطابقة مرجعية."
+            ),
+        }
+    import rdkit as _rdkit  # type: ignore[import-not-found]
+    return {
+        "using_fallback": False,
+        "engine_name": "RDKit (Native C++)",
+        "engine_label_ar": "مكتبة RDKit الأصلية",
+        "engine_version": str(getattr(_rdkit, "__version__", "unknown")),
+        "native_rdkit_available": True,
+        "equivalence_note_ar": "الحسابات البنيوية والواصفات الجزيئية صادرة مباشرة عن مكتبة RDKit الأصلية.",
+    }
+
 
 FUNCTIONAL_GROUP_PATTERNS: list[tuple[str, str, str]] = [
     ("carboxylic_acid", "مجموعة كربوكسيل حمضية (-COOH | Carboxylic Acid)", "[CX3](=O)[OX2H1]"),

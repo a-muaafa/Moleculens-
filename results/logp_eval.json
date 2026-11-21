@@ -1,8 +1,11 @@
 {
-  "generated_at_utc": "2026-11-18T19:50:03+00:00",
+  "generated_at_utc": "2026-11-21T20:13:34+00:00",
   "versions": {
     "python": "3.11.2",
-    "rdkit": "2026.09.1-fallback",
+    "cheminformatics_engine": "Pure-Python RDKit Fallback",
+    "using_rdkit_fallback": true,
+    "rdkit": null,
+    "rdkit_fallback": "pure-python-fallback-1.0",
     "numpy": "2.1.3",
     "sklearn": null
   },

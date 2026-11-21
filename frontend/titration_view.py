@@ -10,7 +10,24 @@ from __future__ import annotations
 import html
 import pandas as pd
 import streamlit as st
+from frontend.cache_helpers import get_cache_version, get_cached_titration_result
 from titration.titration_engine import TitrationEngine
+
+TITRATION_OFFLINE_PRESETS: list[tuple[str, str, str, float, float, float, str]] = [
+    ('HCl + NaOH (قوي + قوي)', 'HCl', 'NaOH', 25.0, 0.10, 0.10, 'acid_with_base'),
+    ('CH₃COOH + NaOH (ضعيف + قوي)', 'CH3COOH', 'NaOH', 25.0, 0.10, 0.10, 'acid_with_base'),
+    ('H₃PO₄ + NaOH (متعدد البروتونات)', 'H3PO4', 'NaOH', 25.0, 0.10, 0.10, 'acid_with_base'),
+    ('NH₃ + HCl (قاعدة ضعيفة + حمض قوي)', 'HCl', 'NH3', 25.0, 0.10, 0.10, 'base_with_acid'),
+    ('H₂SO₄ + KOH (ثنائي البروتون)', 'H2SO4', 'KOH', 25.0, 0.10, 0.10, 'acid_with_base'),
+]
+
+def _apply_titration_preset(acid_k: str, base_k: str, vol: float, a_c: float, t_c: float, mode: str) -> None:
+    st.session_state['tit_acid_key'] = acid_k
+    st.session_state['tit_base_key'] = base_k
+    st.session_state['tit_vol_ml'] = vol
+    st.session_state['tit_analyte_c'] = a_c
+    st.session_state['tit_titrant_c'] = t_c
+    st.session_state['tit_mode'] = mode
 
 
 def render_titration_view(lang: str = "ar") -> None:
@@ -39,6 +56,17 @@ def render_titration_view(lang: str = "ar") -> None:
     bases = TitrationEngine.BASE_DATABASE
     indicators = TitrationEngine.INDICATORS
 
+    st.markdown("<strong>تجارب معايرة جاهزة تعمل دون إنترنت (Offline Presets):</strong>", unsafe_allow_html=True)
+    p_cols = st.columns(len(TITRATION_OFFLINE_PRESETS))
+    for p_idx, (p_lbl, p_acid, p_base, p_vol, p_ac, p_tc, p_mode) in enumerate(TITRATION_OFFLINE_PRESETS):
+        with p_cols[p_idx]:
+            st.button(
+                p_lbl,
+                key=f"tit_preset_{p_idx}",
+                on_click=_apply_titration_preset,
+                args=(p_acid, p_base, p_vol, p_ac, p_tc, p_mode),
+            )
+
     col1, col2 = st.columns([1, 1])
 
     with col1:
@@ -53,6 +81,7 @@ def render_titration_view(lang: str = "ar") -> None:
             options=acid_options,
             format_func=lambda k: acid_labels[k],
             index=0,
+            key="tit_acid_key",
         )
         a_spec = acids[selected_acid_key]
         st.caption(
@@ -74,6 +103,7 @@ def render_titration_view(lang: str = "ar") -> None:
             options=base_options,
             format_func=lambda k: base_labels[k],
             index=0,
+            key="tit_base_key",
         )
         b_spec = bases[selected_base_key]
         st.caption(
@@ -94,6 +124,7 @@ def render_titration_view(lang: str = "ar") -> None:
             options=[m[0] for m in mode_options],
             format_func=lambda val: next(m[1] for m in mode_options if m[0] == val),
             index=0,
+            key="tit_mode",
         )
 
     with col2:
@@ -101,18 +132,18 @@ def render_titration_view(lang: str = "ar") -> None:
         analyte_label = "الحمض في الدورق" if titration_mode == "acid_with_base" else "القاعدة في الدورق"
         analyte_v_label = f"حجم {analyte_label} (مل mL)" if is_ar else "Analyte Volume (mL)"
         analyte_volume_ml = st.number_input(
-            analyte_v_label, min_value=5.0, max_value=200.0, value=25.0, step=5.0
+            analyte_v_label, min_value=5.0, max_value=200.0, value=25.0, step=5.0, key="tit_vol_ml"
         )
 
         analyte_c_label = f"تركيز {analyte_label} (مولار M)" if is_ar else "Analyte Concentration (M)"
         analyte_conc_m = st.number_input(
-            analyte_c_label, min_value=0.001, max_value=5.0, value=0.100, step=0.01
+            analyte_c_label, min_value=0.001, max_value=5.0, value=0.100, step=0.01, key="tit_analyte_c"
         )
 
         titrant_label = "القاعدة في السحاحة" if titration_mode == "acid_with_base" else "الحمض في السحاحة"
         titrant_c_label = f"تركيز {titrant_label} (مولار M)" if is_ar else "Titrant Concentration (M)"
         titrant_conc_m = st.number_input(
-            titrant_c_label, min_value=0.001, max_value=5.0, value=0.100, step=0.01
+            titrant_c_label, min_value=0.001, max_value=5.0, value=0.100, step=0.01, key="tit_titrant_c"
         )
 
         auto_select_ind = st.checkbox(
@@ -124,16 +155,17 @@ def render_titration_view(lang: str = "ar") -> None:
 
     # Perform Titration Simulation
     if titration_mode == "acid_with_base":
-        sim_data = TitrationEngine.simulate_titration(
+        sim_data = get_cached_titration_result(
             acid_key=selected_acid_key,
             base_key=selected_base_key,
             acid_conc_m=analyte_conc_m,
             acid_volume_ml=analyte_volume_ml,
             base_conc_m=titrant_conc_m,
             titration_mode="acid_with_base",
+            cache_version=get_cache_version(),
         )
     else:
-        sim_data = TitrationEngine.simulate_titration(
+        sim_data = get_cached_titration_result(
             acid_key=selected_acid_key,
             base_key=selected_base_key,
             acid_conc_m=titrant_conc_m,
@@ -141,6 +173,7 @@ def render_titration_view(lang: str = "ar") -> None:
             base_conc_m=analyte_conc_m,
             titration_mode="base_with_acid",
             base_volume_ml=analyte_volume_ml,
+            cache_version=get_cache_version(),
         )
 
     rec_ind_key = sim_data.get("recommended_indicator_key", "bromothymol_blue")

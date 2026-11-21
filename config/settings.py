@@ -150,7 +150,12 @@ PDB_BASE_URL = "https://data.rcsb.org/rest/v1/core/entry"
 RHEA_BASE_URL = "https://www.rhea-db.org/rhea"
 ORD_BASE_URL = "https://open-reaction-database.org"
 
-EXTERNAL_API_TIMEOUT_SECONDS = int(os.getenv("EXTERNAL_API_TIMEOUT_SECONDS", "5"))
+EXTERNAL_API_TIMEOUT_SECONDS = int(os.getenv("EXTERNAL_API_TIMEOUT_SECONDS", "3"))
 EXTERNAL_API_MAX_RETRIES = int(os.getenv("EXTERNAL_API_MAX_RETRIES", "2"))
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 CACHE_MAX_ENTRIES = int(os.getenv("CACHE_MAX_ENTRIES", "512"))
+
+SHOW_EXPERIMENTAL_PHARMACOLOGY = os.getenv("SHOW_EXPERIMENTAL_PHARMACOLOGY", "false").strip().lower() in {"1", "true", "yes"}
+SCIENTIFIC_DISCLAIMER_AR = (
+    "هذه المنصة مخصصة للمحاكاة التعليمية والبحث الأولي فقط، ولا تُعد بديلاً عن الاستشارة الطبية أو الصيدلانية المعتمدة."
+)

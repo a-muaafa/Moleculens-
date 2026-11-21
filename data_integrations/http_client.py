@@ -2,9 +2,10 @@
 Resilient HTTP client for MolecuLens external scientific integrations.
 
 Provides:
-1. Configurable timeout and bounded retry on transient network/5xx errors.
-2. Strict HTTPS URL validation.
-3. Safe error handling that never crashes the application when offline.
+1. Short configurable timeout (default 3s) and bounded retry on transient 5xx/timeout errors.
+2. Fast fail on SSL certificate/handshake errors so the app falls back to local data immediately.
+3. Strict HTTPS URL validation (SSRF protection).
+4. Clear Arabic error classification that never leaks raw tracebacks to the UI.
 """
 
 from __future__ import annotations
@@ -19,16 +20,28 @@ from core.security import is_safe_https_url
 RETRYABLE_STATUS_CODES: set[int] = {429, 500, 502, 503, 504}
 
 
+def classify_network_error_ar(exc: Exception, service_name: str = "الخدمة الخارجية") -> str:
+    """Maps network/SSL/timeout exceptions to clear Arabic messages for offline-first fallback."""
+    if isinstance(exc, requests.exceptions.SSLError):
+        return f"تعذر التحقق من شهادة الأمان (SSL) عند الاتصال بـ {service_name}؛ تم التراجع تلقائياً إلى البيانات المحلية."
+    if isinstance(exc, requests.exceptions.Timeout):
+        return f"انتهت مهلة الاتصال بـ {service_name}؛ تم التراجع تلقائياً إلى البيانات المحلية دون تعطيل التطبيق."
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return f"لا يتوفر اتصال بالإنترنت أو تعذر الوصول إلى {service_name}؛ يعمل التطبيق الآن بالبيانات المحلية."
+    return f"تعذر جلب البيانات من {service_name} مؤقتاً؛ تم الاعتماد على البيانات المحلية."
+
+
 def request_with_retry(
     url: str,
     params: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
     timeout: float = EXTERNAL_API_TIMEOUT_SECONDS,
     max_retries: int = EXTERNAL_API_MAX_RETRIES,
-    backoff_seconds: float = 0.25,
+    backoff_seconds: float = 0.2,
 ) -> requests.Response:
     """
-    Executes an HTTP GET request with timeout and bounded retry on transient failures.
+    Executes an HTTP GET request with short timeout and bounded retry on transient failures.
+    Fails fast on SSLError so offline-first fallback activates immediately without hanging.
     Raises ValueError on non-HTTPS URLs and requests.RequestException if all attempts fail.
     """
     if not is_safe_https_url(url):
@@ -44,6 +57,9 @@ def request_with_retry(
                 time.sleep(backoff_seconds * (2 ** attempt))
                 continue
             return resp
+        except requests.exceptions.SSLError as exc:
+            # Fail fast on SSL errors — retrying won't fix certificate/proxy issues during a demo.
+            raise exc
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
             last_exc = exc
             if attempt < attempts - 1:

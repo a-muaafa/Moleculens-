@@ -611,12 +611,14 @@ class TitrationSimulator:
             ph_half_eq = None
         elif case_key == "weak_acid_strong_base":
             kb = KW_25C / max(1e-14, effective_last_ka)
-            oh_eq = solve_quadratic_positive(1.0, kb, -kb * c_salt_at_eq)
+            oh_salt = solve_quadratic_positive(1.0, kb, -kb * c_salt_at_eq)
+            oh_eq = math.sqrt(oh_salt * oh_salt + KW_25C)
             ph_eq = round(compute_ph_from_oh(oh_eq), 2)
             ph_half_eq = round(float(acid_spec["pKa"]), 2)
         elif case_key == "strong_acid_weak_base":
             ka_conj = KW_25C / max(1e-14, effective_last_kb)
-            h_eq = solve_quadratic_positive(1.0, ka_conj, -ka_conj * c_salt_at_eq)
+            h_salt = solve_quadratic_positive(1.0, ka_conj, -ka_conj * c_salt_at_eq)
+            h_eq = math.sqrt(h_salt * h_salt + KW_25C)
             ph_eq = round(compute_ph_from_h(h_eq), 2)
             ph_half_eq = round(14.0 - float(base_spec["pKb"]), 2)
         else:

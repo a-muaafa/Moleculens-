@@ -28,10 +28,22 @@ def main() -> int:
         print("RDKit and NumPy/scikit-learn are required:", bundle.get("message_ar"))
         return 1
 
-    versions = {"python": platform.python_version()}
+    from chemistry_engine.structure_analyzer import get_cheminformatics_engine_info
+
+    engine_info = get_cheminformatics_engine_info()
+    versions = {
+        "python": platform.python_version(),
+        "cheminformatics_engine": engine_info["engine_name"],
+        "using_rdkit_fallback": engine_info["using_fallback"],
+    }
     for mod in ("rdkit", "numpy", "sklearn"):
         try:
-            versions[mod] = __import__(mod).__version__
+            m = __import__(mod)
+            if mod == "rdkit" and getattr(m, "__is_fallback__", False):
+                versions["rdkit"] = None
+                versions["rdkit_fallback"] = getattr(m, "__version__", "pure-python-fallback-1.0")
+            else:
+                versions[mod] = getattr(m, "__version__", None)
         except Exception:
             versions[mod] = None
 

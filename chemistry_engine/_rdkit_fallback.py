@@ -1628,7 +1628,8 @@ def register_rdkit_fallback_in_sys_modules() -> None:
 
     rdkit_mod.Chem = chem_mod
     rdkit_mod.DataStructs = DataStructs
-    rdkit_mod.__version__ = "2026.09.1-fallback"
+    rdkit_mod.__version__ = "pure-python-fallback-1.0"
+    rdkit_mod.__is_fallback__ = True
 
     sys.modules["rdkit"] = rdkit_mod
     sys.modules["rdkit.Chem"] = chem_mod

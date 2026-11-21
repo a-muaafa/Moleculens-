@@ -14,6 +14,8 @@ import streamlit as st
 
 from chemistry_engine.formula_analyzer import format_chemical_formula_display
 from chemistry_engine.molecular_intelligence import MolecularIntelligence
+from chemistry_engine.structure_analyzer import USING_RDKIT_FALLBACK, get_cheminformatics_engine_info
+from frontend.cache_helpers import get_cache_version, get_cached_logp_evaluation, get_cached_similarity_results
 from search.local_catalog import LOCAL_SCIENTIFIC_CATALOG
 
 
@@ -39,6 +41,14 @@ def render_molecular_intelligence_section() -> None:
 """,
         unsafe_allow_html=True,
     )
+
+    engine_info = get_cheminformatics_engine_info()
+    if USING_RDKIT_FALLBACK:
+        st.info(
+            f"**تنبيه شفافية المحرك الكيميائي:** يعمل النظام حالياً باستخدام **{engine_info['engine_label_ar']}** "
+            f"(الإصدار: `{engine_info['engine_version']}`) نظراً لعدم تثبيت مكتبة RDKit الأصلية في هذه البيئة؛ "
+            "النتائج تقريبية تعليمية ولا تُعرض على أنها صادرة عن RDKit الأصلي."
+        )
 
     compounds = [
         c
@@ -91,7 +101,7 @@ def render_molecular_intelligence_section() -> None:
             smiles = chosen_comp["canonical_smiles"]
             st.caption(f"التمثيل البنيوي SMILES: `{smiles}`")
 
-            sims = MolecularIntelligence.find_most_similar(smiles, top_n=6)
+            sims = get_cached_similarity_results(smiles, top_n=6, cache_version=get_cache_version())
             if sims:
                 st.markdown(f"**أقرب المركبات بنيوياً إلى «{_esc(chosen_comp['name_ar'])}» في الكتالوج المعتمد:**")
                 cols = st.columns(3)
@@ -272,7 +282,7 @@ def render_molecular_intelligence_section() -> None:
 
         target_comp = next((c for c in compounds if c["key"] == logp_comp_key), None)
         if target_comp:
-            eval_res = MolecularIntelligence.evaluate_logp_prediction(target_comp["canonical_smiles"])
+            eval_res = get_cached_logp_evaluation(target_comp["canonical_smiles"], cache_version=get_cache_version())
             if eval_res["available"]:
                 det = eval_res["deterministic_clogp"]
                 qsar = eval_res["qsar_model_evaluation"]

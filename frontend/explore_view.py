@@ -2,6 +2,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 from chemistry_engine.formula_analyzer import format_chemical_formula_display
+from config.settings import ALLOW_EXTERNAL_NETWORK
 from config.settings import (
     ENTITY_BIOMOLECULE_PROTEIN,
     ENTITY_CHEMICAL_COMPOUND,
@@ -88,7 +89,7 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
     _render_suggestions(query_text)
 
     force_network = bool(st.session_state.pop("exp_force_network_once", False))
-    res = MolecuLensCore.explore_entity(query_text, allow_network=True, force_network=force_network)
+    res = MolecuLensCore.explore_entity(query_text, allow_network=ALLOW_EXTERNAL_NETWORK, force_network=force_network)
 
     if not res["found"]:
         st.warning(res["message"])
@@ -134,6 +135,7 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
     <span class="{badge_cls}">{entity['entity_type_label_ar']} | {entity['entity_type_label_en']}</span>
     <span class="ml-badge" style="background:#475569;">{entity.get('subclass_label_ar', '')}</span>
     <span class="ml-badge" style="background:#334155;">{entity.get('match_category', 'Exact Match')}</span>
+    <span class="ml-badge" style="background:{'#0f766e' if str(entity.get('db_source', 'local')).lower().startswith(('local', 'curated', '')) and 'external' not in str(entity.get('db_source', '')).lower() else '#1d4ed8'};">{'مصدر محلي — يعمل دون إنترنت (Offline Local DB)' if 'external' not in str(entity.get('db_source', '')).lower() else 'مصدر خارجي موثق (External API)'}</span>
   </div>
   <h3 style="margin-top:0.65rem;margin-bottom:0.35rem;">
     {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']}</span> <span class="ml-formula-pill">{disp_formula}</span>

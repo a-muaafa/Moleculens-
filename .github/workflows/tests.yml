@@ -40,6 +40,12 @@ jobs:
           mkdir -p results
           python scripts/evaluate_logp.py
 
+      - name: Verify offline-first core tests (ALLOW_EXTERNAL_NETWORK=false)
+        env:
+          ALLOW_EXTERNAL_NETWORK: "false"
+        run: |
+          pytest -v tests/test_offline_and_caching.py tests/test_titration_all_catalog.py tests/test_rdkit_fallback_parity.py
+
       - name: Run full test suite once (with coverage and JUnit report)
         run: |
           rm -f data/moleculens_local.db
