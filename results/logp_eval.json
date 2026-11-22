@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-11-21T20:13:34+00:00",
+  "generated_at_utc": "2026-11-22T18:13:40+00:00",
   "versions": {
     "python": "3.11.2",
     "cheminformatics_engine": "Pure-Python RDKit Fallback",
@@ -241,6 +241,10 @@
       "crippen_scaffold_r2": 0.797,
       "crippen_scaffold_rmse": 0.69,
       "crippen_scaffold_mae": 0.553,
+      "hybrid_scaffold_r2": 0.867,
+      "hybrid_scaffold_rmse": 0.559,
+      "hybrid_scaffold_mae": 0.431,
+      "hybrid_beats_or_matches_crippen_on_scaffold": true,
       "note_ar": "يضمن تقسيم الهياكل الجزيئية (Bemis-Murcko Scaffold Split) وضع جميع الجزيئات التي تشترك في نفس النواة الحلقية أو الهيكل الأساسي في نفس الطية، مما يختبر قدرة النموذج على التعميم على هياكل جزيئية جديدة لم يرها أثناء التدريب."
     },
     "hybrid_residual_qsar": {
@@ -253,8 +257,107 @@
       "hybrid_cv_mae": 0.384,
       "beats_or_matches_crippen_on_holdout": true,
       "beats_or_matches_crippen_on_cv": true,
+      "hybrid_scaffold_r2": 0.867,
+      "hybrid_scaffold_rmse": 0.559,
+      "hybrid_scaffold_mae": 0.431,
+      "beats_or_matches_crippen_on_scaffold": true,
+      "hybrid_loco_r2": 0.847,
+      "hybrid_loco_rmse": 0.605,
+      "hybrid_loco_mae": 0.479,
+      "beats_or_matches_crippen_on_loco": true,
       "explanation_ar": "نموذج هجين يدمج خط الأساس الفيزيائي (Wildman-Crippen cLogP) مع تصحيح انحدار Ridge منتظم (α=20) على الواصفات القطبية والطوبولوجية لمعالجة انحرافات الترابط الهيدروجيني الداخلي والقطبية الموضعية، محققاً على عينة الاختبار المستقلة R² = 0.92 و RMSE = 0.429 (مقابل Crippen منفرداً: R² = 0.813 و RMSE = 0.658)."
     },
+    "multi_seed_evaluation": {
+      "seeds": [
+        42,
+        7,
+        123,
+        2024,
+        999
+      ],
+      "ridge_r2_mean_std": [
+        0.85,
+        0.046
+      ],
+      "ridge_rmse_mean_std": [
+        0.569,
+        0.061
+      ],
+      "hybrid_r2_mean_std": [
+        0.896,
+        0.041
+      ],
+      "hybrid_rmse_mean_std": [
+        0.472,
+        0.069
+      ],
+      "crippen_r2_mean_std": [
+        0.754,
+        0.061
+      ],
+      "crippen_rmse_mean_std": [
+        0.736,
+        0.085
+      ]
+    },
+    "learning_curves": [
+      {
+        "train_fraction": 0.25,
+        "n_train_samples": 22,
+        "ridge_train_rmse": 0.31,
+        "ridge_val_rmse": 0.783,
+        "hybrid_train_rmse": 0.248,
+        "hybrid_val_rmse": 0.574
+      },
+      {
+        "train_fraction": 0.5,
+        "n_train_samples": 45,
+        "ridge_train_rmse": 0.466,
+        "ridge_val_rmse": 0.532,
+        "hybrid_train_rmse": 0.414,
+        "hybrid_val_rmse": 0.43
+      },
+      {
+        "train_fraction": 0.75,
+        "n_train_samples": 68,
+        "ridge_train_rmse": 0.524,
+        "ridge_val_rmse": 0.561,
+        "hybrid_train_rmse": 0.462,
+        "hybrid_val_rmse": 0.477
+      },
+      {
+        "train_fraction": 1.0,
+        "n_train_samples": 90,
+        "ridge_train_rmse": 0.5,
+        "ridge_val_rmse": 0.534,
+        "hybrid_train_rmse": 0.442,
+        "hybrid_val_rmse": 0.422
+      }
+    ],
+    "external_test_evaluation": {
+      "n_external": 15,
+      "ridge_ext_r2": 0.573,
+      "ridge_ext_rmse": 0.513,
+      "ridge_ext_mae": 0.434,
+      "hybrid_ext_r2": 0.748,
+      "hybrid_ext_rmse": 0.395,
+      "hybrid_ext_mae": 0.352,
+      "crippen_ext_r2": 0.414,
+      "crippen_ext_rmse": 0.601,
+      "crippen_ext_mae": 0.483,
+      "nested_tuned_ridge_alpha": 1.0,
+      "nested_tuned_hybrid_alpha": 5.0
+    },
+    "prediction_interval_calibration": {
+      "nominal_coverage_pct": 95.0,
+      "empirical_coverage_pct": 96.7,
+      "n_covered": 29,
+      "n_evaluated": 30,
+      "residual_std_train": 0.5519,
+      "is_well_calibrated": true,
+      "note_ar": "التغطية الفعلية المقيسة لفاصل التنبؤ 95% على عينة الاختبار المستقلة هي 96.7% (29/30 مركباً ضمن النطاق)، استناداً إلى تباين البواقي وقيم Leverage."
+    },
+    "dataset_provenance_count": 120,
     "baseline_comparison_analysis": {
       "pure_qsar_test_win_or_tie_count": 14,
       "test_total_count": 30,

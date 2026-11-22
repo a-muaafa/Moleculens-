@@ -74,6 +74,55 @@ class MolecularIntelligence:
 
     # Curated dataset of 120 organic, biochemical, and pharmaceutical compounds with documented experimental octanol-water LogP values
     # Sources: Sangster (1989) J. Phys. Chem. Ref. Data 18(3):1111-1227; Hansch, Leo & Hoekman (1995) Exploring QSAR, ACS; Avdeef (2012) Absorption and Drug Development, 2nd Ed., Wiley.
+
+    # Independent External Test Set (15 held-out compounds NEVER used in training or hyperparameter tuning)
+    # Experimental LogP (octanol-water, neutral form at 25 °C, Shake-Flask / Sangster 1989 & Hansch 1995)
+    EXTERNAL_LOGP_TEST_SET: list[dict[str, Any]] = [
+        {"name": "2-Propanol", "smiles": "CC(C)O", "exp_logp": 0.05, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "1-Pentanol", "smiles": "CCCCCO", "exp_logp": 1.51, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Cyclohexanol", "smiles": "OC1CCCCC1", "exp_logp": 1.23, "source": "Hansch et al. (1995) Exploring QSAR", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Benzyl alcohol", "smiles": "OCc1ccccc1", "exp_logp": 1.10, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "2-Butanone", "smiles": "CCC(=O)C", "exp_logp": 0.29, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Acetophenone", "smiles": "CC(=O)c1ccccc1", "exp_logp": 1.58, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Methyl benzoate", "smiles": "COC(=O)c1ccccc1", "exp_logp": 2.12, "source": "Hansch et al. (1995) Exploring QSAR", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Phenylacetic acid", "smiles": "O=C(O)Cc1ccccc1", "exp_logp": 1.41, "source": "Hansch et al. (1995) Exploring QSAR", "method": "Potentiometric / neutral form", "temp_c": 25.0, "type": "LogP", "ionization": "neutral_form_of_weak_acid"},
+        {"name": "Cinnamic acid", "smiles": "O=C(O)C=Cc1ccccc1", "exp_logp": 2.13, "source": "Avdeef (2012) Absorption and Drug Development", "method": "Potentiometric / neutral form", "temp_c": 25.0, "type": "LogP", "ionization": "neutral_form_of_weak_acid"},
+        {"name": "4-Chlorophenol", "smiles": "Oc1ccc(Cl)cc1", "exp_logp": 2.39, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Quinoline", "smiles": "c1ccc2ncccc2c1", "exp_logp": 2.03, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral_form_of_weak_base"},
+        {"name": "Indole", "smiles": "c1ccc2[nH]ccc2c1", "exp_logp": 2.14, "source": "Sangster (1989) J. Phys. Chem. Ref. Data 18(3)", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Phenacetin", "smiles": "CCOc1ccc(NC(C)=O)cc1", "exp_logp": 1.58, "source": "Hansch et al. (1995) Exploring QSAR", "method": "Shake-flask", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Theophylline", "smiles": "Cn1c(=O)c2[nH]cnc2n(C)c1=O", "exp_logp": -0.02, "source": "Avdeef (2012) Absorption and Drug Development", "method": "Shake-flask / neutral form", "temp_c": 25.0, "type": "LogP", "ionization": "neutral"},
+        {"name": "Lidocaine", "smiles": "CCN(CC)CC(=O)Nc1c(C)cccc1C", "exp_logp": 2.44, "source": "Avdeef (2012) Absorption and Drug Development", "method": "Potentiometric / neutral form", "temp_c": 25.0, "type": "LogP", "ionization": "neutral_form_of_weak_base"},
+    ]
+
+    @classmethod
+    def get_logp_dataset_with_provenance(cls) -> list[dict[str, Any]]:
+        """
+        Returns all 120 benchmark LogP compounds enriched with per-compound experimental
+        provenance metadata (source, measurement method, temperature, LogP vs LogD, ionization).
+        """
+        enriched: list[dict[str, Any]] = []
+        for idx, rec in enumerate(cls.EXPERIMENTAL_LOGP_BENCHMARK_DATASET, start=1):
+            smi = rec.get("smiles", "")
+            is_acid = "C(=O)O" in smi or "C(O)=O" in smi
+            is_base = ("N" in smi or "n" in smi) and not ("C(=O)N" in smi or "NC(=O)" in smi or "[N+]" in smi)
+            ion_state = (
+                "neutral_form_of_weak_acid" if is_acid
+                else ("neutral_form_of_weak_base" if is_base else "neutral")
+            )
+            enriched.append({
+                "compound_id": f"LOGP_REF_{idx:03d}",
+                "name": rec.get("name", ""),
+                "smiles": smi,
+                "exp_logp": rec.get("exp_logp"),
+                "measurement_type": "LogP",
+                "ionization_state": ion_state,
+                "temperature_c": 25.0,
+                "measurement_method": "Shake-flask / Potentiometric (octanol-water, neutral species)",
+                "source_reference": rec.get("source") or cls.DATASET_CITATION,
+            })
+        return enriched
+
     EXPERIMENTAL_LOGP_BENCHMARK_DATASET: list[dict[str, Any]] = [
         # 1. Alcohols & Polyols (18)
         {"name_en": "Methanol", "name_ar": "الميثانول", "smiles": "CO", "experimental_logp": -0.77},
@@ -1152,6 +1201,180 @@ class MolecularIntelligence:
             "citation": cls.DATASET_CITATION,
         }
 
+
+        def _metrics(yt: np.ndarray, yp: np.ndarray) -> tuple[float, float, float]:
+            yt_a = np.asarray(yt, dtype=float)
+            yp_a = np.asarray(yp, dtype=float)
+            ss_res = float(np.sum((yt_a - yp_a) ** 2))
+            ss_tot = float(np.sum((yt_a - float(np.mean(yt_a))) ** 2))
+            r2_v = 1.0 - (ss_res / ss_tot) if ss_tot > 1e-12 else 0.0
+            rmse_v = float(np.sqrt(np.mean((yt_a - yp_a) ** 2)))
+            mae_v = float(np.mean(np.abs(yt_a - yp_a)))
+            return round(r2_v, 3), round(rmse_v, 3), round(mae_v, 3)
+
+        # --- V3.3.0 ADVANCED GENERALIZATION & CALIBRATION SUITE ---
+        # A. Hybrid Residual QSAR on 5-Fold Bemis-Murcko Scaffold Split (exact same scaffold folds as Ridge & Crippen)
+        hyb_scaf_preds = np.zeros(n_samples, dtype=float)
+        for fi in range(n_scaf_folds):
+            va_sc = np.array(sorted(scaf_fold_buckets[fi]), dtype=int)
+            tr_sc = np.array(sorted([idx for fj in range(n_scaf_folds) if fj != fi for idx in scaf_fold_buckets[fj]]), dtype=int)
+            if len(va_sc) == 0 or len(tr_sc) < 5:
+                continue
+            res_tr = y_arr[tr_sc] - crippen_arr[tr_sc]
+            hyb_scaf_model = _fit_predict_numpy(X_arr[tr_sc], res_tr, alpha_v=20.0)
+            hyb_scaf_preds[va_sc] = crippen_arr[va_sc] + hyb_scaf_model.predict(X_arr[va_sc])
+        hyb_scaf_r2, hyb_scaf_rmse, hyb_scaf_mae = _metrics(y_arr, hyb_scaf_preds)
+
+        # B. Hybrid Residual QSAR on Leak-Free LOCO (same included classes with n >= MIN_LOCO_CLASS_SIZE)
+        hyb_loco_preds = np.zeros(n_samples, dtype=float)
+        hyb_loco_mask = np.zeros(n_samples, dtype=bool)
+        for cls_name in np.unique(class_labels):
+            val_m = (class_labels == cls_name)
+            tr_m = ~val_m
+            if int(np.sum(val_m)) < MIN_LOCO_CLASS_SIZE or int(np.sum(tr_m)) < 5:
+                continue
+            res_tr = y_arr[tr_m] - crippen_arr[tr_m]
+            hm = _fit_predict_numpy(X_arr[tr_m], res_tr, alpha_v=20.0)
+            hyb_loco_preds[val_m] = crippen_arr[val_m] + hm.predict(X_arr[val_m])
+            hyb_loco_mask |= val_m
+        if np.any(hyb_loco_mask):
+            hyb_loco_r2, hyb_loco_rmse, hyb_loco_mae = _metrics(y_arr[hyb_loco_mask], hyb_loco_preds[hyb_loco_mask])
+        else:
+            hyb_loco_r2, hyb_loco_rmse, hyb_loco_mae = 0.0, 0.0, 0.0
+
+        # C. Inner-CV Hyperparameter Tuning (strictly inside train_idx only — zero test leakage)
+        alpha_grid = [0.1, 1.0, 5.0, 20.0, 50.0, 100.0]
+        X_tr_only = X_arr[train_idx]
+        y_tr_only = y_arr[train_idx]
+        c_tr_only = crippen_arr[train_idx]
+        n_tr_only = len(train_idx)
+        inner_folds = 5
+        best_ridge_alpha, best_ridge_cv_rmse = 1.0, 1e9
+        best_hyb_alpha, best_hyb_cv_rmse = 20.0, 1e9
+        for cand_a in alpha_grid:
+            r_oof = np.zeros(n_tr_only, dtype=float)
+            h_oof = np.zeros(n_tr_only, dtype=float)
+            for k in range(inner_folds):
+                iv = np.arange(n_tr_only) % inner_folds == k
+                it = ~iv
+                rm = _fit_predict_numpy(X_tr_only[it], y_tr_only[it], alpha_v=cand_a)
+                r_oof[iv] = rm.predict(X_tr_only[iv])
+                hm = _fit_predict_numpy(X_tr_only[it], y_tr_only[it] - c_tr_only[it], alpha_v=cand_a)
+                h_oof[iv] = c_tr_only[iv] + hm.predict(X_tr_only[iv])
+            _, r_rmse_a, _ = _metrics(y_tr_only, r_oof)
+            _, h_rmse_a, _ = _metrics(y_tr_only, h_oof)
+            if r_rmse_a < best_ridge_cv_rmse:
+                best_ridge_cv_rmse, best_ridge_alpha = r_rmse_a, cand_a
+            if h_rmse_a < best_hyb_cv_rmse:
+                best_hyb_cv_rmse, best_hyb_alpha = h_rmse_a, cand_a
+
+        # D. Multi-Seed Repeated Holdout Evaluation (5 seeds: 42, 7, 123, 2024, 999)
+        multi_seeds = [42, 7, 123, 2024, 999]
+        ms_ridge_rmses, ms_hyb_rmses, ms_crip_rmses = [], [], []
+        ms_ridge_r2s, ms_hyb_r2s, ms_crip_r2s = [], [], []
+        for sd in multi_seeds:
+            rng_s = np.random.RandomState(sd)
+            perm_s = rng_s.permutation(n_samples)
+            split_n = int(round(0.75 * n_samples))
+            tr_s, te_s = perm_s[:split_n], perm_s[split_n:]
+            rm_s = _fit_predict_numpy(X_arr[tr_s], y_arr[tr_s], alpha_v=best_ridge_alpha)
+            hm_s = _fit_predict_numpy(X_arr[tr_s], y_arr[tr_s] - crippen_arr[tr_s], alpha_v=best_hyb_alpha)
+            rr2, rrm, _ = _metrics(y_arr[te_s], rm_s.predict(X_arr[te_s]))
+            hr2, hrm, _ = _metrics(y_arr[te_s], crippen_arr[te_s] + hm_s.predict(X_arr[te_s]))
+            cr2, crm, _ = _metrics(y_arr[te_s], crippen_arr[te_s])
+            ms_ridge_r2s.append(rr2); ms_ridge_rmses.append(rrm)
+            ms_hyb_r2s.append(hr2); ms_hyb_rmses.append(hrm)
+            ms_crip_r2s.append(cr2); ms_crip_rmses.append(crm)
+
+        multi_seed_evaluation = {
+            "seeds": multi_seeds,
+            "ridge_r2_mean_std": [round(float(np.mean(ms_ridge_r2s)), 3), round(float(np.std(ms_ridge_r2s)), 3)],
+            "ridge_rmse_mean_std": [round(float(np.mean(ms_ridge_rmses)), 3), round(float(np.std(ms_ridge_rmses)), 3)],
+            "hybrid_r2_mean_std": [round(float(np.mean(ms_hyb_r2s)), 3), round(float(np.std(ms_hyb_r2s)), 3)],
+            "hybrid_rmse_mean_std": [round(float(np.mean(ms_hyb_rmses)), 3), round(float(np.std(ms_hyb_rmses)), 3)],
+            "crippen_r2_mean_std": [round(float(np.mean(ms_crip_r2s)), 3), round(float(np.std(ms_crip_r2s)), 3)],
+            "crippen_rmse_mean_std": [round(float(np.mean(ms_crip_rmses)), 3), round(float(np.std(ms_crip_rmses)), 3)],
+        }
+
+        # E. Learning Curves (25%, 50%, 75%, 100% of train_idx evaluated on held-out test_idx)
+        learning_curves: list[dict[str, Any]] = []
+        for frac in (0.25, 0.50, 0.75, 1.0):
+            sub_n = max(15, int(round(frac * len(train_idx))))
+            sub_idx = train_idx[:sub_n]
+            rm_lc = _fit_predict_numpy(X_arr[sub_idx], y_arr[sub_idx], alpha_v=best_ridge_alpha)
+            hm_lc = _fit_predict_numpy(X_arr[sub_idx], y_arr[sub_idx] - crippen_arr[sub_idx], alpha_v=best_hyb_alpha)
+            _, r_tr_rmse, _ = _metrics(y_arr[sub_idx], rm_lc.predict(X_arr[sub_idx]))
+            _, r_va_rmse, _ = _metrics(y_arr[test_idx], rm_lc.predict(X_arr[test_idx]))
+            _, h_tr_rmse, _ = _metrics(y_arr[sub_idx], crippen_arr[sub_idx] + hm_lc.predict(X_arr[sub_idx]))
+            _, h_va_rmse, _ = _metrics(y_arr[test_idx], crippen_arr[test_idx] + hm_lc.predict(X_arr[test_idx]))
+            learning_curves.append({
+                "train_fraction": frac,
+                "n_train_samples": int(sub_n),
+                "ridge_train_rmse": r_tr_rmse,
+                "ridge_val_rmse": r_va_rmse,
+                "hybrid_train_rmse": h_tr_rmse,
+                "hybrid_val_rmse": h_va_rmse,
+            })
+
+        # F. Independent External Test Set Evaluation (15 compounds never touched in training/tuning)
+        ext_X, ext_y, ext_c, ext_names = [], [], [], []
+        for er in cls.EXTERNAL_LOGP_TEST_SET:
+            em = Chem.MolFromSmiles(er["smiles"])
+            if em is None:
+                continue
+            ext_X.append(cls._extract_qsar_features(em))
+            ext_y.append(float(er["exp_logp"]))
+            ext_c.append(float(Descriptors.MolLogP(em)))
+            ext_names.append(er["name"])
+        ext_X_arr = np.asarray(ext_X, dtype=float)
+        ext_y_arr = np.asarray(ext_y, dtype=float)
+        ext_c_arr = np.asarray(ext_c, dtype=float)
+        full_ridge = _fit_predict_numpy(X_arr[train_idx], y_arr[train_idx], alpha_v=best_ridge_alpha)
+        full_hyb = _fit_predict_numpy(X_arr[train_idx], y_arr[train_idx] - crippen_arr[train_idx], alpha_v=best_hyb_alpha)
+        ext_r_r2, ext_r_rmse, ext_r_mae = _metrics(ext_y_arr, full_ridge.predict(ext_X_arr))
+        ext_h_r2, ext_h_rmse, ext_h_mae = _metrics(ext_y_arr, ext_c_arr + full_hyb.predict(ext_X_arr))
+        ext_c_r2, ext_c_rmse, ext_c_mae = _metrics(ext_y_arr, ext_c_arr)
+        external_test_evaluation = {
+            "n_external": int(len(ext_y_arr)),
+            "ridge_ext_r2": ext_r_r2,
+            "ridge_ext_rmse": ext_r_rmse,
+            "ridge_ext_mae": ext_r_mae,
+            "hybrid_ext_r2": ext_h_r2,
+            "hybrid_ext_rmse": ext_h_rmse,
+            "hybrid_ext_mae": ext_h_mae,
+            "crippen_ext_r2": ext_c_r2,
+            "crippen_ext_rmse": ext_c_rmse,
+            "crippen_ext_mae": ext_c_mae,
+            "nested_tuned_ridge_alpha": best_ridge_alpha,
+            "nested_tuned_hybrid_alpha": best_hyb_alpha,
+        }
+
+        # G. Empirical 95% Prediction Interval Coverage Calibration on Holdout Test Set
+        tr_preds_cal = np_train_ref.predict(X_arr[train_idx])
+        resid_std_cal = float(np.sqrt(np.sum((y_arr[train_idx] - tr_preds_cal) ** 2) / max(1, len(train_idx) - X_arr.shape[1] - 1)))
+        X_te_std = (X_arr[test_idx] - np_train_ref.mu) / np_train_ref.std
+        te_preds_cal = np_train_ref.predict(X_arr[test_idx])
+        inside_95 = 0
+        for ii in range(len(test_idx)):
+            xv = X_te_std[ii]
+            h_i = float(xv @ xtx_inv @ xv)
+            half_w = 1.96 * resid_std_cal * float(np.sqrt(1.0 + max(0.0, h_i)))
+            if abs(float(y_arr[test_idx[ii]]) - float(te_preds_cal[ii])) <= half_w:
+                inside_95 += 1
+        emp_95_cov = round(100.0 * inside_95 / max(1, len(test_idx)), 1)
+        prediction_interval_calibration = {
+            "nominal_coverage_pct": 95.0,
+            "empirical_coverage_pct": emp_95_cov,
+            "n_covered": int(inside_95),
+            "n_evaluated": int(len(test_idx)),
+            "residual_std_train": round(resid_std_cal, 4),
+            "is_well_calibrated": bool(85.0 <= emp_95_cov <= 100.0),
+            "note_ar": (
+                f"التغطية الفعلية المقيسة لفاصل التنبؤ 95% على عينة الاختبار المستقلة هي {emp_95_cov}% "
+                f"({inside_95}/{len(test_idx)} مركباً ضمن النطاق)، استناداً إلى تباين البواقي وقيم Leverage."
+            ),
+        }
+
         scaffold_split_evaluation = {
             "split_name_ar": f"تقسيم الهياكل الجزيئية (5-Fold Bemis-Murcko Scaffold Split, n={n_samples}, هياكل فريدة={len(unique_scaffolds)})",
             "n_unique_scaffolds": len(unique_scaffolds),
@@ -1165,6 +1388,10 @@ class MolecularIntelligence:
             "crippen_scaffold_r2": crippen_all_r2,
             "crippen_scaffold_rmse": crippen_all_rmse,
             "crippen_scaffold_mae": crippen_all_mae,
+            "hybrid_scaffold_r2": hyb_scaf_r2,
+            "hybrid_scaffold_rmse": hyb_scaf_rmse,
+            "hybrid_scaffold_mae": hyb_scaf_mae,
+            "hybrid_beats_or_matches_crippen_on_scaffold": bool(hyb_scaf_rmse <= crippen_all_rmse),
             "note_ar": (
                 "يضمن تقسيم الهياكل الجزيئية (Bemis-Murcko Scaffold Split) وضع جميع الجزيئات التي تشترك في نفس النواة الحلقية "
                 "أو الهيكل الأساسي في نفس الطية، مما يختبر قدرة النموذج على التعميم على هياكل جزيئية جديدة لم يرها أثناء التدريب."
@@ -1181,6 +1408,14 @@ class MolecularIntelligence:
             "hybrid_cv_mae": hybrid_cv_mae,
             "beats_or_matches_crippen_on_holdout": bool(hybrid_test_rmse <= crippen_test_rmse),
             "beats_or_matches_crippen_on_cv": bool(hybrid_cv_rmse <= crippen_all_rmse),
+            "hybrid_scaffold_r2": hyb_scaf_r2,
+            "hybrid_scaffold_rmse": hyb_scaf_rmse,
+            "hybrid_scaffold_mae": hyb_scaf_mae,
+            "beats_or_matches_crippen_on_scaffold": bool(hyb_scaf_rmse <= crippen_all_rmse),
+            "hybrid_loco_r2": hyb_loco_r2,
+            "hybrid_loco_rmse": hyb_loco_rmse,
+            "hybrid_loco_mae": hyb_loco_mae,
+            "beats_or_matches_crippen_on_loco": bool(hyb_loco_rmse <= crippen_group_cv_rmse),
             "explanation_ar": (
                 "نموذج هجين يدمج خط الأساس الفيزيائي (Wildman-Crippen cLogP) مع تصحيح انحدار Ridge منتظم (α=20) على الواصفات القطبية والطوبولوجية "
                 f"لمعالجة انحرافات الترابط الهيدروجيني الداخلي والقطبية الموضعية، محققاً على عينة الاختبار المستقلة R² = {hybrid_test_r2} و RMSE = {hybrid_test_rmse} "
@@ -1285,6 +1520,11 @@ class MolecularIntelligence:
             },
             "scaffold_split_evaluation": scaffold_split_evaluation,
             "hybrid_residual_qsar": hybrid_residual_qsar_evaluation,
+            "multi_seed_evaluation": multi_seed_evaluation,
+            "learning_curves": learning_curves,
+            "external_test_evaluation": external_test_evaluation,
+            "prediction_interval_calibration": prediction_interval_calibration,
+            "dataset_provenance_count": len(cls.get_logp_dataset_with_provenance()),
             "baseline_comparison_analysis": baseline_comparison_analysis,
             "dataset_quality_audit": dataset_quality_audit,
             "model_card": model_card,

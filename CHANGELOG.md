@@ -1,5 +1,30 @@
 # سجل التغييرات (Changelog) — MolecuLens
 
+## [3.3.0] - 2026-11-22 — التدقيق العلمي الشامل (18 بنداً): مقارنة RDKit، تعميم QSAR، شبكة التفاعلات، اتزان المعايرة، وREST API
+
+### المرحلة 1 — إصلاح الأساس العلمي
+- **مجموعة اختبار مرجعية من 150 جزيئاً (`scripts/benchmark_rdkit_parity.py`):** مقارنة RDKit الأصلي مع البديل المدمج عبر 8 خصائص (الصيغة، الوزن، Canonical SMILES، Morgan FP، Tanimoto، SMARTS، Bemis-Murcko، والواصفات) وتوليد `results/rdkit_parity_report.json` مع حظر البديل في الوضع العلمي الصارم (`assert_native_rdkit_if_strict`).
+- **تحذير الرسم التخطيطي التقريبي:** وسم رسوم SVG الصادرة عن البديل بعبارة `Schematic Only (Pure-Python Fallback)` وعرض تحذير واضح في `frontend/structure_viewer.py`.
+- **إصلاح خطأ القيم الناقصة في Lipinski (`education/ai_assistant.py`):** القيم الناقصة تنتج `unavailable` أبداً وليس `pass`، مع فصل `lipinski_compliant` عن `drug_likeness`.
+- **توثيق بيانات LogP على مستوى كل مركب (`get_logp_dataset_with_provenance`):** المصدر، طريقة القياس، الحرارة (25 °C)، نوع القيمة (`LogP`)، وحالة التأين.
+
+### المرحلة 2 — تقوية الذكاء الاصطناعي
+- **تقييم شامل لتعميم QSAR (`chemistry_engine/molecular_intelligence.py`):** تقييم `Hybrid Residual QSAR` على `5-Fold Scaffold Split` و`Leak-Free LOCO` مقارنة بـ `Ridge` و`Wildman-Crippen` على نفس الطيات، مع 5 بذور عشوائية، `External Test Set` مستقل (15 مركباً)، `Learning Curves`، ضبط `alpha` داخل التدريب فقط (`Nested Inner-CV`)، ومعايرة التغطية الفعلية لفاصل التنبؤ 95%.
+- **المساعد العلمي ذو الـ 3 طبقات (`education/ai_assistant.py`):** إعادة هيكلة المساعد كمساعد قواعدي واسترجاعي موثق (`rule_based_retrieval_grounded`) يستخدم `compound_data` فعلياً، يفصل الحقائق المرجعية عن القراءة السياقية، ويصحح العبارات العلمية المبالغ فيها حول `LogP` و`TPSA` و`Lipinski`.
+
+### المرحلة 3 — تقوية المحركات العلمية
+- **شبكة التفاعلات (`analyze_reaction_network` في `reaction_engine/prediction.py`):** تحليل جميع الأزواج والمجموعات، رصد المسارات المتنافسة والمتفاعلات المشتركة والمواد غير المتفاعلة، ومنع الاستهلاك المزدوج أو فرض ناتج وحيد عند التنافس غير المحسوم.
+- **إصلاح `domain` وترتيب فحص عدم التفاعل:** تمرير `domain` إلى السجل الموثق وقواعد الاستنتاج، وتقديم `check_explicit_no_reaction()` قبل الاستنتاج القواعدي العام.
+- **فصل `citation_exists` عن `source_manually_verified`** في `reaction_engine/scientific_audit.py`.
+- **نموذج اتزان المعايرة العام (`solve_equilibrium_ph_exact` في `titration/titration_engine.py`):** حل معادلات حفظ الكتلة والشحنة وجميع ثوابت `Ka/Kb` و`Kw(T)` وتصحيح `Davies` للنشاط الأيوني، دون قص `pH` خارج `[0, 14]`، مع 9 اختبارات مرجعية شاملة (`tests/test_titration_reference_curves.py`).
+
+### المرحلة 4 — هندسة الباك إند والاختبارات
+- **طبقة Repository قابلة للتدقيق (`data_integrations/repository.py`):** حقول `source_id`, `source_url`, `source_version`, `retrieved_at`, `verified_at`, `verification_status`, `license`, `data_quality_status`, `record_origin`.
+- **خادم REST API حقيقي (`api/server.py` عبر FastAPI)** مع اختبارات تكامل HTTP (`TestClient`).
+- **مصفوفة CI ثنائية (`.github/workflows/tests.yml`):** وظيفة `native-rdkit` ووظيفة `pure-python-fallback`.
+
+---
+
 ## [3.2.0] - 2026-11-21 — جاهزية الهاكاثون، العمل دون إنترنت (Offline-First)، التخزين المؤقت، وتدقيق المعايرة وبديل RDKit
 
 ### الإصلاحات الحرجة وجاهزية العرض المباشر (Phase 1)

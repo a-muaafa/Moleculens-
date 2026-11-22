@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 from chemistry_engine.formula_analyzer import format_chemical_formula_display
 from chemistry_engine.structure_analyzer import (
     CPK_ELEMENT_COLORS,
+    USING_RDKIT_FALLBACK,
     analyze_molecular_structure,
     generate_3d_conformer_data,
     render_molecule_2d_svg,
@@ -116,6 +117,11 @@ def _3dmol_html(mol_block: str | None, pdb_id: str | None) -> str:
 
 
 def render_structure_viewer(entity: dict[str, Any], key_prefix: str = "sv") -> None:
+    if USING_RDKIT_FALLBACK:
+        st.warning(
+            "تنبيه علمي (رسم تخطيطي تقريبي): مكتبة RDKit الأصلية غير مثبتة في هذه البيئة؛ "
+            "الرسم المعروض أدناه هو رسم تخطيطي تقريبي (Schematic Only) ولا يمثل مواضع الذرات أو الهندسة الجزيئية الدقيقة."
+        )
     smiles = (entity.get("canonical_smiles") or "").strip()
     formula = entity.get("symbol_or_formula", "")
     disp_formula = format_chemical_formula_display(formula)

@@ -1,7 +1,11 @@
 """
-AI Scientific Assistant for MolecuLens.
-Provides pedagogical explanations, step-by-step breakdowns of chemical properties,
-Lipinski rule interpretation, and interactive student Q&A grounded strictly in calculated data.
+Grounded Scientific Educational Assistant for MolecuLens.
+Explicitly structured as a 3-layer Rule-Based & Retrieval-Grounded Educational Assistant
+(NOT a generative LLM):
+  Layer 1 — Scientific Data: computed physicochemical descriptors, equations, and verified records.
+  Layer 2 — Retrieval & Context: retrieves grounded context from compound_data and local verified catalogs with citations.
+  Layer 3 — Explanation: explains computed results and concepts in Arabic/English without inventing numbers,
+            reactions, or unverified drug claims, and explicitly distinguishes reference facts from inferences.
 """
 
 from typing import Any, Optional
@@ -9,7 +13,14 @@ import html
 
 
 class AIScientificAssistant:
-    """Explains compound analysis and physicochemical properties with zero data hallucination."""
+    """
+    Rule-based and retrieval-grounded educational assistant.
+    Never invents numbers, reaction products, or unverified medical/pharmacological claims.
+    """
+
+    ASSISTANT_ARCHITECTURE = "rule_based_retrieval_grounded"
+    ASSISTANT_LABEL_AR = "مساعد تعليمي قواعدي ومبني على الاسترجاع الموثق (Rule-Based & Retrieval-Grounded Assistant)"
+    ASSISTANT_LABEL_EN = "Rule-Based & Retrieval-Grounded Educational Assistant"
 
     PROP_MAP = {
         "mw": "molecular_weight",
@@ -25,62 +36,106 @@ class AIScientificAssistant:
         "molecular_weight": {
             "title_ar": "الوزن الجزيئي (Molecular Weight - MW)",
             "title_en": "Molecular Weight (MW)",
-            "meaning_ar": "مجموع الكتل الذرية لجميع الذرات المكونة للجزيء بوحدة جرام/مول (Da).",
-            "meaning_en": "Sum of atomic weights of all constituent atoms in g/mol (Da).",
-            "significance_ar": "يحدد حجم الجزيء وقدرته على النفاذ عبر الأغشية الخلوية؛ تفضل الأدوية الفموية وزناً جزيئياً أقل من 500 Da وفق قاعدة ليبينسكي.",
-            "significance_en": "Determines molecule size and membrane permeation; oral drugs generally require MW <= 500 Da per Lipinski's rule.",
-            "threshold": "MW <= 500 Da",
+            "meaning_ar": "مجموع الكتل الذرية لجميع الذرات المكونة للجزيء بوحدة دالتون / جرام لكل مول (Da).",
+            "meaning_en": "Sum of atomic weights of all constituent atoms in Da (g/mol).",
+            "significance_ar": (
+                "مؤشر إرشادي لحجم الجزيء؛ تشير قاعدة ليبينسكي الاستكشافية إلى حد MW <= 500 Da كمرشّح أولي "
+                "لكثير من الجزيئات الصغيرة الفموية، لكن توجد أدوية فموية معتمدة تتجاوز هذا الحد ولا يضمن وحده الامتصاص."
+            ),
+            "significance_en": (
+                "An empirical size heuristic; Lipinski's Rule of Five uses MW <= 500 Da as an initial filter "
+                "for small oral molecules, though approved oral exceptions exist and MW alone does not guarantee absorption."
+            ),
+            "threshold": "MW <= 500 Da (إرشادي)",
             "limit": 500.0,
+            "source": "Lipinski et al. (1997) Adv. Drug Deliv. Rev. 23(1-3), 3-25",
         },
         "logp": {
-            "title_ar": "معامل التقسيم والتوزع الدهني (Partition Coefficient - LogP)",
+            "title_ar": "معامل التقسيم الدهني/المائي (Partition Coefficient - LogP)",
             "title_en": "Partition Coefficient (LogP)",
-            "meaning_ar": "لوغاريتم نسبة تركيز المركب في الأوكتانول مقارنة بالماء؛ يقيس مدى ألفة الجزيء للدهون (Lipophilicity).",
-            "meaning_en": "Logarithm of compound concentration ratio between octanol and water; measures lipophilicity.",
-            "significance_ar": "قيم LogP المعتدلة (بين 0 و 5) تدل على توازن مثالي بين الذوبانية في سوائل الجسم المائية والقدرة على عبور الحواجز الدهنية للخلايا.",
-            "significance_en": "Moderate LogP (0 to 5) balances aqueous solubility in bodily fluids with lipid membrane permeability.",
-            "threshold": "LogP <= 5.0",
+            "meaning_ar": "لوغاريتم نسبة تركيز الشكل المتعادل للمركب بين الأوكتانول والماء؛ يقيس الألفة للدهون (Lipophilicity).",
+            "meaning_en": "Logarithm of the neutral species concentration ratio between octanol and water; measures lipophilicity.",
+            "significance_ar": (
+                "يُستخدم نطاق LogP المعتدل (غالباً نحو 0 إلى 3 أو <= 5 وفق مؤشر ليبينسكي) كقاعدة إرشادية أولية "
+                "لموازنة الذوبانية المائية والنفاذية السلبية عبر الأغشية، لكنه ليس نطاقاً مثالياً عاماً لكل الأدوية "
+                "ولا يغني عن قياس الذوبانية والأيض وLogD عند pH فسيولوجي."
+            ),
+            "significance_en": (
+                "Moderate LogP values (heuristic threshold LogP <= 5 in Lipinski's filter) serve as an empirical guideline "
+                "balancing aqueous solubility and passive membrane diffusion, not a universal ideal range or guarantee of bioavailability."
+            ),
+            "threshold": "LogP <= 5.0 (إرشادي)",
             "limit": 5.0,
+            "source": "Lipinski et al. (1997); Sangster (1989) J. Phys. Chem. Ref. Data",
         },
         "hbd": {
             "title_ar": "مانحات الروابط الهيدروجينية (Hydrogen Bond Donors - HBD)",
             "title_en": "Hydrogen Bond Donors (HBD)",
             "meaning_ar": "عدد ذرات الهيدروجين المرتبطة بذرات عالية الكهروسالبية (مثل -OH و -NH).",
             "meaning_en": "Count of hydrogen atoms bonded to electronegative atoms (-OH, -NH).",
-            "significance_ar": "العدد الزائد من المانحات (> 5) يزيد من طاقة نزع الإماهة (Desolvation Energy) ويعيق امتصاص الدواء عبر بطانة الأمعاء.",
-            "significance_en": "Excess donors (> 5) raise desolvation energy, hindering intestinal membrane absorption.",
-            "threshold": "HBD <= 5",
+            "significance_ar": (
+                "مؤشر إرشادي: ارتفاع عدد المانحات عن 5 يرتبط إحصائياً بزيادة طاقة نزع الإماهة وصعوبة النفاذ السلبي، "
+                "مع وجود استثناءات تعتمد على النقل النشط أو طبيعة الهدف الدوائي."
+            ),
+            "significance_en": (
+                "An empirical heuristic: HBD > 5 statistically correlates with higher desolvation penalty and lower passive permeability, "
+                "though active transport and clinical exceptions exist."
+            ),
+            "threshold": "HBD <= 5 (إرشادي)",
             "limit": 5.0,
+            "source": "Lipinski et al. (1997) Adv. Drug Deliv. Rev.",
         },
         "hba": {
             "title_ar": "مستقبلات الروابط الهيدروجينية (Hydrogen Bond Acceptors - HBA)",
             "title_en": "Hydrogen Bond Acceptors (HBA)",
-            "meaning_ar": "عدد ذرات النيتروجين والأكسجين ذات الأزواج الإلكترونية الحرة القادرة على استقبال رابطة هيدروجينية.",
-            "meaning_en": "Count of N and O atoms with lone pairs capable of accepting an H-bond.",
-            "significance_ar": "تساعد في تثبيت الدواء داخل الجيب الرابط للبروتين الهدف، لكن زيادتها عن 10 تقلل من النفاذية الغشائية الفموية.",
-            "significance_en": "Facilitates target binding cavity anchoring, but exceeding 10 lowers oral membrane permeability.",
-            "threshold": "HBA <= 10",
+            "meaning_ar": "عدد ذرات النيتروجين والأكسجين القادرة على استقبال رابطة هيدروجينية.",
+            "meaning_en": "Count of N and O atoms capable of accepting a hydrogen bond.",
+            "significance_ar": (
+                "مؤشر إرشادي ضمن قاعدة ليبينسكي (<= 10)؛ يساعد في التفاعل القطبي مع الأهداف الحيوية، "
+                "وزيادته المفرطة قد تقلل النفاذية السلبية دون أن تمنع التطوير الدوائي بصورة مطلقة."
+            ),
+            "significance_en": (
+                "An empirical heuristic within Lipinski's filter (<= 10); excess acceptors often correlate with lower passive "
+                "permeability but do not rigidly preclude drug development."
+            ),
+            "threshold": "HBA <= 10 (إرشادي)",
             "limit": 10.0,
+            "source": "Lipinski et al. (1997) Adv. Drug Deliv. Rev.",
         },
         "tpsa": {
             "title_ar": "مساحة السطح القطبي الطوبولوجي (Topological Polar Surface Area - TPSA)",
             "title_en": "Topological Polar Surface Area (TPSA)",
-            "meaning_ar": "مجموع مساحات السطح للذرات القطبية (الأكسجين والنيتروجين وذرات الهيدروجين المرتبطة بها) بوحدة أنغستروم مربع (Å²).",
-            "meaning_en": "Total surface sum of polar atoms (O, N, and attached H) in square angstroms (Å²).",
-            "significance_ar": "تنبئ بنفاذية الدواء؛ إذا كانت TPSA أقل من 140 Å² يكون الامتصاص المعوي جيداً، وإذا كانت أقل من 90 Å² يمكن للمركب عبور الحاجز الدموي الدماغي (BBB).",
-            "significance_en": "Predicts permeability; TPSA <= 140 Å² correlates with good intestinal absorption, and <= 90 Å² with BBB penetration.",
-            "threshold": "TPSA <= 140 Å² (BBB <= 90 Å²)",
+            "meaning_ar": "مجموع مساحات السطح التقريبية للذرات القطبية (الأكسجين والنيتروجين والهيدروجين المرتبط بهما) بوحدة (Å²).",
+            "meaning_en": "Approximate surface sum over polar atoms (O, N, and attached H) in Å².",
+            "significance_ar": (
+                "مؤشر إرشادي يرتبط إحصائياً بالنفاذية السلبية: القيم <= 140 Å² (قاعدة فيبر) ترتبط غالباً بفرص أفضل "
+                "للامتصاص المعوي السلبي، والقيم <= 90 Å² تُستخدم كمؤشر مبدئي لاحتمال عبور الحاجز الدموي الدماغي (BBB)، "
+                "لكنها ليست شروطاً لازمة أو حاسمة ولا تضمن النفاذية الفعلية (التي تتأثر بمضخات الطرد مثل P-gp والتأين)."
+            ),
+            "significance_en": (
+                "An empirical heuristic statistically associated with passive permeability: TPSA <= 140 Å² (Veber) is a guideline "
+                "for oral passive absorption and <= 90 Å² is a rough guideline for CNS/BBB penetration, NOT a strict requirement or guarantee."
+            ),
+            "threshold": "TPSA <= 140 Å² إرشادي للامتصاص (<= 90 Å² إرشادي للـ BBB)",
             "limit": 140.0,
+            "source": "Ertl et al. (2000) J. Med. Chem.; Veber et al. (2002) J. Med. Chem. 45(12), 2615-2623",
         },
         "rotatable_bonds": {
             "title_ar": "الروابط القابلة للدوران (Rotatable Bonds)",
             "title_en": "Rotatable Bonds",
-            "meaning_ar": "الروابط الأحادية غير الحلقية بين ذرات غير طرفية والقابلة للدوران الحر.",
-            "meaning_en": "Single non-ring bonds between non-terminal heavy atoms with free rotation.",
-            "significance_ar": "تعبر عن مرونة الجزيء؛ الجزيئات ذات الروابط القابلة للدوران (<= 10) تكون أيسر في الارتباط الانتقائي بالهدف الحيوي مع ثبات تكويني أعلى.",
-            "significance_en": "Reflects conformational flexibility; <= 10 rotatable bonds optimizes selective binding entropy.",
-            "threshold": "Rotatable Bonds <= 10",
+            "meaning_ar": "الروابط الأحادية غير الحلقية بين ذرات ثقيلة غير طرفية والقابلة للدوران.",
+            "meaning_en": "Single non-ring bonds between non-terminal heavy atoms.",
+            "significance_ar": (
+                "مؤشر إرشادي للمرونة التكوينية؛ تقترح قاعدة فيبر <= 10 روابط كدليل عام لتقليل الخسارة الإنتروبية "
+                "عند الارتباط، لكنها قاعدة إرشادية وليست شرطاً قاطعاً."
+            ),
+            "significance_en": (
+                "An empirical flexibility heuristic; Veber's guideline suggests <= 10 rotatable bonds to limit entropic loss, "
+                "not a strict requirement."
+            ),
+            "threshold": "Rotatable Bonds <= 10 (إرشادي)",
             "limit": 10.0,
+            "source": "Veber et al. (2002) J. Med. Chem.",
         },
     }
 
@@ -114,15 +169,15 @@ class AIScientificAssistant:
             limit = meta["limit"]
             if value <= limit:
                 context_eval = (
-                    f"القيمة المقاسة ({value}) في نطاق سليم ومثالي لقاعدة ليبينسكي."
+                    f"القيمة المحسوبة ({value}) تقع ضمن الحد الإرشادي الشائع (<= {limit})؛ وهذا مؤشر أولي وليس ضماناً للأداء الحيوي."
                     if is_ar
-                    else f"Measured value ({value}) complies within optimal threshold."
+                    else f"Computed value ({value}) falls within the common heuristic guideline (<= {limit}); indicative only, not a guarantee."
                 )
             else:
                 context_eval = (
-                    f"القيمة المقاسة ({value}) تتجاوز الحد الموصى به ({limit})."
+                    f"القيمة المحسوبة ({value}) تتجاوز الحد الإرشادي الشائع ({limit})، مما يستدعي مراجعة أوسع للخصائص الحركية."
                     if is_ar
-                    else f"Exceeds recommended optimal threshold ({limit})."
+                    else f"Computed value ({value}) exceeds the common heuristic guideline ({limit})."
                 )
 
         return {
@@ -135,6 +190,7 @@ class AIScientificAssistant:
             "optimal_range": optimal_range,
             "context_evaluation": context_eval,
             "measured_value": value,
+            "source": meta.get("source", ""),
         }
 
     @classmethod
@@ -154,9 +210,8 @@ class AIScientificAssistant:
         id_ver = profile.get("identity_verification", {})
         if id_ver.get("is_verified"):
             text += (
-                "**حالة التحقق البنيوي (Structure Identity):** تم إثبات مطابقة البنية الكيميائية الحقيقية "
-                "مع الصيغة المسجلة ومعرفات قواعد البيانات المرجعية (PubChem / ChEMBL / ChEBI) بنسبة 100%، "
-                "مما يضمن عدم الخلط بين هذه المادة والمصاوغات الفراغية أو التركيبية الأخرى.\n\n"
+                "**حالة التحقق البنيوي (Structure Identity):** تم التحقق من تطابق الصيغة المستخرجة من البنية "
+                "مع الصيغة المسجلة ومعرفات قواعد البيانات المرجعية.\n\n"
             )
         else:
             text += f"**حالة التحقق البنيوي:** {html.escape(id_ver.get('status_ar', 'التحقق غير مكتمل'))}.\n\n"
@@ -169,14 +224,34 @@ class AIScientificAssistant:
         metrics: dict[str, Any] | None,
         lang: str = "ar",
     ) -> dict[str, Any]:
+        """
+        Evaluates Lipinski's Rule of Five strictly without coercing missing values to 0.0.
+        - Missing required descriptors produce status='unavailable' (NEVER 'pass').
+        - Explicitly separates Lipinski rule compliance from broader Drug-likeness.
+        """
+        is_ar = lang == "ar"
+        caveat_ar = (
+            "تنبيه منهجي: قاعدة ليبينسكي مرشّح إرشادي أولي للتوافق البنيوي فقط (Lipinski Compliance) "
+            "وليست مكافئة لمفهوم الصلاحية الدوائية الكاملة (Drug-likeness)، ولا تتنبأ وحدها بالفعالية أو السلامة أو التوافر الحيوي الفموي الفعلي."
+        )
+        caveat_en = (
+            "Methodological caveat: Lipinski compliance is an empirical heuristic filter only, distinct from overall "
+            "drug-likeness, and does not by itself predict efficacy, safety, or actual oral bioavailability."
+        )
+
         if not metrics:
             return {
                 "available": False,
-                "summary": "البيانات غير متاحة" if lang == "ar" else "Data unavailable",
-                "summary_ar": "الخصائص الدوائية ومحددات ليبينسكي غير متاحة حالياً.",
-                "violations_count": 0,
-                "is_compliant": False,
-                "is_druglike": False,
+                "status": "unavailable",
+                "summary": "البيانات غير متاحة لتقييم قاعدة ليبينسكي." if is_ar else "Data unavailable for Lipinski evaluation.",
+                "summary_ar": "الخصائص الفيزيوكيميائية غير متاحة لتقييم قاعدة ليبينسكي.",
+                "violations_count": None,
+                "missing_parameters": ["MW", "LogP", "HBD", "HBA"],
+                "is_compliant": None,
+                "lipinski_compliant": None,
+                "is_druglike": None,
+                "drug_likeness_note_ar": caveat_ar,
+                "drug_likeness_note_en": caveat_en,
                 "details": [],
             }
 
@@ -185,77 +260,118 @@ class AIScientificAssistant:
         elif "calculated_drug_descriptors" in metrics:
             metrics = metrics["calculated_drug_descriptors"]
 
-        mw = float(metrics.get("molecular_weight", 0.0) or 0.0)
-        logp = float(metrics.get("logp", 0.0) or 0.0)
-        hbd = int(metrics.get("hbd", 0) or 0)
-        hba = int(metrics.get("hba", 0) or 0)
-        tpsa = float(metrics.get("tpsa", 0.0) or 0.0)
-        rot = int(metrics.get("rotatable_bonds", 0) or 0)
+        def _parse_num(val: Any) -> Optional[float]:
+            if val is None or isinstance(val, bool):
+                return None
+            try:
+                f = float(val)
+                return f if f == f else None  # reject NaN
+            except (TypeError, ValueError):
+                return None
 
-        details = []
+        mw = _parse_num(metrics.get("molecular_weight"))
+        logp = _parse_num(metrics.get("logp"))
+        hbd = _parse_num(metrics.get("hbd"))
+        hba = _parse_num(metrics.get("hba"))
+        tpsa = _parse_num(metrics.get("tpsa"))
+        rot = _parse_num(metrics.get("rotatable_bonds"))
+
+        checks = [
+            ("MW", mw, 500.0, "<= 500 Da", " Da"),
+            ("LogP", logp, 5.0, "<= 5.0", ""),
+            ("HBD", hbd, 5.0, "<= 5", ""),
+            ("HBA", hba, 10.0, "<= 10", ""),
+        ]
+
+        details: list[dict[str, Any]] = []
+        missing_params: list[str] = []
         violations = 0
 
-        # MW <= 500
-        if mw <= 500.0:
-            details.append({"parameter": "MW", "value": f"{mw} Da", "threshold": "<= 500 Da", "status": "pass"})
-        else:
-            violations += 1
-            details.append({"parameter": "MW", "value": f"{mw} Da", "threshold": "<= 500 Da", "status": "fail"})
+        for label, val, limit, threshold_str, unit in checks:
+            if val is None:
+                missing_params.append(label)
+                details.append({
+                    "parameter": label,
+                    "value": "غير متاح (N/A)" if is_ar else "Unavailable",
+                    "threshold": threshold_str,
+                    "status": "unavailable",
+                })
+            elif val <= limit:
+                disp = f"{int(val)}" if label in {"HBD", "HBA"} else f"{val}{unit}"
+                details.append({"parameter": label, "value": disp, "threshold": threshold_str, "status": "pass"})
+            else:
+                violations += 1
+                disp = f"{int(val)}" if label in {"HBD", "HBA"} else f"{val}{unit}"
+                details.append({"parameter": label, "value": disp, "threshold": threshold_str, "status": "fail"})
 
-        # LogP <= 5.0
-        if logp <= 5.0:
-            details.append({"parameter": "LogP", "value": f"{logp}", "threshold": "<= 5.0", "status": "pass"})
-        else:
-            violations += 1
-            details.append({"parameter": "LogP", "value": f"{logp}", "threshold": "<= 5.0", "status": "fail"})
+        # Missing required descriptors MUST produce unavailable, never a false pass!
+        if missing_params:
+            miss_str = ", ".join(missing_params)
+            summary_ar = (
+                f"تقييم قاعدة ليبينسكي غير مكتمل (unavailable) بسبب نقص الخصائص التالية: {miss_str}. "
+                "لا تُعتبر البيانات الناقصة متوافقة مع القاعدة."
+            )
+            summary_en = (
+                f"Lipinski evaluation unavailable due to missing descriptors: {miss_str}. "
+                "Missing data is never treated as a pass."
+            )
+            return {
+                "available": False,
+                "status": "unavailable",
+                "summary": summary_ar if is_ar else summary_en,
+                "summary_ar": summary_ar,
+                "violations_count": None,
+                "missing_parameters": missing_params,
+                "is_compliant": None,
+                "lipinski_compliant": None,
+                "is_druglike": None,
+                "drug_likeness_note_ar": caveat_ar,
+                "drug_likeness_note_en": caveat_en,
+                "details": details,
+                "tpsa_comment_ar": f"تبلغ مساحة السطح القطبي TPSA مقداره {tpsa} Å² (مؤشر إرشادي فقط)." if tpsa is not None else "قيمة TPSA غير متاحة.",
+                "rotatable_comment_ar": f"يحتوي المركب على {int(rot)} روابط قابلة للدوران." if rot is not None else "عدد الروابط القابلة للدوران غير متاح.",
+            }
 
-        # HBD <= 5
-        if hbd <= 5:
-            details.append({"parameter": "HBD", "value": f"{hbd}", "threshold": "<= 5", "status": "pass"})
-        else:
-            violations += 1
-            details.append({"parameter": "HBD", "value": f"{hbd}", "threshold": "<= 5", "status": "fail"})
-
-        # HBA <= 10
-        if hba <= 10:
-            details.append({"parameter": "HBA", "value": f"{hba}", "threshold": "<= 10", "status": "pass"})
-        else:
-            violations += 1
-            details.append({"parameter": "HBA", "value": f"{hba}", "threshold": "<= 10", "status": "fail"})
-
-        is_compliant = violations <= 1
-        is_druglike = is_compliant
-        is_ar = lang == "ar"
+        lipinski_compliant = violations <= 1
 
         if violations == 0:
             summary = (
-                "المركب متوافق تماماً مع جميع معايير قاعدة ليبينسكي الخماسية دون أي مخالفة."
+                "المركب يحقق جميع حدود قاعدة ليبينسكي الإرشادية الأربعة (0 مخالفات). "
+                "يُعد هذا مؤشراً أولياً فقط ولا يثبت وحده النجاح الدوائي أو التوافر الحيوي."
                 if is_ar
-                else "Fully compliant with Lipinski's Rule of Five with 0 violations."
+                else "Meets all 4 empirical Lipinski Rule of Five thresholds (0 violations); an initial heuristic only, not proof of oral bioavailability or drug efficacy."
             )
         elif violations == 1:
             summary = (
-                "المركب متوافق مع قاعدة ليبينسكي (مخالفة واحدة مقبولة صيدلانياً)."
+                "المركب يسجل مخالفة واحدة لحدود قاعدة ليبينسكي الإرشادية (ضمن هامش التسامح التقليدي <= 1 مخالفة)، "
+                "وهذا لا يضمن وحده النجاح كدواء فموي ويتطلب تقييماً حركياً وسمّياً شاملاً."
                 if is_ar
-                else "Compliant with Lipinski's Rule of Five (1 acceptable violation)."
+                else "Has 1 Lipinski threshold violation (within the traditional <= 1 heuristic allowance); does not guarantee oral drug success."
             )
         else:
             summary = (
-                f"المركب غير متوافق مع قاعدة ليبينسكي بمعدل ({violations}) مخالفات."
+                f"المركب يتجاوز حدود قاعدة ليبينسكي الإرشادية بعدد ({violations}) مخالفات؛ "
+                "مما يشير إحصائياً إلى تحديات محتملة في الامتصاص السلبي (مع وجود استثناءات دوائية معروفة)."
                 if is_ar
-                else f"Non-compliant with Lipinski's Rule of Five ({violations} violations)."
+                else f"Exceeds empirical Lipinski thresholds ({violations} violations), indicating potential passive permeability challenges."
             )
 
         return {
             "available": True,
+            "status": "evaluated",
             "summary": summary,
             "summary_ar": summary,
             "violations_count": violations,
-            "is_compliant": is_compliant,
-            "is_druglike": is_druglike,
+            "missing_parameters": [],
+            "is_compliant": lipinski_compliant,
+            "lipinski_compliant": lipinski_compliant,
+            # Explicitly decoupled: Lipinski compliance alone is NOT overall drug-likeness
+            "is_druglike": None,
+            "drug_likeness_note_ar": caveat_ar,
+            "drug_likeness_note_en": caveat_en,
             "details": details,
-            "tpsa_comment_ar": f"تبلغ مساحة السطح القطبي TPSA مقداره {tpsa} Å².",
-            "rotatable_comment_ar": f"يحتوي المركب على {rot} روابط قابلة للدوران.",
+            "tpsa_comment_ar": f"تبلغ مساحة السطح القطبي TPSA مقداره {tpsa} Å² (مؤشر إرشادي للنفاذية السلبية)." if tpsa is not None else "قيمة TPSA غير متاحة.",
+            "rotatable_comment_ar": f"يحتوي المركب على {int(rot)} روابط قابلة للدوران." if rot is not None else "عدد الروابط القابلة للدوران غير متاح.",
         }
 
     @classmethod
@@ -269,17 +385,12 @@ class AIScientificAssistant:
         is_ar = lang == "ar"
         if profile is None:
             profile = entity_or_profile
-            entity = profile.get("entity", profile.get("basic_info", {}))
-        else:
-            entity = entity_or_profile
-
         basic = profile.get("basic_info", {})
         props = profile.get("properties", {})
         steps = []
 
-        # Step 1: الهوية والتركيب الجزيئي
         formula = basic.get("formula", "")
-        mw = props.get("molecular_weight", basic.get("molar_mass", ""))
+        mw = props.get("molecular_weight", basic.get("molar_mass", "غير متاح"))
         steps.append({
             "step_number": "1",
             "title": "التركيب الجزيئي والهوية الكيميائية" if is_ar else "Molecular Identity & Structure",
@@ -288,25 +399,23 @@ class AIScientificAssistant:
             "content_ar": f"الصيغة الكيميائية: {formula}، الكتلة الجزيئية: {mw} g/mol.",
         })
 
-        # Step 2: الذوبانية والتوزع الدهني (LogP & TPSA)
         logp = props.get("logp", "N/A")
         tpsa = props.get("tpsa", "N/A")
         steps.append({
             "step_number": "2",
-            "title": "الذوبانية والنفاذية الغشائية (LogP & TPSA)" if is_ar else "Solubility & Permeability",
-            "title_ar": "الذوبانية والنفاذية الغشائية (LogP & TPSA)",
-            "detail": f"معامل التقسيم LogP={logp}، مساحة السطح القطبية TPSA={tpsa} Å²." if is_ar else f"LogP: {logp}, TPSA: {tpsa} Å².",
-            "content_ar": f"معامل التقسيم LogP={logp}، مساحة السطح القطبية TPSA={tpsa} Å².",
+            "title": "المؤشرات الإرشادية للذوبانية والنفاذية (LogP & TPSA)" if is_ar else "Heuristic Solubility & Permeability Indicators",
+            "title_ar": "المؤشرات الإرشادية للذوبانية والنفاذية (LogP & TPSA)",
+            "detail": f"معامل التقسيم LogP={logp}، مساحة السطح القطبية TPSA={tpsa} Å² (مؤشرات إرشادية أولية)." if is_ar else f"LogP: {logp}, TPSA: {tpsa} Å² (empirical heuristics).",
+            "content_ar": f"معامل التقسيم LogP={logp}، مساحة السطح القطبية TPSA={tpsa} Å² (مؤشرات إرشادية أولية).",
         })
 
-        # Step 3: الروابط الهيدروجينية وقابلية التطوير كدواء
         hbd = props.get("hbd", "N/A")
         hba = props.get("hba", "N/A")
         rot = props.get("rotatable_bonds", "N/A")
         steps.append({
             "step_number": "3",
-            "title": "الروابط الهيدروجينية والمرونة (HBD/HBA)" if is_ar else "H-Bonding & Flexibility",
-            "title_ar": "الروابط الهيدروجينية والمرونة (HBD/HBA)",
+            "title": "الروابط الهيدروجينية والمرونة التكوينية (HBD/HBA)" if is_ar else "H-Bonding & Flexibility",
+            "title_ar": "الروابط الهيدروجينية والمرونة التكوينية (HBD/HBA)",
             "detail": f"مانحات الهيدروجين HBD={hbd}، مستقبلات الهيدروجين HBA={hba}، روابط الدوران={rot}." if is_ar else f"HBD: {hbd}, HBA: {hba}, Rotatable: {rot}.",
             "content_ar": f"مانحات الهيدروجين HBD={hbd}، مستقبلات الهيدروجين HBA={hba}، روابط الدوران={rot}.",
         })
@@ -317,14 +426,10 @@ class AIScientificAssistant:
     def explain_reaction_prediction(cls, prediction: dict[str, Any], lang: str = "ar") -> str:
         """
         Explains a reaction-prediction result in Arabic, strictly grounded in the computed data.
-
-        The assistant never invents products: it only narrates the verdict, the applied rule,
-        the balanced equation, the stoichiometry and the declared limitations.
         """
         if not prediction:
             return "لا تتوفر نتيجة تحليل لشرحها حالياً."
 
-        mode = prediction.get("mode", "")
         mode_label = prediction.get("mode_label_ar", "")
         verdict = prediction.get("verdict_ar", "")
         lines: list[str] = []
@@ -419,9 +524,188 @@ class AIScientificAssistant:
 
         lines.append(
             "\n---\n"
-            "*ملاحظة منهجية: هذا الشرح يعرض النتائج المحسوبة كما هي دون تعديلها أو إضافة نتائج غير موجودة في محرك MolecuLens.*"
+            f"*ملاحظة منهجية: صادر عن {cls.ASSISTANT_LABEL_AR} — يعرض النتائج المحسوبة كما هي دون تعديل أو اختراع.*"
         )
         return "\n".join(lines)
+
+    @classmethod
+    def _extract_compound_context(cls, compound_data: dict[str, Any] | None) -> dict[str, Any]:
+        """Layer 1 & 2 helper: extracts verified scientific data & citations from compound_data."""
+        if not compound_data or not isinstance(compound_data, dict):
+            return {"has_compound": False, "props": {}, "sources": []}
+
+        entity = compound_data.get("entity", compound_data)
+        profile = compound_data.get("profile", compound_data)
+        props = (
+            profile.get("properties")
+            or compound_data.get("properties")
+            or compound_data.get("calculated_drug_descriptors")
+            or {}
+        )
+        basic = profile.get("basic_info", {})
+        sources = list(entity.get("sources", []) or profile.get("sources", []) or [])
+        name_ar = entity.get("name_ar") or basic.get("name_ar") or entity.get("name_en") or ""
+        name_en = entity.get("name_en") or basic.get("name_en") or ""
+        formula = entity.get("symbol_or_formula") or basic.get("formula") or ""
+        return {
+            "has_compound": bool(name_ar or name_en or formula or props),
+            "name_ar": name_ar,
+            "name_en": name_en,
+            "formula": formula,
+            "props": dict(props) if isinstance(props, dict) else {},
+            "sources": sources,
+        }
+
+    @classmethod
+    def answer_student_question_structured(
+        cls,
+        question: str,
+        compound_data: dict[str, Any] | None = None,
+        lang: str = "ar",
+    ) -> dict[str, Any]:
+        """
+        3-Layer Grounded Scientific Q&A:
+          - Layer 1 (scientific_data): exact computed numbers from compound_data (never invented).
+          - Layer 2 (retrieval_context): retrieved facts and explicit source citations.
+          - Layer 3 (explanation): clear Arabic/English explanation separating reference facts from inferences.
+        """
+        q_lower = (question or "").strip().lower()
+        is_ar = lang == "ar"
+        ctx = cls._extract_compound_context(compound_data)
+        props = ctx["props"]
+        sources_used: list[str] = list(ctx["sources"])
+        reference_facts: list[str] = []
+        inferences: list[str] = []
+        grounded_in_compound = False
+
+        comp_label = (
+            f"{ctx['name_ar']} ({ctx['formula']})" if ctx.get("name_ar") and ctx.get("formula")
+            else (ctx.get("name_ar") or ctx.get("name_en") or ctx.get("formula") or "")
+        )
+
+        if any(k in q_lower for k in ["تفاعل", "تفاعلات", "reaction", "نواتج", "متفاعل"]):
+            reference_facts.append(
+                "يميز محرك MolecuLens بين: (1) التفاعلات الموثّقة بمراجع علمية، (2) حالات عدم التفاعل المثبتة، "
+                "(3) الاستنتاج القواعدي المعلن المصدر والحدود، و(4) غياب الأدلة الكافية دون اختلاق نواتج."
+                if is_ar
+                else "MolecuLens distinguishes documented reactions, explicit no-reaction cases, declared general-rule inferences, and insufficient evidence without inventing products."
+            )
+            sources_used.append("MolecuLens VERIFIED_REACTIONS_REGISTRY & Prediction Engine")
+            if comp_label:
+                grounded_in_compound = True
+                inferences.append(
+                    f"للمادة الحالية ({comp_label}): يمكن تمريرها مباشرة إلى مختبر التفاعلات (Reaction Lab) لاختبار تفاعلاتها الموثقة أو شبكة التفاعلات متعددة المواد."
+                    if is_ar
+                    else f"For {comp_label}: pass it into Reaction Lab to inspect verified reactions or multi-reactant networks."
+                )
+
+        elif "logp" in q_lower or "التقسيم" in q_lower or "توزع" in q_lower:
+            sources_used.append(cls.PROPERTY_META["logp"]["source"])
+            reference_facts.append(cls.PROPERTY_META["logp"]["significance_ar" if is_ar else "significance_en"])
+            if props.get("logp") is not None:
+                grounded_in_compound = True
+                val = props["logp"]
+                inferences.append(
+                    f"القيمة المحسوبة لـ {comp_label or 'المركب الحالي'}: LogP = {val} "
+                    f"({'ضمن الحد الإرشادي <= 5' if float(val) <= 5.0 else 'يتجاوز الحد الإرشادي 5.0'}؛ مؤشر أولي وليس ضماناً للذوبانية أو الامتصاص)."
+                    if is_ar
+                    else f"Computed value for {comp_label or 'this compound'}: LogP = {val} (heuristic indicator only)."
+                )
+
+        elif "tpsa" in q_lower or "السطح القطب" in q_lower or "حاجز" in q_lower or "نفاذية" in q_lower:
+            sources_used.append(cls.PROPERTY_META["tpsa"]["source"])
+            reference_facts.append(cls.PROPERTY_META["tpsa"]["significance_ar" if is_ar else "significance_en"])
+            if props.get("tpsa") is not None:
+                grounded_in_compound = True
+                val = props["tpsa"]
+                inferences.append(
+                    f"القيمة المحسوبة لـ {comp_label or 'المركب الحالي'}: TPSA = {val} Å² "
+                    "(مؤشر إرشادي للنفاذية السلبية وليس شرطاً حاسماً أو إثباتاً لعبور الحواجز الحيوية)."
+                    if is_ar
+                    else f"Computed value for {comp_label or 'this compound'}: TPSA = {val} Å² (empirical guideline only)."
+                )
+
+        elif "rotatable" in q_lower or "دوران" in q_lower or "مرونة" in q_lower:
+            sources_used.append(cls.PROPERTY_META["rotatable_bonds"]["source"])
+            reference_facts.append(cls.PROPERTY_META["rotatable_bonds"]["significance_ar" if is_ar else "significance_en"])
+            if props.get("rotatable_bonds") is not None:
+                grounded_in_compound = True
+                inferences.append(
+                    f"عدد الروابط القابلة للدوران المحسوب لـ {comp_label or 'المركب الحالي'}: {props['rotatable_bonds']}."
+                    if is_ar
+                    else f"Computed rotatable bonds for {comp_label or 'this compound'}: {props['rotatable_bonds']}."
+                )
+
+        elif "lipinski" in q_lower or "ليبينسكي" in q_lower:
+            sources_used.append(cls.PROPERTY_META["molecular_weight"]["source"])
+            reference_facts.append(
+                "قاعدة ليبينسكي (1997) هي مرشّح إرشادي أولي (MW <= 500، LogP <= 5، HBD <= 5، HBA <= 10) "
+                "ولا تعني وحدها الصلاحية الدوائية الكاملة أو ضمان التوافر الحيوي أو الفعالية أو السلامة."
+                if is_ar
+                else "Lipinski's Rule of Five (1997) is an empirical initial filter (MW <= 500, LogP <= 5, HBD <= 5, HBA <= 10); it does not by itself predict efficacy, safety, or actual oral bioavailability."
+            )
+            if props:
+                lip = cls.explain_lipinski_evaluation(props, lang=lang)
+                grounded_in_compound = True
+                inferences.append(
+                    f"تقييم {comp_label or 'المركب الحالي'}: {lip['summary']}"
+                    if is_ar
+                    else f"Evaluation for {comp_label or 'this compound'}: {lip['summary']}"
+                )
+
+        elif any(k in q_lower for k in ["كتلة", "وزن", "صيغة", "formula", "mw", "mass"]) and ctx["has_compound"]:
+            grounded_in_compound = True
+            mw_val = props.get("molecular_weight")
+            reference_facts.append(
+                f"البيانات المسجلة للمادة ({comp_label}): الصيغة = {ctx.get('formula') or 'غير متاحة'}، "
+                f"الوزن الجزيئي المحسوب = {mw_val if mw_val is not None else 'غير متاح'}."
+                if is_ar
+                else f"Recorded data for {comp_label}: formula={ctx.get('formula') or 'N/A'}, MW={mw_val if mw_val is not None else 'N/A'}."
+            )
+
+        else:
+            # Honest unavailability response — never hallucinate drug/medical facts!
+            if ctx["has_compound"] and comp_label:
+                grounded_in_compound = True
+                reference_facts.append(
+                    f"لا تتوفر إجابة مرجعية مباشرة لهذا السؤال بعينه داخل القاعدة الموثقة الحالية. "
+                    f"البيانات المتاحة حالياً للمادة ({comp_label}) تقتصر على الصيغة والخصائص الفيزيوكيميائية المحسوبة."
+                    if is_ar
+                    else f"No verified direct answer is available for this specific question in the current grounded knowledge base for {comp_label}."
+                )
+            else:
+                reference_facts.append(
+                    "لا تتوفر إجابة علمية موثقة لهذا السؤال في قاعدة البيانات المحلية الحالية؛ "
+                    "يمتنع المساعد عن التخمين أو إضافة معلومات دوائية دون مصدر."
+                    if is_ar
+                    else "No verified scientific answer is available for this question in the local knowledge base; the assistant does not fabricate facts."
+                )
+
+        dedup_sources = list(dict.fromkeys(s for s in sources_used if s))
+        parts = []
+        if reference_facts:
+            parts.append(("**حقائق مرجعية:** " if is_ar else "**Reference facts:** ") + " ".join(reference_facts))
+        if inferences:
+            parts.append(("**قراءة سياقية لبيانات المركب:** " if is_ar else "**Context interpretation:** ") + " ".join(inferences))
+        if dedup_sources:
+            parts.append(("**المصادر المستخدمة:** " if is_ar else "**Sources:** ") + " | ".join(dedup_sources))
+        else:
+            parts.append(
+                "**ملاحظة:** لا توجد مصادر دوائية مرفقة لهذا الاستعلام؛ يرجى الرجوع إلى المراجع المعتمدة."
+                if is_ar
+                else "**Note:** No pharmacological sources matched this query."
+            )
+
+        return {
+            "assistant_architecture": cls.ASSISTANT_ARCHITECTURE,
+            "assistant_label_ar": cls.ASSISTANT_LABEL_AR,
+            "grounded_in_compound_data": grounded_in_compound,
+            "layer1_scientific_data": ctx,
+            "layer2_sources_used": dedup_sources,
+            "layer3_reference_facts": reference_facts,
+            "layer3_inferences": inferences,
+            "answer_text": "\n\n".join(parts),
+        }
 
     @classmethod
     def answer_student_question(
@@ -430,63 +714,5 @@ class AIScientificAssistant:
         compound_data: dict[str, Any] | None = None,
         lang: str = "ar",
     ) -> str:
-        q_lower = (question or "").lower()
-        is_ar = lang == "ar"
-
-        if any(k in q_lower for k in ["تفاعل", "تفاعلات", "reaction", "نواتج", "متفاعل"]):
-            return (
-                "يعتمد محرك التفاعلات في منصة MolecuLens على ثلاثة مستويات من الدليل: "
-                "(1) تفاعل موثّق في سجل مرجعي علمي محدّد (مرجع تجريبي أو مواصفة دستية صيدلانية أو كتاب تحليل معتمد)، "
-                "(2) استنتاج من قاعدة كيميائية عامة معلنة مع ذكر مرجعها وحدودها، "
-                "(3) غياب الأدلة كخيار علمي صريح: في الحالتين الأولى والثانية يذكر النظام مصدر كل نتيجة، "
-                "وفي الحالة الثالثة يعرض «لا تتوفر بيانات كافية» بدل اختلاق معادلة. "
-                "كما يُجرى تحقّق رياضي آلي من حفظ الذرات (Atom Conservation)، "
-                "وتُعرض النسب المولية والمتفاعل المحدد والناتج النظري للحسابات المدخلة."
-                if is_ar
-                else "MolecuLens separates reaction evidence into three tiers: (1) a reaction recorded in a referenced scientific registry, "
-                "(2) an inference from a declared general chemistry rule with its source and limits, and "
-                "(3) an explicit lack-of-evidence outcome instead of an invented equation. "
-                "Atom conservation is verified automatically, and stoichiometry, limiting reagent and theoretical yield are computed."
-            )
-
-        if "logp" in q_lower or "التقسيم" in q_lower or "توزع" in q_lower:
-            return (
-                "معامل التوزع (LogP) يقيس مدى ألفة الجزيء للدهون مقارنة بالماء (Lipophilicity). "
-                "في تصميم الأدوية، يُعد النطاق بين 0 و 5 مثالياً لأن الدواء يحتاج إلى الذوبان في السوائل الحيوية المائية "
-                "للوصول إلى الأنسجة، وفي نفس الوقت يحتاج إلى ألفة دهنية تمكنه من عبور الغشاء الخلوي المكون من طبقة فوسفوليبيد ثنائية."
-                if is_ar
-                else "LogP measures the lipophilicity (octanol/water partition) of a molecule. Values between 0 and 5 provide the optimal balance between aqueous solubility in blood and passive permeability across lipid bilayers."
-            )
-
-        if "tpsa" in q_lower or "السطح القطبية" in q_lower or "حاجز" in q_lower or "نفاذية" in q_lower:
-            return (
-                "مساحة السطح القطبي الطوبولوجي (TPSA) تمثل مجموع مساحات الذرات القطبية (الأكسجين والنيتروجين والهيدروجين المرتبط بهما). "
-                "تُعد TPSA مؤشراً حاسماً لنفاذية الأغشية الحيوية؛ حيث تفضل الأدوية المعوية TPSA <= 140 Å²، "
-                "بينما يتطلب عبور الحاجز الدموي الدماغي (Blood-Brain Barrier - BBB) مساحة سطح قطبية منخفضة TPSA <= 90 Å² لضمان نفاذية كافية للجهاز العصبي المركزي."
-                if is_ar
-                else "Topological Polar Surface Area (TPSA) sums polar atoms (N, O, and attached H). TPSA <= 140 Å² is required for good oral absorption, whereas <= 90 Å² is vital for penetration across the Blood-Brain Barrier (BBB)."
-            )
-
-        if "rotatable" in q_lower or "دوران" in q_lower or "مرونة" in q_lower:
-            return (
-                "الروابط القابلة للدوران تعبر عن المرونة التكوينية للجزيء (Conformational Flexibility). "
-                "وفق قاعدة فيبر (Veber's rule)، يُفضل ألا يزيد عدد الروابط القابلة للدوران عن 10 روابط؛ "
-                "لأن الجزيئات شديدة المرونة تفقد قدراً كبيراً من الإنتروبيا الحرة عند الارتباط بهدفها الحيوي، مما يقلل ألفة الارتباط ويضعف التوافر الحيوي الفموي."
-                if is_ar
-                else "Rotatable bonds govern conformational flexibility. Veber's rule states that <= 10 rotatable bonds optimizes oral bioavailability, as rigid molecules suffer less entropic loss upon binding to their target protein."
-            )
-
-        if "lipinski" in q_lower or "ليبينسكي" in q_lower:
-            return (
-                "قاعدة ليبينسكي الخماسية (Lipinski's Rule of Five) صاغها العالم كريستوفر ليبينسكي عام 1997 لتوقع التوافر الحيوي الفموي للأدوية. "
-                "سُميت بالخماسية لأن حدودها مضاعفات للعدد 5: الوزن الجزيئي <= 500 Da، معامل LogP <= 5، مانحات الهيدروجين HBD <= 5، ومستقبلات الهيدروجين HBA <= 10 (2 × 5). "
-                "المركب الذي لا يتجاوز أكثر من مخالفة واحدة يمتلك احتمالية عالية للنجاح كدواء فموي."
-                if is_ar
-                else "Lipinski's Rule of Five, established by Christopher Lipinski in 1997, predicts drug-likeness and oral bioavailability. It is based on parameters that are multiples of 5: MW <= 500 Da, LogP <= 5, HBD <= 5, HBA <= 10 (2x5). Compounds with at most 1 violation generally exhibit high oral bioavailability."
-            )
-
-        return (
-            "يعتمد التحليل العلمي على القياسات البنيوية والفيزيوكيميائية الدقيقة المحسوبة في منصة MolecuLens دون تخمين أو اختراع لضمان الموثوقية الأكاديمية."
-            if is_ar
-            else "Scientific evaluations in MolecuLens are strictly grounded in computed physicochemical descriptors to ensure academic precision."
-        )
+        """Returns the formatted grounded educational answer string (backwards-compatible API)."""
+        return cls.answer_student_question_structured(question, compound_data=compound_data, lang=lang)["answer_text"]

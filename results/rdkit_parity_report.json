@@ -1,0 +1,12 @@
+{
+  "generated_at_utc": "2026-11-22T18:09:53.333636+00:00",
+  "benchmark_size": 150,
+  "native_rdkit_available": false,
+  "native_rdkit_version": null,
+  "fallback_version": "pure-python-fallback-1.0",
+  "parity_verified": false,
+  "fallback_parse_success_count": 150,
+  "fallback_parse_success_pct": 100.0,
+  "note_ar": "لم يتم العثور على مكتبة RDKit الأصلية في هذه البيئة؛ لذا لم تُحسب نسب المطابقة الفعلية بين RDKit والبديل. شغّل هذا السكربت في بيئة تحتوي على RDKit الأصلي (أو عبر وظيفة native-rdkit في GitHub Actions) لقياس نسب المطابقة الحقيقية عبر الـ 150 جزيئاً.",
+  "property_match_rates_pct": null
+}

@@ -1,4 +1,4 @@
-name: MolecuLens Automated Tests
+name: MolecuLens Automated Tests (CI Matrix)
 
 on:
   push:
@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Pytest, security gates & QSAR evaluation (Python 3.11)
+  native-rdkit:
+    name: Native RDKit + Full Pytest + Parity Benchmark (Python 3.11)
     runs-on: ubuntu-latest
 
     steps:
@@ -27,26 +27,31 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install full dependencies (Native RDKit, scikit-learn, FastAPI, Streamlit)
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install fastapi httpx
 
       - name: Byte-compile all sources (syntax gate)
         run: python -m compileall -q .
 
-      - name: Reproducible QSAR LogP evaluation on a clean environment
+      - name: 150-Molecule Native RDKit vs Pure-Python Fallback Parity Benchmark
         run: |
           mkdir -p results
-          python scripts/evaluate_logp.py
+          python scripts/benchmark_rdkit_parity.py --require-native-rdkit
+
+      - name: Reproducible QSAR LogP evaluation using Native RDKit
+        run: |
+          python scripts/evaluate_logp.py --require-native-rdkit
 
       - name: Verify offline-first core tests (ALLOW_EXTERNAL_NETWORK=false)
         env:
           ALLOW_EXTERNAL_NETWORK: "false"
         run: |
-          pytest -v tests/test_offline_and_caching.py tests/test_titration_all_catalog.py tests/test_rdkit_fallback_parity.py
+          pytest -v tests/test_offline_and_caching.py tests/test_titration_all_catalog.py tests/test_titration_reference_curves.py tests/test_rdkit_fallback_parity.py tests/test_scientific_hardening_v33.py
 
-      - name: Run full test suite once (with coverage and JUnit report)
+      - name: Run full test suite with coverage and JUnit report
         run: |
           rm -f data/moleculens_local.db
           mkdir -p results
@@ -56,26 +61,51 @@ jobs:
             --cov=. --cov-report=xml:coverage.xml --cov-report=term \
             | tee results/pytest_summary.txt
 
-      - name: Write job summary from the real test output
+      - name: Write job summary from real test output
         if: always()
         run: |
-          echo "## MolecuLens Automated QA Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "## MolecuLens Native RDKit QA Summary" >> "$GITHUB_STEP_SUMMARY"
           if [ -f results/pytest_summary.txt ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
             tail -n 30 results/pytest_summary.txt >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "Test run did not produce output (a previous step failed)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Upload test, coverage and QSAR artifacts
+      - name: Upload QA, Parity & QSAR artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: moleculens-qa-artifacts
+          name: moleculens-native-rdkit-qa-artifacts
           path: |
             coverage.xml
             results/logp_eval.json
+            results/rdkit_parity_report.json
             results/junit.xml
             results/pytest_summary.txt
           if-no-files-found: warn
+
+  pure-python-fallback:
+    name: Pure-Python Fallback + Offline Mode (No RDKit / No sklearn)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal non-RDKit runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pandas requests Pillow fastapi httpx pytest
+
+      - name: Run fallback & offline scientific hardening tests
+        env:
+          ALLOW_EXTERNAL_NETWORK: "false"
+        run: |
+          python scripts/benchmark_rdkit_parity.py
+          python scripts/evaluate_logp.py
+          pytest -v tests/test_offline_and_caching.py tests/test_titration_all_catalog.py tests/test_titration_reference_curves.py tests/test_rdkit_fallback_parity.py tests/test_scientific_hardening_v33.py

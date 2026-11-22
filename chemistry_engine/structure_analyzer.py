@@ -25,6 +25,29 @@ except ImportError:
     HAS_RDKIT = True
     USING_RDKIT_FALLBACK = True
 
+
+
+FALLBACK_UNVERIFIED_OPERATIONS: set[str] = {
+    "qsar_scientific_evaluation",
+    "morgan_fingerprint_exact_parity",
+    "bemis_murcko_exact_parity",
+    "accurate_2d_geometry",
+    "accurate_3d_conformer",
+}
+
+
+def assert_native_rdkit_if_strict(operation: str, strict: bool = False) -> None:
+    """
+    Blocks Pure-Python Fallback execution for operations whose exact parity with native
+    C++ RDKit has not been proven when strict=True.
+    """
+    if strict and USING_RDKIT_FALLBACK and operation in FALLBACK_UNVERIFIED_OPERATIONS:
+        raise RuntimeError(
+            f"Operation '{operation}' requires native C++ RDKit in strict scientific mode; "
+            "Pure-Python Fallback parity is not guaranteed for this calculation."
+        )
+
+
 def get_cheminformatics_engine_info() -> dict[str, Any]:
     """
     Returns transparent metadata about whether native C++ RDKit or the Pure-Python Fallback is active.

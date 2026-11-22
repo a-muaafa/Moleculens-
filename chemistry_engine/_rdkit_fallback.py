@@ -1559,6 +1559,7 @@ class rdMolDraw2D:
             label = f"{sym}:{idx}" if drawer._opts.addAtomIndices else sym
             lines.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='13' fill='#f8fafc' stroke='#0f4c5c' stroke-width='1.5'/>")
             lines.append(f"<text x='{x:.1f}' y='{y+4:.1f}' font-family='sans-serif' font-size='11' font-weight='bold' fill='#0f172a' text-anchor='middle'>{label}</text>")
+        lines.append('<text x="8" y="' + str(max(14, getattr(drawer, 'h', 300) - 6)) + '" font-size="10" fill="#b45309" font-family="sans-serif">Schematic Only (Pure-Python Fallback — Not Exact Molecular Geometry)</text>')
         lines.append("</svg>")
         drawer._svg = "\n".join(lines)
 

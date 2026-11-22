@@ -472,6 +472,119 @@ def solve_quadratic_positive(a: float, b: float, c: float) -> float:
     return 0.0
 
 
+
+
+def kw_at_temperature(temperature_c: float = 25.0) -> float:
+    """
+    Computes water autoionization constant Kw(T) from 0 °C to 60 °C using standard
+    thermodynamic Van 't Hoff relation (ΔH°_w ≈ 55.836 kJ/mol, exact 1.0e-14 at 25.0 °C).
+    """
+    t_c = max(0.0, min(60.0, float(temperature_c)))
+    t_k = t_c + 273.15
+    t_ref = 298.15
+    delta_h_j = 55836.0
+    r_gas = 8.314462618
+    ln_kw = math.log(1.0e-14) - (delta_h_j / r_gas) * (1.0 / t_k - 1.0 / t_ref)
+    return math.exp(ln_kw)
+
+
+def davies_activity_coefficient(charge: int, ionic_strength: float) -> float:
+    """
+    Davies equation for single-ion activity coefficient γ_z at 25 °C (valid up to I ≈ 0.5 M):
+      log10(γ_z) = -0.509 * z^2 * (sqrt(I) / (1 + sqrt(I)) - 0.3 * I)
+    """
+    if charge == 0 or ionic_strength <= 0.0:
+        return 1.0
+    i_eff = min(float(ionic_strength), 0.5)
+    sqrt_i = math.sqrt(i_eff)
+    log10_g = -0.509 * (charge ** 2) * (sqrt_i / (1.0 + sqrt_i) - 0.3 * i_eff)
+    return 10.0 ** log10_g
+
+
+def _acid_avg_charge(h: float, ka_list: list[float], is_strong: bool, n_protons: int) -> float:
+    """Average negative charge per mole of analytical acid C_a (mass balance across all α_j)."""
+    if is_strong:
+        return float(n_protons)
+    # Denominator D = [H]^n + Ka1*[H]^(n-1) + Ka1*Ka2*[H]^(n-2) + ...
+    n = len(ka_list)
+    terms = [h ** n]
+    prod = 1.0
+    for j, ka in enumerate(ka_list, start=1):
+        prod *= ka
+        terms.append(prod * (h ** (n - j)))
+    denom = sum(terms)
+    if denom <= 0.0:
+        return 0.0
+    return sum(j * terms[j] for j in range(1, n + 1)) / denom
+
+
+def _base_avg_charge(oh: float, kb_list: list[float], is_strong: bool, n_oh: int) -> float:
+    """Average positive charge per mole of analytical base C_b (mass balance across all β_j)."""
+    if is_strong:
+        return float(n_oh)
+    n = len(kb_list)
+    terms = [oh ** n]
+    prod = 1.0
+    for j, kb in enumerate(kb_list, start=1):
+        prod *= kb
+        terms.append(prod * (oh ** (n - j)))
+    denom = sum(terms)
+    if denom <= 0.0:
+        return 0.0
+    return sum(j * terms[j] for j in range(1, n + 1)) / denom
+
+
+def solve_equilibrium_ph_exact(
+    c_acid_m: float,
+    c_base_m: float,
+    acid_spec: dict[str, Any],
+    base_spec: dict[str, Any],
+    temperature_c: float = 25.0,
+    use_activity_correction: bool = False,
+) -> float:
+    """
+    General analytical acid-base equilibrium solver using exact Mass Balance,
+    Charge Balance, all stepwise Ka/Kb ionization fractions, exact Kw(T),
+    and optional Davies ionic-strength activity correction.
+    Does NOT artificially clip pH to [0, 14] (e.g., 2.0 M HCl yields pH ≈ -0.30).
+    """
+    kw = kw_at_temperature(temperature_c)
+    acid_strong = acid_spec.get("type") == "strong"
+    base_strong = base_spec.get("type") == "strong"
+    n_p = int(acid_spec.get("protons", 1))
+    n_oh = int(base_spec.get("hydroxides", 1))
+    ka_list = [10.0 ** (-float(p)) for p in acid_spec.get("pKa_list", [acid_spec["pKa"]])]
+    kb_list = [10.0 ** (-float(p)) for p in base_spec.get("pKb_list", [base_spec["pKb"]])]
+
+    def charge_balance(ph: float) -> float:
+        h = 10.0 ** (-ph)
+        oh = kw / max(h, 1e-30)
+        pos_base = c_base_m * _base_avg_charge(oh, kb_list, base_strong, n_oh)
+        neg_acid = c_acid_m * _acid_avg_charge(h, ka_list, acid_strong, n_p)
+        # Positive charges - Negative charges (strictly decreasing in pH!)
+        return (h + pos_base) - (oh + neg_acid)
+
+    lo, hi = -2.0, 16.0
+    for _ in range(90):
+        mid = 0.5 * (lo + hi)
+        if charge_balance(mid) > 0.0:
+            lo = mid
+        else:
+            hi = mid
+    ph_ideal = 0.5 * (lo + hi)
+
+    if not use_activity_correction:
+        return round(ph_ideal, 3)
+
+    # First-order Davies activity correction on a(H+) = γ_1 * [H+]
+    h_val = 10.0 ** (-ph_ideal)
+    oh_val = kw / max(h_val, 1e-30)
+    ionic_strength = 0.5 * (h_val + oh_val + c_acid_m * n_p + c_base_m * n_oh)
+    gamma_h = davies_activity_coefficient(1, ionic_strength)
+    ph_activity = -math.log10(max(1e-30, gamma_h * h_val))
+    return round(ph_activity, 3)
+
+
 def compute_ph_from_h(h_conc: float) -> float:
     h = max(h_conc, 1e-14)
     return max(0.0, min(14.0, -math.log10(h)))

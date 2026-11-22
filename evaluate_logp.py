@@ -22,7 +22,13 @@ sys.path.insert(0, str(ROOT))
 from chemistry_engine.molecular_intelligence import MolecularIntelligence  # noqa: E402
 
 
-def main() -> int:
+def main(require_native_rdkit: bool = False) -> int:
+    if '--require-native-rdkit' in sys.argv:
+        require_native_rdkit = True
+    from chemistry_engine.structure_analyzer import USING_RDKIT_FALLBACK
+    if require_native_rdkit and USING_RDKIT_FALLBACK:
+        print('ERROR: --require-native-rdkit specified, but native C++ RDKit is not installed.')
+        return 1
     bundle = MolecularIntelligence.train_and_evaluate_qsar_logp_model()
     if not bundle.get("available"):
         print("RDKit and NumPy/scikit-learn are required:", bundle.get("message_ar"))

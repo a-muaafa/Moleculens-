@@ -15,6 +15,8 @@ Reaction Prediction Engine — محرك توقع التفاعلات (المخت�
 
 from __future__ import annotations
 
+import itertools
+
 import re
 from typing import Any
 
@@ -918,7 +920,138 @@ def _find_species(species: list[dict[str, Any]], kind: str) -> list[dict[str, An
     return [s for s in species if s["kind"] == kind]
 
 
-def _infer_by_rules(species: list[dict[str, Any]]) -> dict[str, Any] | None:
+
+RULE_DOMAIN_MAP: dict[str, set[str]] = {
+    "neutralization": {"acid_base_chemistry", "general_chemistry"},
+    "acid_base": {"acid_base_chemistry", "general_chemistry"},
+    "precipitation": {"redox_and_precipitation", "general_chemistry"},
+    "single_displacement": {"redox_and_precipitation", "general_chemistry"},
+    "redox_synthesis": {"redox_and_precipitation", "general_chemistry"},
+    "combustion": {"general_chemistry", "organic_chemistry", "redox_and_precipitation"},
+    "decomposition": {"general_chemistry"},
+    "organic_reaction": {"organic_chemistry"},
+    "biochemical_reaction": {"biochemistry"},
+}
+
+
+def _inference_matches_domain(inference: dict[str, Any] | None, domain: str | None) -> bool:
+    if inference is None:
+        return False
+    if not domain or domain in {"all_domains", "all"}:
+        return True
+    cat = str(inference.get("category", "") or "").strip()
+    allowed = RULE_DOMAIN_MAP.get(cat, {"general_chemistry"})
+    return domain in allowed
+
+
+def analyze_reaction_network(
+    species: list[dict[str, Any]],
+    domain: str = "all_domains",
+) -> dict[str, Any]:
+    """
+    Analyzes a multi-reactant mixture (2+ species) as a Reaction Network:
+    - Evaluates ALL supported pairs and larger subsets (documented + rule-inferred, honoring domain).
+    - Identifies unreacted/spectator species.
+    - Detects shared reactants participating in 2+ competing pathways.
+    - Prevents double-consuming the same reactant across competing pathways without coupled stoichiometry.
+    """
+    from reaction_engine.reaction_registry import find_verified_reactions
+    eff_domain = None if (not domain or domain in {"all_domains", "all"}) else domain
+    pathways: list[dict[str, Any]] = []
+    seen_sigs: set[tuple[str, ...]] = set()
+
+    # Check subsets from size len(species) down to 2
+    for k in range(len(species), 1, -1):
+        for subset in itertools.combinations(species, k):
+            sub_formulas = [s["formula"] for s in subset]
+            sig = tuple(sorted(sub_formulas))
+            if sig in seen_sigs:
+                continue
+
+            docs = find_verified_reactions(sub_formulas, reaction_type=None, domain=eff_domain)
+            if docs:
+                rxn = docs[0]
+                seen_sigs.add(sig)
+                pathways.append({
+                    "pathway_id": rxn.get("reaction_id", f"doc_{'_'.join(sig)}"),
+                    "mode": "documented",
+                    "reactant_formulas": sub_formulas,
+                    "product_formulas": [pr["formula"] for pr in rxn.get("products", [])],
+                    "equation_unicode": rxn.get("equation_unicode", rxn.get("equation_text", "")),
+                    "category": rxn.get("category", ""),
+                    "domain": rxn.get("domain", ""),
+                    "reaction_name_ar": rxn.get("reaction_name_ar", ""),
+                    "_rxn": rxn,
+                    "_subset": list(subset),
+                })
+                continue
+
+            if k == 2:
+                # Respect explicit no-reaction BEFORE general rule inference
+                if check_explicit_no_reaction(list(subset)):
+                    continue
+                inf = _infer_by_rules(list(subset), domain=domain)
+                if inf is not None:
+                    seen_sigs.add(sig)
+                    pathways.append({
+                        "pathway_id": f"rule_{inf.get('rule_id', 'inferred')}_{'_'.join(sig)}",
+                        "mode": "rule_inferred",
+                        "reactant_formulas": sub_formulas,
+                        "product_formulas": [pr["formula"] for pr in inf.get("products", [])],
+                        "equation_unicode": inf.get("equation_unicode", ""),
+                        "category": inf.get("category", ""),
+                        "domain": domain,
+                        "reaction_name_ar": inf.get("rule_name_ar", ""),
+                        "_inf": inf,
+                        "_subset": list(subset),
+                    })
+
+    # Detect shared/competing reactants and unreacted species
+    participation: dict[str, list[str]] = {s["formula"]: [] for s in species}
+    for pw in pathways:
+        for f in pw["reactant_formulas"]:
+            participation.setdefault(f, []).append(pw["pathway_id"])
+
+    shared_reactants = [f for f, pws in participation.items() if len(pws) > 1]
+    unreacted_formulas = [f for f, pws in participation.items() if len(pws) == 0]
+    has_unresolved_competition = bool(shared_reactants and len(pathways) > 1)
+
+    clean_pathways = [
+        {k: v for k, v in pw.items() if not k.startswith("_")}
+        for pw in pathways
+    ]
+
+    return {
+        "input_formulas": [s["formula"] for s in species],
+        "domain_filter": domain,
+        "pathway_count": len(pathways),
+        "pathways": clean_pathways,
+        "shared_reactants": shared_reactants,
+        "unreacted_formulas": unreacted_formulas,
+        "has_unresolved_competition": has_unresolved_competition,
+        "double_consumption_prevented": True,
+        "single_outcome_withheld": has_unresolved_competition,
+        "summary_ar": (
+            f"تم رصد {len(pathways)} مسارات تفاعلية متنافسة تشترك فيها المواد ({'، '.join(shared_reactants)})؛ "
+            "يمتنع المحرك عن فرض ناتج نهائي واحد أو استهلاك نفس المادة مرتين دون نموذج حركي/اتزاني مقترن."
+            if has_unresolved_competition
+            else (
+                f"تم تحليل شبكة التفاعلات ورصد {len(pathways)} مسار(ات) متوافقة، والمواد غير المتفاعلة: "
+                f"{'، '.join(unreacted_formulas) if unreacted_formulas else 'لا يوجد'}."
+                if pathways
+                else "لم تُرصد مسارات تفاعلية مدعومة ضمن الشبكة المدخلة."
+            )
+        ),
+        "_raw_pathways": pathways,
+    }
+
+
+def _infer_by_rules(species: list[dict[str, Any]], domain: str = "all_domains") -> dict[str, Any] | None:
+    res = _infer_by_rules_core(species)
+    return res if _inference_matches_domain(res, domain) else None
+
+
+def _infer_by_rules_core(species: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Applies the documented general-chemistry rules in priority order."""
     if len(species) < 2:
         return None
@@ -1497,12 +1630,15 @@ def predict_reaction(
             species,
         )
 
-    # ---- Tier 1: documented reactions from the verified registry -----------------------
+    eff_domain = None if (not domain or domain in {"all_domains", "all"}) else domain
+
+    # ---- Step 2: Documented reactions from the verified registry (honoring domain) ---
     formulas = [s["formula"] for s in species]
-    documented = find_verified_reactions(formulas, reaction_type=None, domain=None)
+    documented = find_verified_reactions(formulas, reaction_type=None, domain=eff_domain)
     if documented:
         rxn = documented[0]
         payload = _documented_payload(rxn, species, reactant_inputs)
+        payload["domain_filter_applied"] = domain
         payload["alternatives"] = [
             {"reaction_id": r["reaction_id"], "reaction_name_ar": r["reaction_name_ar"], "category": r.get("category", "")}
             for r in documented[1:]
@@ -1514,51 +1650,62 @@ def predict_reaction(
             )
         return payload
 
-    # If 3 or more species, check if any subset of size >= 2 matches a documented reaction!
-    if len(species) > 2:
-        for k in range(len(species) - 1, 1, -1):
-            for subset in itertools.combinations(species, k):
-                sub_formulas = [s["formula"] for s in subset]
-                sub_documented = find_verified_reactions(sub_formulas, reaction_type=None, domain=None)
-                if sub_documented:
-                    rxn = sub_documented[0]
-                    unreacted = [s for s in species if s not in subset]
-                    sub_inputs = [inp for inp in (reactant_inputs or []) if _matches_species_input(inp, subset)]
-                    payload = _documented_payload(rxn, list(subset), sub_inputs, unreacted_species=unreacted)
-                    payload["alternatives"] = [
-                        {"reaction_id": r["reaction_id"], "reaction_name_ar": r["reaction_name_ar"], "category": r.get("category", "")}
-                        for r in sub_documented[1:]
-                    ]
-                    return payload
+    # ---- Step 3: Explicit "No Reaction" Detection BEFORE general rule inference ------
+    if len(species) == 2:
+        no_rxn = check_explicit_no_reaction(species)
+        if no_rxn:
+            return _insufficient_payload(
+                no_rxn["reason_ar"],
+                [
+                    "تم التحقق علمياً من عدم توفر دافع ثرموديناميكي أو كهروكيميائي لحدوث تفاعل في الشروط المعتادة.",
+                    "لا حاجة لإضافة متفاعلات أخرى ما لم تكن هناك رغبة في دراسة تفاعل كيميائي مختلف.",
+                ],
+                species,
+                is_no_reaction=True,
+                no_reaction_reason_ar=no_rxn["reason_ar"],
+                scientific_basis_ar=no_rxn["scientific_basis_ar"],
+            )
 
-    # ---- Tier 2: rule-based inference ------------------------------------------------
-    inference = _infer_by_rules(species)
+    # ---- Step 4A: Multi-reactant Reaction Network analysis (3+ species) --------------
+    if len(species) > 2:
+        network = analyze_reaction_network(species, domain=domain)
+        raw_pws = network.pop("_raw_pathways", [])
+        if raw_pws:
+            primary = raw_pws[0]
+            subset = primary["_subset"]
+            unreacted = [s for s in species if s not in subset]
+            sub_inputs = [inp for inp in (reactant_inputs or []) if _matches_species_input(inp, subset)]
+            if primary["mode"] == "documented":
+                payload = _documented_payload(primary["_rxn"], subset, sub_inputs, unreacted_species=unreacted)
+            else:
+                payload = _finalize_inferred(primary["_inf"], subset, sub_inputs, unreacted_species=unreacted)
+            payload["domain_filter_applied"] = domain
+            payload["reaction_network"] = network
+            if network["has_unresolved_competition"]:
+                payload["single_outcome_withheld"] = True
+                payload["verdict_ar"] = (
+                    f"مسارات تفاعلية متنافسة غير محسومة ({network['pathway_count']} مسارات تشترك فيها المواد: "
+                    f"{'، '.join(network['shared_reactants'])}) — يُعرض المسار الأول كمرجع مع إظهار كامل شبكة التفاعلات دون استهلاك مزدوج."
+                )
+            return payload
+
+        no_rxn_multi = check_explicit_no_reaction(species)
+        if no_rxn_multi:
+            return _insufficient_payload(
+                no_rxn_multi["reason_ar"],
+                ["تم التحقق علمياً من عدم توفر دافع ثرموديناميكي أو كهروكيميائي لحدوث تفاعل بين هذه المواد."],
+                species,
+                is_no_reaction=True,
+                no_reaction_reason_ar=no_rxn_multi["reason_ar"],
+                scientific_basis_ar=no_rxn_multi["scientific_basis_ar"],
+            )
+
+    # ---- Step 4B: Rule-based inference (2 species, honoring domain) ------------------
+    inference = _infer_by_rules(species, domain=domain)
     if inference is not None:
-        return _finalize_inferred(inference, species, reactant_inputs)
-
-    # If 3 or more species, check if any pair of species reacts via rules!
-    if len(species) > 2:
-        for pair in itertools.combinations(species, 2):
-            inf = _infer_by_rules(list(pair))
-            if inf is not None:
-                unreacted = [s for s in species if s not in pair]
-                pair_inputs = [inp for inp in (reactant_inputs or []) if _matches_species_input(inp, pair)]
-                return _finalize_inferred(inf, list(pair), pair_inputs, unreacted_species=unreacted)
-
-    # ---- Explicit "No Reaction" Detection ----
-    no_rxn = check_explicit_no_reaction(species)
-    if no_rxn:
-        return _insufficient_payload(
-            no_rxn["reason_ar"],
-            [
-                "تم التحقق علمياً من عدم توفر دافع ثرموديناميكي أو كهروكيميائي لحدوث تفاعل في الشروط المعتادة.",
-                "لا حاجة لإضافة متفاعلات أخرى ما لم تكن هناك رغبة في دراسة تفاعل كيميائي مختلف.",
-            ],
-            species,
-            is_no_reaction=True,
-            no_reaction_reason_ar=no_rxn["reason_ar"],
-            scientific_basis_ar=no_rxn["scientific_basis_ar"],
-        )
+        payload = _finalize_inferred(inference, species, reactant_inputs)
+        payload["domain_filter_applied"] = domain
+        return payload
 
     # ---- Fallback Tier 3: Insufficient evidence (never invent products) ----
     return _insufficient_payload(
