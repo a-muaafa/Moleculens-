@@ -1064,7 +1064,30 @@ def _calc_labute_asa(mol: _Mol) -> float:
     return round(asa, 3)
 
 
-def _compute_morgan_bitvect(mol: _Mol, radius: int = 2, nBits: int = 2048) -> set[int]:
+class ExplicitBitVect(set):
+    """Minimal ExplicitBitVect compatible with set and RDKit's BitVect API."""
+    def __init__(self, bits=None, num_bits: int = 2048):
+        super().__init__(bits or ())
+        self._num_bits = int(num_bits)
+
+    def GetOnBits(self) -> tuple[int, ...]:
+        return tuple(sorted(self))
+
+    def GetNumBits(self) -> int:
+        return self._num_bits
+
+    def GetNumOnBits(self) -> int:
+        return len(self)
+
+    def ToBitString(self) -> str:
+        chars = ["0"] * self._num_bits
+        for b in self:
+            if 0 <= b < self._num_bits:
+                chars[b] = "1"
+        return "".join(chars)
+
+
+def _compute_morgan_bitvect(mol: _Mol, radius: int = 2, nBits: int = 2048) -> ExplicitBitVect:
     """Computes circular neighborhood hashes up to `radius` hops mapped into `nBits`."""
     heavy = [a for a in mol.atoms if a.symbol != "H"]
     env: dict[int, str] = {}
@@ -1091,7 +1114,7 @@ def _compute_morgan_bitvect(mol: _Mol, radius: int = 2, nBits: int = 2048) -> se
             nxt[a.idx] = hashlib.md5(combined.encode()).hexdigest()[:12]
             bits.add(int(nxt[a.idx][:8], 16) % nBits)
         curr = nxt
-    return bits
+    return ExplicitBitVect(bits, num_bits=nBits)
 
 
 # ==============================================================================
@@ -1392,6 +1415,8 @@ class AllChem:
 
 
 class DataStructs:
+    ExplicitBitVect = ExplicitBitVect
+
     @staticmethod
     def TanimotoSimilarity(fp_a: set[int], fp_b: set[int]) -> float:
         if not fp_a and not fp_b:

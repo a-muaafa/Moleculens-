@@ -614,7 +614,11 @@ class AIScientificAssistant:
 
         elif "tpsa" in q_lower or "السطح القطب" in q_lower or "حاجز" in q_lower or "نفاذية" in q_lower:
             sources_used.append(cls.PROPERTY_META["tpsa"]["source"])
-            reference_facts.append(cls.PROPERTY_META["tpsa"]["significance_ar" if is_ar else "significance_en"])
+            reference_facts.append(
+                f"مساحة السطح القطبي الطوبولوجي (TPSA): {cls.PROPERTY_META['tpsa']['significance_ar' if is_ar else 'significance_en']}"
+                if is_ar
+                else f"Topological Polar Surface Area (TPSA): {cls.PROPERTY_META['tpsa']['significance_en']}"
+            )
             if props.get("tpsa") is not None:
                 grounded_in_compound = True
                 val = props["tpsa"]

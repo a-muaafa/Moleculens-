@@ -1,12 +1,27 @@
 {
-  "generated_at_utc": "2026-11-22T18:09:53.333636+00:00",
+  "generated_at_utc": "2026-11-22T19:42:07.982542+00:00",
   "benchmark_size": 150,
-  "native_rdkit_available": false,
-  "native_rdkit_version": null,
+  "parsed_both_count": 150,
+  "native_rdkit_available": true,
+  "native_rdkit_version": "2026.09.1",
   "fallback_version": "pure-python-fallback-1.0",
-  "parity_verified": false,
-  "fallback_parse_success_count": 150,
-  "fallback_parse_success_pct": 100.0,
-  "note_ar": "لم يتم العثور على مكتبة RDKit الأصلية في هذه البيئة؛ لذا لم تُحسب نسب المطابقة الفعلية بين RDKit والبديل. شغّل هذا السكربت في بيئة تحتوي على RDKit الأصلي (أو عبر وظيفة native-rdkit في GitHub Actions) لقياس نسب المطابقة الحقيقية عبر الـ 150 جزيئاً.",
-  "property_match_rates_pct": null
+  "parity_verified": true,
+  "property_match_rates_pct": {
+    "molecular_formula_exact_pct": 100.0,
+    "molecular_weight_within_0_1_da_pct": 100.0,
+    "canonical_smiles_exact_pct": 91.33,
+    "morgan_fingerprint_exact_pct": 0.0,
+    "tanimoto_similarity_within_0_05_pct": 74.0,
+    "smarts_matching_exact_pct": 91.25,
+    "bemis_murcko_scaffold_exact_pct": 72.67,
+    "descriptors": {
+      "logp_within_0_5_pct": 76.67,
+      "tpsa_within_5_0_pct": 96.0,
+      "hbd_exact_pct": 98.67,
+      "hba_exact_pct": 66.67,
+      "rotatable_bonds_exact_pct": 86.0,
+      "ring_count_exact_pct": 100.0
+    }
+  },
+  "formula_mismatches_sample": []
 }

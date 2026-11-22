@@ -122,7 +122,8 @@ def _import_native_rdkit() -> dict[str, Any] | None:
         import rdkit
         if getattr(rdkit, "__is_fallback__", False):
             return None
-        from rdkit import Chem, DataStructs
+        from rdkit import Chem, DataStructs, RDLogger
+        RDLogger.DisableLog("rdApp.warning")
         from rdkit.Chem import Crippen, Descriptors, Lipinski, rdMolDescriptors
         from rdkit.Chem.Scaffolds import MurckoScaffold
         return {
@@ -229,7 +230,8 @@ def run_parity_benchmark(require_native_rdkit: bool = False) -> dict[str, Any]:
         ffp = fb.AllChem.GetMorganFingerprintAsBitVect(fm, 2, nBits=2048)
         native_fps.append(nfp)
         fb_fps.append(ffp)
-        if set(nfp.GetOnBits()) == set(ffp.GetOnBits()):
+        fb_bits = set(ffp.GetOnBits()) if hasattr(ffp, "GetOnBits") else (set(ffp) if isinstance(ffp, (set, list, tuple)) else set())
+        if set(nfp.GetOnBits()) == fb_bits:
             counts["morgan_fp_exact"] += 1
 
         nsc = n_Scaf.MurckoScaffoldSmiles(mol=nm)
