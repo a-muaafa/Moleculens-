@@ -108,19 +108,19 @@ def render_molecular_intelligence_section() -> None:
                 for idx, item in enumerate(sims):
                     with cols[idx % 3]:
                         pct = item["similarity_pct"]
-                        bar_color = "#059669" if pct >= 50 else ("#0f4c5c" if pct >= 25 else "#475569")
+                        bar_color = "#047857" if pct >= 50 else ("#0E5A6D" if pct >= 25 else "#52657A")
                         st.markdown(
                             f"""
 <div class="ml-card" style="border-top:4px solid {bar_color};">
   <div style="display:flex;justify-content:space-between;align-items:center;">
-    <strong style="color:#0f4c5c;font-size:1.05rem;">{_esc(item['name_ar'])}</strong>
-    <span class="ml-tri-badge" style="background:rgba(15,76,92,0.12);color:{bar_color};font-weight:bold;">
+    <strong style="color:#0D2B42;font-size:1.05rem;">{_esc(item['name_ar'])}</strong>
+    <span class="ml-tri-badge" style="background:rgba(14,90,109,0.10);color:{bar_color};font-weight:bold;">
       {pct}% تشابه
     </span>
   </div>
-  <p style="margin:0.25rem 0;color:#64748b;font-size:0.88rem;">{_esc(item['name_en'])} ({format_chemical_formula_display(item['formula'])})</p>
-  <span class="ml-badge" style="background:#334155;margin-bottom:0.4rem;">{_esc(item['subclass_label_ar'])}</span>
-  <p style="margin:0;font-size:0.8rem;color:#94a3b8;font-family:monospace;word-break:break-all;">{_esc(item['smiles'])}</p>
+  <p style="margin:0.25rem 0;color:#52657A;font-size:0.88rem;">{_esc(item['name_en'])} ({format_chemical_formula_display(item['formula'])})</p>
+  <span class="ml-badge" style="background:#244C73;margin-bottom:0.4rem;">{_esc(item['subclass_label_ar'])}</span>
+  <p style="margin:0;font-size:0.8rem;color:#64748B;font-family:'JetBrains Mono',monospace;word-break:break-all;">{_esc(item['smiles'])}</p>
 </div>
 """,
                             unsafe_allow_html=True,

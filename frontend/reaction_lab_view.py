@@ -494,12 +494,12 @@ def _render_end_to_end_visual_experiment(rxn_result: dict[str, Any]) -> None:
             with r_cols[idx_c]:
                 st.markdown(
                     f"""
-<div style="border:1px solid #cbd5e1;border-radius:12px;padding:12px;background:#f8fafc;text-align:center;">
-  <div style="font-weight:700;color:#0f4c5c;font-size:1.05rem;">{card['name_ar']} ({card['formula_display']})</div>
-  <div style="font-size:0.85rem;color:#64748b;margin-bottom:6px;">الحالة: ({card['state']}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
+<div class="ml-stage-card">
+  <div style="font-weight:700;color:#0E5A6D;font-size:1.05rem;">{card['name_ar']} ({card['formula_display']})</div>
+  <div style="font-size:0.85rem;color:#52657A;margin-bottom:6px;">الحالة: ({card['state']}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
   <div style="display:flex;justify-content:center;margin:6px 0;">{card['svg']}</div>
-  <div style="font-weight:700;color:#1e3a8a;margin-top:6px;">الكمية الابتدائية: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
-  <div style="font-size:0.86rem;color:#0f766e;margin-top:4px;">الدور: {card['role_ar']}</div>
+  <div style="font-weight:700;color:#244C73;margin-top:6px;">الكمية الابتدائية: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
+  <div style="font-size:0.86rem;color:#0D9488;margin-top:4px;">الدور: {card['role_ar']}</div>
 </div>
 """,
                     unsafe_allow_html=True,
@@ -547,15 +547,15 @@ def _render_end_to_end_visual_experiment(rxn_result: dict[str, Any]) -> None:
         inv_cols = st.columns(max(1, len(s4["final_inventory"])))
         for idx_i, item in enumerate(s4["final_inventory"]):
             with inv_cols[idx_i]:
-                border_col = "#059669" if "ناتج" in item["kind_ar"] else "#d97706"
+                border_col = "#047857" if "ناتج" in item["kind_ar"] else "#D97706"
                 st.markdown(
                     f"""
-<div style="border:2px solid {border_col};border-radius:12px;padding:12px;background:#ffffff;text-align:center;">
+<div class="ml-species-card" style="border:1.5px solid {border_col};border-top:4px solid {border_col};padding:12px;">
   <div style="font-size:0.82rem;font-weight:700;color:{border_col};">{item['kind_ar']}</div>
-  <div style="font-weight:700;color:#0f4c5c;font-size:1.05rem;margin-top:3px;">{item['name_ar']} ({item['formula_display']})</div>
+  <div style="font-weight:700;color:#0D2B42;font-size:1.05rem;margin-top:3px;">{item['name_ar']} ({item['formula_display']})</div>
   <div style="display:flex;justify-content:center;margin:6px 0;">{item['svg']}</div>
-  <div style="font-weight:700;color:#1e293b;">الكمية في الوعاء النهائي: {item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
-  <div style="font-size:0.84rem;color:#475569;margin-top:4px;">{item['status_ar']}</div>
+  <div style="font-weight:700;color:#1E293B;">الكمية في الوعاء النهائي: {item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
+  <div style="font-size:0.84rem;color:#52657A;margin-top:4px;">{item['status_ar']}</div>
 </div>
 """,
                     unsafe_allow_html=True,

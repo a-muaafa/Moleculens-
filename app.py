@@ -64,12 +64,12 @@ def _open_prediction_with_entity(entity_info: dict[str, Any]) -> None:
 render_hero_header(lang=app_lang)
 
 nav_options: dict[str, str] = {
-    "home": "الصفحة الرئيسية (Home)",
-    "explore": "1. Explore & Understand (استكشاف المادة)",
-    "reaction_lab": "2. Reaction Lab – مختبر التفاعلات الكيميائية",
-    "molecular_intelligence": "3. Molecular Intelligence (الذكاء الجزيئي والتعديل البنيوي)",
-    "titration": "4. Titration Lab (مختبر المعايرة)",
-    "concentration": "5. Concentration Lab (حاسبة التراكيز)",
+    "home": "الرئيسية (Home)",
+    "explore": "استكشاف المادة (Explore & Understand)",
+    "reaction_lab": "مختبر التفاعلات (Reaction Lab)",
+    "molecular_intelligence": "الذكاء الجزيئي (Molecular AI)",
+    "titration": "مختبر المعايرة (Titration)",
+    "concentration": "حاسبة التراكيز (Concentration)",
 }
 if SHOW_EXPERIMENTAL_PHARMACOLOGY:
     nav_options["pharmacology"] = "6. Pharmacology – علم الأدوية (Coming Soon)"
@@ -116,5 +116,7 @@ except Exception:
         st.session_state["active_section"] = "home"
         st.rerun()
 
-st.divider()
-st.caption(f"تنويه علمي وطبي: {SCIENTIFIC_DISCLAIMER_AR}")
+st.markdown(
+    f'<div class="ml-footer"><strong>تنويه علمي وطبي:</strong> {SCIENTIFIC_DISCLAIMER_AR}</div>',
+    unsafe_allow_html=True,
+)
