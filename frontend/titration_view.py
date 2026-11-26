@@ -44,9 +44,9 @@ def render_titration_view(lang: str = "ar") -> None:
 
     st.markdown(
         f"""
-        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-            <h2 style="color: #60a5fa; margin: 0 0 8px 0; font-size: 1.5rem;">{html.escape(header_title)}</h2>
-            <p style="color: #94a3b8; margin: 0; font-size: 0.95rem;">{html.escape(header_desc)}</p>
+        <div class="ml-module-header">
+            <h2>{html.escape(header_title)}</h2>
+            <p>{html.escape(header_desc)}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -284,7 +284,8 @@ def render_titration_view(lang: str = "ar") -> None:
     ind_range = indicators[selected_indicator]["transition_range"]
     is_suitable = ind_range[0] <= ph_eq <= ind_range[1] or abs(ph_eq - ((ind_range[0] + ind_range[1]) / 2.0)) <= 1.5
 
-    suit_color = "#10b981" if is_suitable else "#f59e0b"
+    suit_color = "#047857" if is_suitable else "#B45309"
+    suit_bg = "#ECFDF5" if is_suitable else "#FFFBEB"
     suit_text = (
         ("الكاشف ملائم لهذه المعايرة لأن مدى تغير لونه يتقاطع مع القفزة الهيدروجينية لنقطة التكافؤ." if is_ar
          else "Selected indicator is suitable: its transition interval encompasses the sharp equivalence pH inflection.")
@@ -295,12 +296,12 @@ def render_titration_view(lang: str = "ar") -> None:
 
     st.markdown(
         f"""
-        <div style="background: rgba(15, 23, 42, 0.6); border-left: 4px solid {suit_color}; border-radius: 8px; padding: 14px 18px; margin-top: 16px;">
+        <div class="ml-suitability-card" style="background: {suit_bg}; border-right: 4px solid {suit_color}; border-color: rgba(14, 90, 109, 0.14); border-right-color: {suit_color};">
             <strong style="color: {suit_color}; font-size: 1rem;">
                 {("تقييم ملائمة الكاشف: " if is_ar else "Indicator Assessment: ")}
                 {indicators[selected_indicator]['name_ar' if is_ar else 'name_en']}
             </strong>
-            <p style="color: #cbd5e1; margin: 6px 0 0 0; font-size: 0.9rem;">{html.escape(suit_text)}</p>
+            <p style="color: #334155; margin: 6px 0 0 0; font-size: 0.92rem; line-height: 1.65;">{html.escape(suit_text)}</p>
         </div>
         """,
         unsafe_allow_html=True,

@@ -32,6 +32,25 @@ def render_hero_header(lang: str = "ar") -> None:
         else "Interactive scientific learning platform for pharmacy and chemistry students before entering the laboratory (Pre-Lab Simulation). "
         "Explore elements, compounds, drugs, and proteins, or simulate chemical reactions, titrations, and molecular analysis offline-first."
     )
+    chips_html = (
+        """
+  <div class="ml-hero-stats">
+    <span class="ml-hero-chip">241 مادة علمية موثقة محلياً</span>
+    <span class="ml-hero-chip">152 تفاعلاً معتمداً بمرجع علمي</span>
+    <span class="ml-hero-chip">41 حمضاً و 30 قاعدة و 23 كاشفاً</span>
+    <span class="ml-hero-chip">توثيق علمي صريح دون اختلاق</span>
+  </div>
+"""
+        if is_ar
+        else """
+  <div class="ml-hero-stats">
+    <span class="ml-hero-chip">241 Offline Substances</span>
+    <span class="ml-hero-chip">152 Verified Reactions</span>
+    <span class="ml-hero-chip">41 Acids / 30 Bases / 23 Indicators</span>
+    <span class="ml-hero-chip">Evidence-Grounded Core</span>
+  </div>
+"""
+    )
 
     st.markdown(
         f"""
@@ -46,6 +65,7 @@ def render_hero_header(lang: str = "ar") -> None:
   <p class="ml-hero-desc">
     {html.escape(desc)}
   </p>
+  {chips_html}
 </div>
 """,
         unsafe_allow_html=True,
@@ -56,24 +76,32 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
     """Renders the 3-step welcome card and the grid of completed core modules."""
     is_ar = lang == "ar"
 
-    # Concise 3-step user journey welcome card
     if is_ar:
         st.markdown(
             """
-<div class="ml-card" style="border-right:4px solid #0f4c5c;margin-bottom:1.25rem;">
+<div class="ml-card" style="border-right:4px solid var(--ml-accent);margin-bottom:1.25rem;">
   <h3 style="margin-top:0;">ابدأ رحلتك في MolecuLens بثلاث خطوات</h3>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:0.65rem;">
-    <div style="background:rgba(15,76,92,0.06);border-radius:10px;padding:12px;">
-      <strong>1. اختر مركباً أو تجربة جاهزة</strong>
-      <p style="margin:4px 0 0 0;font-size:0.9rem;">ابحث عن أي مادة بالعربية أو الإنجليزية أو الصيغة الكيميائية، أو اختر تجربة جاهزة تعمل دون إنترنت.</p>
+  <div class="ml-step-grid">
+    <div class="ml-step-tile">
+      <div style="display:flex;align-items:center;margin-bottom:0.35rem;">
+        <span class="ml-step-num">01</span>
+        <strong>اختر مركباً أو تجربة جاهزة</strong>
+      </div>
+      <p style="margin:0;font-size:0.9rem;color:var(--ml-text-muted);">ابحث عن أي مادة بالعربية أو الإنجليزية أو الصيغة الكيميائية، أو اختر تجربة جاهزة تعمل دون إنترنت.</p>
     </div>
-    <div style="background:rgba(15,76,92,0.06);border-radius:10px;padding:12px;">
-      <strong>2. شغّل التحليل أو المحاكاة</strong>
-      <p style="margin:4px 0 0 0;font-size:0.9rem;">نفّذ محاكاة التفاعل الكيميائي أو المعايرة الحجمية أو تحليل الخصائص الجزيئية وQSAR.</p>
+    <div class="ml-step-tile">
+      <div style="display:flex;align-items:center;margin-bottom:0.35rem;">
+        <span class="ml-step-num">02</span>
+        <strong>شغّل التحليل أو المحاكاة</strong>
+      </div>
+      <p style="margin:0;font-size:0.9rem;color:var(--ml-text-muted);">نفّذ محاكاة التفاعل الكيميائي أو المعايرة الحجمية أو تحليل الخصائص الجزيئية وQSAR.</p>
     </div>
-    <div style="background:rgba(15,76,92,0.06);border-radius:10px;padding:12px;">
-      <strong>3. استعرض النتائج والتفسير العلمي</strong>
-      <p style="margin:4px 0 0 0;font-size:0.9rem;">اطّلع على المعادلات الموزونة والرسوم التفاعلية ومصدر البيانات وحدود النموذج العلمي.</p>
+    <div class="ml-step-tile">
+      <div style="display:flex;align-items:center;margin-bottom:0.35rem;">
+        <span class="ml-step-num">03</span>
+        <strong>استعرض النتائج والتفسير العلمي</strong>
+      </div>
+      <p style="margin:0;font-size:0.9rem;color:var(--ml-text-muted);">اطّلع على المعادلات الموزونة والرسوم التفاعلية ومصدر البيانات وحدود النموذج العلمي.</p>
     </div>
   </div>
 </div>
@@ -83,7 +111,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
     else:
         st.markdown(
             """
-<div class="ml-card" style="border-left:4px solid #0f4c5c;margin-bottom:1.25rem;">
+<div class="ml-card" style="border-left:4px solid var(--ml-accent);margin-bottom:1.25rem;">
   <h3 style="margin-top:0;">Start with MolecuLens in 3 Steps</h3>
   <ol style="margin:0.5rem 0 0 1.2rem;">
     <li><strong>Choose a compound or offline preset.</strong></li>
@@ -100,6 +128,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         st.markdown(
             f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('المختبر 01 • التفاعلات والستوكيومتري' if is_ar else 'Lab 01 • Reactions')}</span>
   <h3>1. Reaction Lab – مختبر التفاعلات الكيميائية</h3>
   <p><strong>{('المختبر الموحد للتوقع التفاعلي، الموازنة، والحسابات الستوكيومترية (152 تفاعلاً موثقاً)' if is_ar else 'Unified Reaction Prediction, Stoichiometry & Visual Lab (152 Verified Reactions)')}</strong></p>
   <p>
@@ -118,6 +147,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         st.markdown(
             f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('المختبر 02 • المعايرة الحجمية' if is_ar else 'Lab 02 • Titration')}</span>
   <h3>2. Titration Lab – مختبر المعايرة الافتراضي</h3>
   <p><strong>{('محاكاة منحنيات pH والكواشف اللونية (41 حمضاً و30 قاعدة و23 كاشفاً)' if is_ar else 'Expanded Virtual Titration Lab (41 Acids, 30 Bases, 23 Indicators)')}</strong></p>
   <p>
@@ -132,13 +162,14 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Titration Lab" if is_ar else "Open Titration Lab", key="home_go_titration"):
             on_navigate("titration")
 
-    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div style='height:0.65rem;'></div>", unsafe_allow_html=True)
     c3, c4 = st.columns(2)
 
     with c3:
         st.markdown(
             f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('المختبر 03 • الكيمياء المعلوماتية وQSAR' if is_ar else 'Lab 03 • Cheminformatics')}</span>
   <h3>3. Molecular Intelligence – الذكاء الجزيئي</h3>
   <p><strong>{('التشابه الجزيئي والتعديل البنيوي ونماذج QSAR الشفافة' if is_ar else 'Molecular Intelligence, Virtual Editing & Transparent QSAR')}</strong></p>
   <p>
@@ -157,6 +188,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         st.markdown(
             f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('المختبر 04 • الاستكشاف ثنائي اللغة' if is_ar else 'Lab 04 • Exploration')}</span>
   <h3>4. Explore &amp; Understand – استكشاف المادة</h3>
   <p><strong>{('بحث موحد بالعربية والإنجليزية والصيغ الكيميائية (241 مادة محلية)' if is_ar else 'Unified Multilingual Chemical Search (241 Offline Substances)')}</strong></p>
   <p>
@@ -171,13 +203,14 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
         if st.button("الدخول إلى Explore & Understand" if is_ar else "Open Explore & Understand", key="home_go_explore"):
             on_navigate("explore")
 
-    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div style='height:0.65rem;'></div>", unsafe_allow_html=True)
     c5, c6 = st.columns(2)
 
     with c5:
         st.markdown(
             f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('المختبر 05 • المحاليل والتخفيف' if is_ar else 'Lab 05 • Solutions')}</span>
   <h3>5. Concentration Lab – حاسبة التراكيز</h3>
   <p><strong>{('حسابات التراكيز وإعداد المحاليل المخبرية' if is_ar else 'Concentration Calculator & Lab Recipes')}</strong></p>
   <p>
@@ -196,6 +229,7 @@ def render_home_overview(on_navigate: Callable[[str], None], lang: str = "ar") -
             st.markdown(
                 f"""
 <div class="ml-section-card">
+  <span class="ml-module-pill">{('خطة التطوير' if is_ar else 'Roadmap')}</span>
   <h3>6. Pharmacology – علم الأدوية</h3>
   <p><strong>{('علم الأدوية الجزيئي والسريري (قيد التطوير المستقبلي)' if is_ar else 'Pharmacology & Clinical Therapeutics (Experimental)')}</strong></p>
   <p>

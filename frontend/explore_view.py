@@ -37,7 +37,7 @@ def _render_suggestions(query_text: str) -> None:
         return
     st.markdown("<strong>اقتراحات فورية (Live Suggestions — اختر لتعبئة خانة البحث):</strong>", unsafe_allow_html=True)
     for idx, s in enumerate(suggestions):
-        c_text, c_btn = st.columns([5, 1])
+        c_text, c_btn = st.columns([6, 1], vertical_alignment="center")
         with c_text:
             st.markdown(
                 f"""
@@ -66,7 +66,7 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
 
     st.markdown(
         """
-<div class="ml-card">
+<div class="ml-module-header">
   <h3>Explore &amp; Understand — استكشاف المادة وفهم تركيبها وخصائصها</h3>
   <p>
     اكتب في خانة البحث الموحدة أي مدخل: الاسم العربي، الاسم الإنجليزي، الاسم النظامي (IUPAC Name)، الصيغة الكيميائية (H₂O أو CH₃COOH)،
@@ -82,14 +82,28 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
         key=EXPLORE_QUERY_KEY,
         placeholder="مثال: حمض الخليك، Acetic Acid، CH3COOH، Aspirin، Fe",
     )
+
+    quick_samples = [
+        ("حمض الخليك (CH₃COOH)", "CH3COOH"),
+        ("الأسبرين (Aspirin)", "Aspirin"),
+        ("الباراسيتامول (Paracetamol)", "Paracetamol"),
+        ("الكافيين (Caffeine)", "Caffeine"),
+        ("الهيموجلوبين (Hemoglobin)", "Hemoglobin"),
+    ]
+    q_cols = st.columns(len(quick_samples))
+    for q_idx, (q_lbl, q_val) in enumerate(quick_samples):
+        with q_cols[q_idx]:
+            st.button(q_lbl, key=f"exp_quick_{q_idx}", on_click=_set_explore_query, args=(q_val,))
+
     detected = detect_query_input_type(query_text)
     if detected["type"] != "empty":
         st.caption(f"نوع المدخل المكتشف تلقائياً (Detected Input Type): {detected['label_ar']}")
 
-    _render_suggestions(query_text)
-
     force_network = bool(st.session_state.pop("exp_force_network_once", False))
     res = MolecuLensCore.explore_entity(query_text, allow_network=ALLOW_EXTERNAL_NETWORK, force_network=force_network)
+
+    if not res["found"] or res["is_ambiguous"]:
+        _render_suggestions(query_text)
 
     if not res["found"]:
         st.warning(res["message"])
@@ -131,20 +145,20 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
     st.markdown(
         f"""
 <div class="ml-card">
-  <div>
+  <div class="ml-badges-row">
     <span class="{badge_cls}">{entity['entity_type_label_ar']} | {entity['entity_type_label_en']}</span>
-    <span class="ml-badge" style="background:#475569;">{entity.get('subclass_label_ar', '')}</span>
-    <span class="ml-badge" style="background:#334155;">{entity.get('match_category', 'Exact Match')}</span>
-    <span class="ml-badge" style="background:{'#0f766e' if str(entity.get('db_source', 'local')).lower().startswith(('local', 'curated', '')) and 'external' not in str(entity.get('db_source', '')).lower() else '#1d4ed8'};">{'مصدر محلي — يعمل دون إنترنت (Offline Local DB)' if 'external' not in str(entity.get('db_source', '')).lower() else 'مصدر خارجي موثق (External API)'}</span>
+    <span class="ml-badge ml-badge-neutral">{entity.get('subclass_label_ar', '')}</span>
+    <span class="ml-badge ml-badge-neutral">{entity.get('match_category', 'Exact Match')}</span>
+    <span class="ml-badge {'ml-badge-local' if 'external' not in str(entity.get('db_source', '')).lower() else 'ml-badge-element'}">{'مصدر محلي — يعمل دون إنترنت (Offline Local DB)' if 'external' not in str(entity.get('db_source', '')).lower() else 'مصدر خارجي موثق (External API)'}</span>
   </div>
-  <h3 style="margin-top:0.65rem;margin-bottom:0.35rem;">
+  <h3 style="margin-top:0.35rem;margin-bottom:0.4rem;">
     {entity['name_ar']} — <span class="ltr-inline">{entity['name_en']}</span> <span class="ml-formula-pill">{disp_formula}</span>
   </h3>
-  <p style="margin-bottom:0.2rem;color:#64748b;font-size:0.92rem;">
+  <p style="margin-bottom:0.25rem;color:var(--ml-text-muted);font-size:0.9rem;">
     <strong>سبب المطابقة (Match Reason):</strong> {entity.get('match_reason_ar', '')} |
     <strong>المصادر العلمية الموحدة (Verified Sources):</strong> <span class="ltr-inline">{", ".join(profile.get('sources', []))}</span>
   </p>
-  <p style="margin-bottom:0;color:{'#0f766e' if id_ver.get('is_verified') else '#b45309'};font-size:0.88rem;font-weight:700;">
+  <p style="margin-bottom:0;color:{'#047857' if id_ver.get('is_verified') else '#B45309'};font-size:0.88rem;font-weight:700;">
     {id_ver.get('status_ar', '')}
   </p>
 </div>
@@ -152,21 +166,38 @@ def render_explore_section(on_open_reaction_lab, on_open_prediction_lab=None, la
         unsafe_allow_html=True,
     )
 
-    if entity_type == ENTITY_CHEMICAL_ELEMENT:
-        _render_element_profile_ui(profile)
-    elif entity_type == ENTITY_DRUG_SUBSTANCE:
-        _render_drug_profile_ui(profile)
-    elif entity_type == ENTITY_BIOMOLECULE_PROTEIN:
-        _render_protein_profile_ui(profile)
+    tab_labels = ["1. التركيب والخصائص (Profile & Properties)"]
+    if entity_type != ENTITY_CHEMICAL_ELEMENT:
+        tab_labels.append("2. البنية الجزيئية 2D & 3D")
+        tab_labels.append("3. التطبيقات والتفسير العلمي")
+        tab_labels.append("4. المساعد العلمي الذكي (AI)")
     else:
-        _render_compound_profile_ui(profile)
+        tab_labels.append("2. التطبيقات والتفسير العلمي")
+        tab_labels.append("3. المساعد العلمي الذكي (AI)")
+
+    exp_tabs = st.tabs(tab_labels)
+    with exp_tabs[0]:
+        if entity_type == ENTITY_CHEMICAL_ELEMENT:
+            _render_element_profile_ui(profile)
+        elif entity_type == ENTITY_DRUG_SUBSTANCE:
+            _render_drug_profile_ui(profile)
+        elif entity_type == ENTITY_BIOMOLECULE_PROTEIN:
+            _render_protein_profile_ui(profile)
+        else:
+            _render_compound_profile_ui(profile)
 
     if entity_type != ENTITY_CHEMICAL_ELEMENT:
-        render_structure_viewer(entity)
-
-    _render_explanation_and_applications_ui(profile)
-
-    render_ai_assistant_component(compound_data=profile, lang=lang)
+        with exp_tabs[1]:
+            render_structure_viewer(entity)
+        with exp_tabs[2]:
+            _render_explanation_and_applications_ui(profile)
+        with exp_tabs[3]:
+            render_ai_assistant_component(compound_data=profile, lang=lang)
+    else:
+        with exp_tabs[1]:
+            _render_explanation_and_applications_ui(profile)
+        with exp_tabs[2]:
+            render_ai_assistant_component(compound_data=profile, lang=lang)
 
     st.markdown('<div class="ml-card">', unsafe_allow_html=True)
     st.markdown(

@@ -101,12 +101,12 @@ def _3dmol_html(mol_block: str | None, pdb_id: str | None) -> str:
     return f"""
 <div style="font-family:sans-serif;direction:ltr;">
   <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-    <button onclick="setBallStick()" style="padding:5px 12px;border-radius:6px;border:1px solid #0f4c5c;background:#1e3e62;color:#fff;cursor:pointer;font-weight:600;">Ball &amp; Stick</button>
-    <button onclick="setSpacefill()" style="padding:5px 12px;border-radius:6px;border:1px solid #0f4c5c;background:#0f766e;color:#fff;cursor:pointer;font-weight:600;">Spacefill (CPK)</button>
-    <button onclick="isSpinning=!isSpinning;viewer.spin(isSpinning);" style="padding:5px 12px;border-radius:6px;border:1px solid #334155;background:#475569;color:#fff;cursor:pointer;font-weight:600;">Toggle Spin</button>
-    <button onclick="viewer.zoomTo();viewer.render();" style="padding:5px 12px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;color:#0f172a;cursor:pointer;font-weight:600;">Reset View</button>
+    <button onclick="setBallStick()" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(14,90,109,0.25);background:#0E5A6D;color:#fff;cursor:pointer;font-weight:600;transition:all 0.2s;">Ball &amp; Stick</button>
+    <button onclick="setSpacefill()" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(13,148,136,0.25);background:#0D9488;color:#fff;cursor:pointer;font-weight:600;transition:all 0.2s;">Spacefill (CPK)</button>
+    <button onclick="isSpinning=!isSpinning;viewer.spin(isSpinning);" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(36,76,115,0.25);background:#244C73;color:#fff;cursor:pointer;font-weight:600;transition:all 0.2s;">Toggle Spin</button>
+    <button onclick="viewer.zoomTo();viewer.render();" style="padding:6px 14px;border-radius:8px;border:1px solid #D7E3EC;background:#F7FAFC;color:#0D2B42;cursor:pointer;font-weight:600;transition:all 0.2s;">Reset View</button>
   </div>
-  <div id="mol3d" style="width:100%;height:430px;position:relative;border:1px solid #cbd5e1;border-radius:12px;"></div>
+  <div id="mol3d" style="width:100%;height:430px;position:relative;border:1.5px solid #D7E3EC;border-radius:14px;overflow:hidden;"></div>
 </div>
 <script src="https://3dmol.org/build/3Dmol-min.js"></script>
 <script>

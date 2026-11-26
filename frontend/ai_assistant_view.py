@@ -25,12 +25,12 @@ def render_ai_assistant_component(compound_data: dict = None, lang: str = "ar"):
 
     st.markdown(
         f"""
-        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+        <div class="ml-module-header" style="margin-bottom: 18px;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-                <span style="background: #3b82f6; color: white; padding: 3px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: bold;">AI</span>
-                <h3 style="color: #60a5fa; margin: 0; font-size: 1.3rem;">{html.escape(box_title)}</h3>
+                <span class="ml-ai-tag">AI</span>
+                <h3 style="margin: 0; font-size: 1.28rem;">{html.escape(box_title)}</h3>
             </div>
-            <p style="color: #94a3b8; margin: 0; font-size: 0.9rem;">{html.escape(box_desc)}</p>
+            <p>{html.escape(box_desc)}</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -78,20 +78,20 @@ def render_ai_assistant_component(compound_data: dict = None, lang: str = "ar"):
 
         st.markdown(
             f"""
-            <div style="background: rgba(15, 23, 42, 0.6); border-right: 4px solid #3b82f6; border-radius: 8px; padding: 16px 20px; margin-top: 12px;">
-                <h4 style="color: #93c5fd; margin: 0 0 8px 0;">{html.escape(explanation['property_name'])}</h4>
-                <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.6; margin-bottom: 12px;">
+            <div class="ml-ai-card">
+                <h4>{html.escape(explanation['property_name'])}</h4>
+                <p style="color: #334155; font-size: 0.95rem; line-height: 1.7; margin-bottom: 12px;">
                     {html.escape(explanation['definition'])}
                 </p>
-                <div style="background: rgba(30, 41, 59, 0.5); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-                    <strong style="color: #38bdf8; font-size: 0.85rem;">{("الأهمية الدوائية والحركية:" if is_ar else "Pharmacological Impact:")}</strong>
-                    <p style="color: #e2e8f0; margin: 4px 0 0 0; font-size: 0.9rem;">{html.escape(explanation['pharmacological_impact'])}</p>
+                <div class="ml-ai-impact-box">
+                    <strong style="color: #0E5A6D; font-size: 0.86rem;">{("الأهمية الدوائية والحركية:" if is_ar else "Pharmacological Impact:")}</strong>
+                    <p style="color: #1E293B; margin: 4px 0 0 0; font-size: 0.92rem; line-height: 1.65;">{html.escape(explanation['pharmacological_impact'])}</p>
                 </div>
-                <div style="color: #94a3b8; font-size: 0.85rem;">
-                    <strong>{("الحد المثالي لقاعدة ليبينسكي:" if is_ar else "Lipinski Optimal Threshold:")}</strong> 
-                    <span style="color: #f59e0b;">{html.escape(explanation['optimal_range'])}</span>
+                <div style="color: #52657A; font-size: 0.88rem; margin-top: 8px;">
+                    <strong>{("الحد المثالي لقاعدة ليبينسكي:" if is_ar else "Lipinski Optimal Threshold:")}</strong>
+                    <span style="color: #B45309; font-weight: 700;">{html.escape(explanation['optimal_range'])}</span>
                 </div>
-                {f'<div style="margin-top: 8px; font-weight: bold; color: #10b981;">{html.escape(explanation.get("context_evaluation", ""))}</div>' if explanation.get("context_evaluation") else ''}
+                {f'<div style="margin-top: 8px; font-weight: 700; color: #047857;">{html.escape(explanation.get("context_evaluation", ""))}</div>' if explanation.get("context_evaluation") else ''}
             </div>
             """,
             unsafe_allow_html=True,
@@ -103,12 +103,12 @@ def render_ai_assistant_component(compound_data: dict = None, lang: str = "ar"):
             for idx, step in enumerate(steps, 1):
                 st.markdown(
                     f"""
-                    <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px 18px; margin-bottom: 10px;">
-                        <span style="background: #2563eb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">
+                    <div class="ml-ai-step">
+                        <span style="background: #0E5A6D; color: white; padding: 2px 9px; border-radius: 6px; font-size: 0.76rem; font-weight: 700;">
                             {("خطوة" if is_ar else "Step")} {idx}
                         </span>
-                        <strong style="color: #f1f5f9; margin-right: 8px; font-size: 0.95rem;">{html.escape(step['title'])}</strong>
-                        <p style="color: #cbd5e1; margin: 6px 0 0 0; font-size: 0.9rem; line-height: 1.5;">{html.escape(step['detail'])}</p>
+                        <strong style="color: #0D2B42; margin-right: 8px; font-size: 0.96rem;">{html.escape(step['title'])}</strong>
+                        <p style="color: #475569; margin: 6px 0 0 0; font-size: 0.92rem; line-height: 1.65;">{html.escape(step['detail'])}</p>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -142,11 +142,11 @@ def render_ai_assistant_component(compound_data: dict = None, lang: str = "ar"):
             answer = assistant.answer_student_question(active_question, compound_data=compound_data, lang=lang)
             st.markdown(
                 f"""
-                <div style="background: rgba(30, 41, 59, 0.8); border-left: 4px solid #10b981; border-radius: 8px; padding: 16px; margin-top: 14px;">
-                    <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 6px;">
+                <div class="ml-ai-answer">
+                    <div style="color: #0E5A6D; font-size: 0.88rem; margin-bottom: 6px;">
                         <strong>{("السؤال:" if is_ar else "Question:")}</strong> {html.escape(active_question)}
                     </div>
-                    <div style="color: #e2e8f0; font-size: 0.95rem; line-height: 1.6;">
+                    <div style="color: #1E293B; font-size: 0.95rem; line-height: 1.75;">
                         {html.escape(answer)}
                     </div>
                 </div>

@@ -120,16 +120,16 @@ def _render_visual_molecules(reactants: list[dict[str, Any]], products: list[dic
                 svg = ReactionVisualizer.get_species_svg(r.get("formula", ""))
                 st.markdown(
                     f"""
-                    <div style="background:#1e293b;border:1px solid #334155;border-radius:10px;padding:8px;text-align:center;">
-                        <strong style="color:#38bdf8;">{coeff_str}{_esc(r.get('name_ar', ''))}</strong>
-                        <div style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
+                    <div class="ml-species-card">
+                        <strong style="color:#0E5A6D;">{coeff_str}{_esc(r.get('name_ar', ''))}</strong>
+                        <div style="color:#52657A;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
                         <div>{svg}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
     with c_arrow:
-        st.markdown("<div style='text-align:center;font-size:2.2rem;color:#0f766e;margin-top:60px;'>→</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center;font-size:2.2rem;color:#0D9488;margin-top:60px;font-weight:800;'>→</div>", unsafe_allow_html=True)
     with c_p:
         st.markdown("**النواتج بعد التفاعل (Products):**")
         p_cols = st.columns(max(len(products), 1))
@@ -141,9 +141,9 @@ def _render_visual_molecules(reactants: list[dict[str, Any]], products: list[dic
                 svg = ReactionVisualizer.get_species_svg(p.get("formula", ""))
                 st.markdown(
                     f"""
-                    <div style="background:#1e293b;border:1px solid #059669;border-radius:10px;padding:8px;text-align:center;">
-                        <strong style="color:#34d399;">{coeff_str}{_esc(p.get('name_ar', ''))}</strong>
-                        <div style="color:#94a3b8;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
+                    <div class="ml-species-card ml-species-card-product">
+                        <strong style="color:#047857;">{coeff_str}{_esc(p.get('name_ar', ''))}</strong>
+                        <div style="color:#52657A;font-size:0.85rem;margin-bottom:6px;">{f_disp}</div>
                         <div>{svg}</div>
                     </div>
                     """,
@@ -381,10 +381,10 @@ def render_prediction_section() -> None:
     if not prediction.get("supported"):
         if prediction.get("is_no_reaction") or prediction.get("no_reaction_detected"):
             st.markdown(
-                '<div style="background-color: #2b1f14; border: 1px solid #c2410c; border-radius: 8px; padding: 14px; margin-bottom: 14px;">'
-                '<h4 style="color: #fb923c; margin: 0 0 8px 0;">تأكيد علمي: لا يحدث تفاعل كيميائي (No Reaction Confirmed)</h4>'
-                f'<p style="color: #fed7aa; margin: 0 0 6px 0;"><strong>النتيجة المباشرة:</strong> {_esc(prediction.get("no_reaction_reason_ar") or prediction.get("verdict_ar", ""))}</p>'
-                f'<p style="color: #e2e8f0; font-size: 0.9em; margin: 0;"><strong>الأساس العلمي والدافع الثرموديناميكي:</strong> {_esc(prediction.get("scientific_basis_ar") or prediction.get("explanation_ar", ""))}</p>'
+                '<div class="ml-no-reaction-card">'
+                '<h4>تأكيد علمي: لا يحدث تفاعل كيميائي (No Reaction Confirmed)</h4>'
+                f'<p style="color: #7C2D12; margin: 0 0 6px 0;"><strong>النتيجة المباشرة:</strong> {_esc(prediction.get("no_reaction_reason_ar") or prediction.get("verdict_ar", ""))}</p>'
+                f'<p style="color: #475569; font-size: 0.92em; margin: 0;"><strong>الأساس العلمي والدافع الثرموديناميكي:</strong> {_esc(prediction.get("scientific_basis_ar") or prediction.get("explanation_ar", ""))}</p>'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -600,11 +600,11 @@ def _render_end_to_end_experiment_walkthrough(prediction: dict[str, Any]) -> Non
             with cols1[idx_c]:
                 st.markdown(
                     f"""
-<div style="border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:#f8fafc;text-align:center;">
-  <div style="font-weight:700;color:#0f4c5c;">{_esc(card['name_ar'])} ({_esc(card['formula_display'])})</div>
-  <div style="font-size:0.82rem;color:#64748b;">الطور: ({_esc(card['state'])}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
-  <div style="font-weight:700;color:#1e3a8a;margin-top:6px;">الكمية المضافة: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
-  <div style="font-size:0.84rem;color:#0f766e;margin-top:3px;">{_esc(card['role_ar'])}</div>
+<div class="ml-stage-card">
+  <div style="font-weight:700;color:#0E5A6D;">{_esc(card['name_ar'])} ({_esc(card['formula_display'])})</div>
+  <div style="font-size:0.82rem;color:#52657A;">الطور: ({_esc(card['state'])}) | المعامل: {card['coefficient']} | الكتلة المولية: {card['molar_mass']:.2f} g/mol</div>
+  <div style="font-weight:700;color:#244C73;margin-top:6px;">الكمية المضافة: {card['initial_mol']:g} mol ({card['initial_mass_g']:g} g)</div>
+  <div style="font-size:0.84rem;color:#0D9488;margin-top:3px;">{_esc(card['role_ar'])}</div>
 </div>
 """,
                     unsafe_allow_html=True,
@@ -638,14 +638,14 @@ def _render_end_to_end_experiment_walkthrough(prediction: dict[str, Any]) -> Non
         inv_cols = st.columns(max(1, len(s4["final_inventory"])))
         for idx_i, item in enumerate(s4["final_inventory"]):
             with inv_cols[idx_i]:
-                b_col = "#059669" if "ناتج" in item["kind_ar"] else "#d97706"
+                b_col = "#047857" if "ناتج" in item["kind_ar"] else "#D97706"
                 st.markdown(
                     f"""
-<div style="border:2px solid {b_col};border-radius:10px;padding:10px;background:#ffffff;text-align:center;">
+<div class="ml-species-card" style="border:1.5px solid {b_col};border-top:4px solid {b_col};">
   <div style="font-size:0.8rem;font-weight:700;color:{b_col};">{_esc(item['kind_ar'])}</div>
-  <div style="font-weight:700;color:#0f4c5c;margin-top:3px;">{_esc(item['name_ar'])} ({_esc(item['formula_display'])})</div>
-  <div style="font-weight:700;color:#1e293b;margin-top:5px;">{item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
-  <div style="font-size:0.82rem;color:#475569;margin-top:3px;">{_esc(item['status_ar'])}</div>
+  <div style="font-weight:700;color:#0D2B42;margin-top:3px;">{_esc(item['name_ar'])} ({_esc(item['formula_display'])})</div>
+  <div style="font-weight:700;color:#1E293B;margin-top:5px;">{item['amount_mol']:g} mol ({item['mass_g']:g} g)</div>
+  <div style="font-size:0.82rem;color:#52657A;margin-top:3px;">{_esc(item['status_ar'])}</div>
 </div>
 """,
                     unsafe_allow_html=True,
